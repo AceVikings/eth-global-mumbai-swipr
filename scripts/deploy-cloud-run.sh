@@ -24,7 +24,7 @@ APP_MODE="${APP_MODE:-preview}"
 REPOSITORY="${REPOSITORY:-swipr}"
 TAG="${TAG:-$(git rev-parse --short HEAD)}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/backend:${TAG}"
-ENV_VARS="APP_MODE=${APP_MODE},ALLOWED_ORIGINS=${WEB_ORIGIN},ARKIV_WRITER_ADDRESS=${ARKIV_WRITER_ADDRESS}"
+ENV_VARS="APP_MODE=${APP_MODE},ALLOWED_ORIGINS=${WEB_ORIGIN},BOT_AUTH_AUDIENCE=${WEB_ORIGIN},ARKIV_WRITER_ADDRESS=${ARKIV_WRITER_ADDRESS}"
 ENV_VARS+=",ARKIV_ENGINE_STREAM=${ARKIV_ENGINE_STREAM:-swipr-engine-v1},ARKIV_CONFIRMATIONS=${ARKIV_CONFIRMATIONS:-2}"
 # Unset means the SDK's default Rabdi RPC. Keep access keys out of this URL; use the secret.
 [[ -z "${ARKIV_RPC_URL:-}" ]] || ENV_VARS+=",ARKIV_RPC_URL=${ARKIV_RPC_URL}"
@@ -69,19 +69,29 @@ run gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --tag "$IMAG
 # API: public ingress, auth per route; reads Arkiv only and never receives ARKIV_RELAYER_PK.
 run gcloud run deploy swipr-api "${COMMON[@]}" --service-account "$API_SERVICE_ACCOUNT" \
   --port 8787 --allow-unauthenticated --max-instances 1 --concurrency 8 \
-  --set-env-vars "$ENV_VARS" "$(secrets_flag "$api_secrets")"
+  --update-env-vars "$ENV_VARS" "$(secrets_flag "$api_secrets")"
 
-# Worker: the only Arkiv writer, one always-on instance with no public traffic. Cloud Run can
+# Worker: the only Arkiv writer, one always-on instance; IAM permits only its callers. Cloud Run can
 # still run two revisions briefly during a rollout; the host's Arkiv nonce fence, not
 # max-instances, is what rejects a competing writer.
 run gcloud run deploy swipr-worker "${COMMON[@]}" --service-account "$WORKER_SERVICE_ACCOUNT" \
-  --port 8788 --no-allow-unauthenticated --ingress internal \
+  --port 8788 --no-allow-unauthenticated --ingress all \
   --no-cpu-throttling --min-instances 1 --max-instances 1 \
   --command npm --args run,worker \
-  --set-env-vars "$ENV_VARS" "$(secrets_flag "$worker_secrets")"
+  --update-env-vars "$ENV_VARS" "$(secrets_flag "$worker_secrets")"
 
 if $EXECUTE; then
+  worker_url="$(gcloud run services describe swipr-worker --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')"
+  run gcloud run services add-iam-policy-binding swipr-worker --project "$PROJECT_ID" --region "$REGION" \
+    --member "serviceAccount:${API_SERVICE_ACCOUNT}" --role roles/run.invoker
   url="$(gcloud run services describe swipr-api --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')"
+  run gcloud run services update swipr-api --project "$PROJECT_ID" --region "$REGION" \
+    --update-env-vars "WORKER_URL=${worker_url},PUBLIC_API_URL=${url}"
   echo "API URL (set as VITE_API_URL on Render): ${url}"
+  echo "Bot MCP URL: ${url}/mcp"
   echo "Next: verify ${url}/health and ${url}/ready before recording anything as live."
+fi
+
+if ! $EXECUTE; then
+  echo 'After deploy: resolve the worker URL, grant the API account roles/run.invoker on the worker only, and update WORKER_URL + PUBLIC_API_URL.'
 fi

@@ -1,6 +1,8 @@
+import { isSocialCommand, replaySocial, validateSocialCommand } from './social/store';
+import { isProjectCommand, replayProject, validateProjectCommand } from './bots/store';
 import { randomUUID } from 'node:crypto';
 import type { Terms } from '../shared/types';
-import type { Journal, JournalSnapshot } from './arkiv-journal';
+import { withJournalWrite, type Journal, type JournalSnapshot } from './arkiv-journal';
 import {
   apply, check, claimPlan, emptyState, entryKeyOf, fail, getPassRow, intIn, jobView, LedgerError, passView, requestKeyOf, reservationView, type ChainProof, type Command, type Job, type LedgerEvent,
   type Pass, type Reservation, type State,
@@ -125,11 +127,23 @@ function replay(snapshot: JournalSnapshot): State {
   const state = emptyState();
   const ids = new Set<string>();
   if (snapshot.events.length !== snapshot.nonce) throw new Error('ledger_journal_incomplete');
+  replaySocial(snapshot.events);
+  replayProject(snapshot.events); // validate bot ownership and replay constraints too
   snapshot.events.forEach((event, index) => {
     if (event.revision !== index + 1 || ids.has(event.id) || !Number.isSafeInteger(event.at) || event.at < state.at) {
       throw new Error(`ledger_journal_invalid at revision ${index + 1}`);
     }
     ids.add(event.id);
+    if (isSocialCommand(event.command)) {
+      validateSocialCommand(event.command);
+      state.revision = event.revision; state.at = event.at;
+      return;
+    }
+    if (isProjectCommand(event.command)) {
+      validateProjectCommand(event.command);
+      state.revision = event.revision; state.at = event.at;
+      return;
+    }
     try {
       apply(state, event.revision, event.at, validate(event.command));
     } catch (error) {
@@ -145,7 +159,7 @@ const cmd = <K extends Command['type']>(type: K, fields: Record<string, unknown>
 type Plan<T> = { done: T } | { command: Command; result: (state: State) => T };
 
 export class Ledger {
-  private gate: Promise<unknown> = Promise.resolve();
+  
 
   private constructor(private readonly journal: Journal) {}
 
@@ -170,7 +184,7 @@ export class Ledger {
   /** In-process serialization only; cross-process safety is the journal's nonce fence. */
   private write<T>(plan: (state: State, at: number) => Plan<T>): Promise<T> {
     if (!this.journal.canWrite) fail('read_only', 'ledger is read-only');
-    const run = this.gate.then(async () => {
+    const run = withJournalWrite(this.journal, async () => {
       const snapshot = await this.journal.read();
       const state = replay(snapshot);
       const at = Math.max(snapshot.timestampMs, state.at);
@@ -186,7 +200,6 @@ export class Ledger {
       }
       return step.result(state);
     });
-    this.gate = run.catch(() => undefined);
     return run;
   }
 

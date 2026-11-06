@@ -1,3 +1,8 @@
+import { SocialStore } from './social/store';
+import { ApiError } from './auth';
+import { jsonBody } from './http';
+import { ProjectStore } from './bots/store';
+import { BotError } from './bots/validation';
 import { createServer } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Ledger, type Job } from './ledger';
@@ -19,10 +24,27 @@ async function main() {
   if (!config.arkiv.writerAddress) throw new Error('ARKIV_WRITER_ADDRESS is required by the worker');
   const renew = config.arkivMaintainerKey ? createArkivMaintainer(config.arkiv, config.arkivMaintainerKey) : null;
   if (renew) await renew();
-  const ledger = await Ledger.open(createArkivJournal(config.arkiv));
+  const journal = createArkivJournal(config.arkiv);
+  const ledger = await Ledger.open(journal);
+  const social = new SocialStore(journal, config.botAudience);
+  const projects = new ProjectStore(journal, config.botAudience);
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const path = req.url?.split('?')[0];
+    if (path === '/internal/bots' || path === '/internal/social') {
+      res.setHeader('content-type', 'application/json'); res.setHeader('cache-control', 'no-store');
+      if (stopping || req.method !== 'POST') { res.writeHead(stopping ? 503 : 405); res.end(JSON.stringify({ error: { code: 'unavailable', message: 'Worker cannot accept this command.' } })); return; }
+      try {
+        const input = await jsonBody(req);
+        const result = await (path === '/internal/social' ? social.execute(input) : projects.execute(input));
+        res.writeHead(200); res.end(JSON.stringify(result));
+      } catch (error) {
+        const known = error instanceof BotError || error instanceof ApiError;
+        res.writeHead(known ? error.status : 503);
+        res.end(JSON.stringify({ error: { code: known ? error.code : 'unavailable', message: known ? error.message : 'Bot command was not confirmed; reconcile the same request ID.' } }));
+      }
+      return;
+    }
     if (!['/healthz', '/readyz', '/health', '/ready'].includes(path || '')) { res.writeHead(404); res.end(); return; }
     const ok = !stopping && Date.now() - lastHealthy < 60000;
     res.writeHead(ok ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });

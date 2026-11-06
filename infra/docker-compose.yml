@@ -18,6 +18,7 @@ services:
     command: ["npm", "run", "api"]
     environment:
       PORT: "8787"
+      WORKER_URL: http://worker:8788
       NODE_ENV: development  # allows the default http://127.0.0.1:5173 CORS origin
       ARKIV_RELAYER_PK: ""   # worker-only secrets; blanked even if .env holds them
       ARKIV_MAINTAINER_PK: ""

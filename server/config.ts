@@ -12,7 +12,14 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
   }
   const confirmations = Number(env.ARKIV_CONFIRMATIONS || 2);
   if (!Number.isSafeInteger(confirmations) || confirmations < 1 || confirmations > 20) throw new Error('Invalid ARKIV_CONFIRMATIONS');
-  return { port, origins, mode,
+  const botAudience = env.BOT_AUTH_AUDIENCE || 'http://localhost:5173';
+  const audience = new URL(botAudience);
+  if (audience.origin !== botAudience || (audience.protocol !== 'https:' && !(env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1'].includes(audience.hostname) && audience.protocol === 'http:'))) throw new Error('Invalid BOT_AUTH_AUDIENCE');
+  const publicApiUrl = env.PUBLIC_API_URL || (env.NODE_ENV === 'production' ? '' : 'http://localhost:8787');
+  const apiOrigin = publicApiUrl ? new URL(publicApiUrl) : null;
+  if (apiOrigin && (apiOrigin.origin !== publicApiUrl || (apiOrigin.protocol !== 'https:' && !(env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1'].includes(apiOrigin.hostname) && apiOrigin.protocol === 'http:')))) throw new Error('Invalid PUBLIC_API_URL');
+  return { port, origins, mode, botAudience, publicApiUrl,
+    workerUrl: env.WORKER_URL || (env.NODE_ENV === 'production' ? undefined : 'http://127.0.0.1:8788'),
     arkiv: { rpcUrl: env.ARKIV_RPC_URL, accessKey: env.ARKIV_ACCESS_KEY,
       writerAddress: env.ARKIV_WRITER_ADDRESS || '', privateKey: env.ARKIV_RELAYER_PK,
       stream: env.ARKIV_ENGINE_STREAM || 'swipr-engine-v1', confirmations },
