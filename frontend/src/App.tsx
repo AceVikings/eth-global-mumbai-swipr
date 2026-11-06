@@ -2,7 +2,7 @@ import { botPortrait } from './lib/profile-images';
 import Matches from './components/Matches';
 import { useEffect, useState } from "react";
 import type { Trader } from "./contracts/types";
-import { SessionPanel, useSession } from './auth/Session';
+import { SessionPanel, WalletBalance, useSession } from './auth/Session';
 import Dropdown from './components/Dropdown';
 import Leaderboards from './components/Leaderboards';
 import BotStudio from "./components/BotStudio";
@@ -198,8 +198,8 @@ export default function App() {
                       <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button>
                     </div>
                     <div className="filter-select">
-                      <Icon name="filter" size={16} />
-                      <Dropdown label="Trading style" value={prefs.vibe} options={vibes.map(v => [v, v])}
+                      <WalletBalance />
+                      <Dropdown icon={<Icon name="filter" size={20} />} label="Trading style" value={prefs.vibe} options={vibes.map(v => [v, v])}
                         onChange={v => updatePrefs(prefs.amount, v)} />
                     </div>
                   </div>
@@ -281,7 +281,7 @@ export default function App() {
                       amount and start time.
                     </p>
                   </div>
-                  <SessionPanel />
+                  <SessionPanel showBalance />
                   <div className="settings-group">
                     <h2>Take Swipr with you</h2>
                     <p>

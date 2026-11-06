@@ -165,11 +165,13 @@ function PrivySession({ children }: { children: ReactNode }) {
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-type Balance = { state: 'idle' | 'loading' | 'unavailable' } | { state: 'done'; display: string };
+type Balance = { state: 'idle' | 'loading' | 'unavailable' } | { state: 'done'; address: string; display: string; gasDisplay: string };
 
-/** Base balance via the backend's authenticated /api/wallet route. Optional; shows "unavailable" until the host ships it. */
-function useBaseBalance(enabled: boolean, address: Address | null, getAccessToken: Session['getAccessToken']): Balance {
+/** Confirmed Base balances; refresh on focus and once a minute. Never substitute a zero for an error. */
+function useBaseBalance(enabled: boolean, address: Address | null, getAccessToken: Session['getAccessToken']) {
   const [balance, setBalance] = useState<Balance>({ state: 'idle' });
+  const [version, setVersion] = useState(0);
+  const refresh = useCallback(() => setVersion(v => v + 1), []);
   useEffect(() => {
     if (!enabled || !address) { setBalance({ state: 'idle' }); return; }
     const controller = new AbortController();
@@ -181,15 +183,33 @@ function useBaseBalance(enabled: boolean, address: Address | null, getAccessToke
         headers: { authorization: `Bearer ${token}` }, cache: 'no-store', signal: controller.signal,
       });
       if (!response.ok) throw new Error('unavailable');
-      const body = await response.json() as { address?: unknown; display?: unknown };
-      if (typeof body.address !== 'string' || body.address.toLowerCase() !== address.toLowerCase() || typeof body.display !== 'string') {
-        throw new Error('invalid');
-      }
-      if (!controller.signal.aborted) setBalance({ state: 'done', display: body.display });
+      const body = await response.json() as { address?: unknown; chainId?: unknown; display?: unknown; gasDisplay?: unknown };
+      if (typeof body.address !== 'string' || body.address.toLowerCase() !== address.toLowerCase() || body.chainId !== 8453
+        || typeof body.display !== 'string' || typeof body.gasDisplay !== 'string') throw new Error('invalid');
+      if (!controller.signal.aborted) setBalance({ state: 'done', address: body.address, display: body.display, gasDisplay: body.gasDisplay });
     })().catch(() => { if (!controller.signal.aborted) setBalance({ state: 'unavailable' }); });
     return () => controller.abort();
-  }, [enabled, address, getAccessToken]);
-  return balance;
+  }, [enabled, address, getAccessToken, version]);
+  useEffect(() => {
+    if (!enabled || !address) return;
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [enabled, address, refresh]);
+  const current: Balance = balance.state === 'done' && balance.address.toLowerCase() !== address?.toLowerCase() ? { state: 'loading' } : balance;
+  return { balance: current, refresh };
+}
+
+export function WalletBalance() {
+  const session = useSession();
+  const { balance, refresh } = useBaseBalance(session.authenticated, session.address, session.getAccessToken);
+  if (!session.authenticated) return null;
+  return <div className="wallet-balance" aria-live="polite">
+    <span>Wallet balance</span>
+    {balance.state === 'unavailable'
+      ? <button type="button" className="text-button" onClick={refresh}>Retry balance</button>
+      : <strong title="USDC on Base">{balance.state === 'done' ? balance.display : 'Loading…'}</strong>}
+  </div>;
 }
 
 export function SessionPanel({ showBalance = false }: { showBalance?: boolean }) {
@@ -198,7 +218,7 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deletionStatus, setDeletionStatus] = useState('');
-  const balance = useBaseBalance(showBalance && authenticated, address, session.getAccessToken);
+  const { balance, refresh: refreshBalance } = useBaseBalance(showBalance && authenticated, address, session.getAccessToken);
   const signOut = async () => { setBusy(true); try { await session.logout(); } finally { setBusy(false); } };
 
   let status: string;
@@ -219,7 +239,7 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
           {userLabel && <div><dt>Account</dt><dd>{userLabel}</dd></div>}
           <div><dt>Wallet</dt><dd>{address ? <code title={address}>{address}</code> : '—'}</dd></div>
           {showBalance && address && <div><dt>Base balance</dt><dd>{
-            balance.state === 'done' ? balance.display : balance.state === 'loading' ? 'Loading…' : 'Unavailable'}</dd></div>}
+            balance.state === 'done' ? `${balance.display} · ${balance.gasDisplay}` : balance.state === 'loading' ? 'Loading…' : <button type="button" className="text-button" onClick={refreshBalance}>Retry balance</button>}</dd></div>}
         </dl>
       )}
       {error && <p className="session-error" role="alert">{error}</p>}

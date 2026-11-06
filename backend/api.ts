@@ -1,3 +1,4 @@
+import { createWalletBalance } from './wallet-balance';
 import express from 'express';
 import { buildWalletAction } from './bots/wallet-actions';
 import { deleteAccountMessage } from './account';
@@ -18,6 +19,7 @@ import type { Ledger } from './ledger';
 import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;
+  walletBalance?: (address: string) => Promise<{ address: string; chainId: number; display: string; gasDisplay: string }>;
   walletProfiles?: () => Promise<BotProfile[]>;
   walletSignals?: (profiles: BotProfile[]) => Promise<BotSignal[]>;
   executeSocial?: (input: unknown) => Promise<unknown>;
@@ -39,8 +41,9 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, walletBalance, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
+  const readBalance = walletBalance ?? createWalletBalance(config.baseRpc);
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const listBots = async () => {
     if (walletProfiles) {
@@ -113,6 +116,12 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       const path = url.pathname;
       if (req.method === 'POST' && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
       const gateway = makeGateway(req.headers.authorization);
+      if (path === '/api/wallet' && req.method === 'GET') {
+        const identity = await authenticate(req.headers.authorization);
+        const wallet = requireWallet(identity, url.searchParams.get('address'));
+        try { return send(200, await readBalance(wallet)); }
+        catch { throw new ApiError(503, 'balance_unavailable', 'Could not load your Base balance. Try again.'); }
+      }
       if (path === '/api/arkiv/rpc' && req.method === 'POST') {
         await authenticate(req.headers.authorization);
         if (!arkivRpc) throw new ApiError(503, 'rpc_unavailable', 'Account storage is unavailable.');

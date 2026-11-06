@@ -9,3 +9,6 @@
 .dropdown-option[aria-selected="true"] { color: var(--ink); font-weight: 600; }
 .dropdown-option.is-active { background: var(--canvas); color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .dropdown-trigger svg { transition: none; } }
+
+.dropdown-icon-trigger { width: 44px; height: 44px; padding: 0; justify-content: center; border-color: transparent; background: transparent; }
+.dropdown-icon-trigger[aria-expanded="true"] svg { transform: none; }

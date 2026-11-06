@@ -493,3 +493,10 @@ main {
 .account-button:disabled { opacity: .6; }
 .sidebar-account .account-button { width: 100%; }
 .account-error { color: var(--coral-dark); margin: 12px 0; }
+
+.wallet-balance { display: grid; gap: 2px; text-align: right; font-variant-numeric: tabular-nums; }
+.wallet-balance > span { font-size: 11px; color: var(--muted); }
+.wallet-balance strong { font-size: 14px; line-height: 20px; white-space: nowrap; color: var(--ink); }
+.wallet-balance .text-button { min-height: 28px; padding: 0; font-size: 12px; }
+.filter-select { gap: 16px; }
+@media (max-width: 480px) { .discovery-filter { gap: 8px; } .filter-select { gap: 8px; } .discovery-actions { gap: 8px; } .discovery-actions .text-button { font-size: 12px; } }
