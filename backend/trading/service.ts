@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createPublicClient, http, erc20Abi, recoverTypedDataAddress, type Address, type Hex } from 'viem';
 import { base } from 'viem/chains';
 import { ApiError } from '../auth';
-import { createFlashClient, FLASH_DOMAIN, TOKENS, toUnits, validateApproval, validateTypedData, type FlashQuote, type OrderIntent } from '../providers/flash';
+import { createFlashClient, SWIPR_INTEGRATOR_FEE_BPS, FLASH_DOMAIN, TOKENS, toUnits, validateApproval, validateTypedData, type FlashQuote, type OrderIntent } from '../providers/flash';
 import { decodeTransferLegs, type Receipt } from '../providers/base';
 import type { BotProfile } from '../contracts/bots';
 import type { SeatDirectory } from '../contracts/seats';
@@ -11,7 +11,7 @@ const id = (v: unknown) => { if (typeof v !== 'string' || !/^[a-z0-9-]{1,128}$/i
 function fail(text: string): never { throw new ApiError(409, 'trade_blocked', text); }
 const now = () => Math.floor(Date.now() / 1000);
 type Context = { profileId: string; seatId?: string; sourceOrderId?: string };
-type Ticket = { version: 1; expiresAt: number; intent: OrderIntent; quote: Pick<FlashQuote, 'quoteId' | 'typedDataRaw'>; context: Context; vault: string };
+type Ticket = { version: 1; expiresAt: number; intent: OrderIntent; quote: Pick<FlashQuote, 'quoteId' | 'typedDataRaw' | 'integratorFeeBps'>; context: Context; vault: string };
 export type TradingService = ReturnType<typeof createTradingService>;
 export function createTradingService(options: { apiKey: string; ticketSecret: string; rpcUrl: string;
   profiles: () => Promise<BotProfile[]>; seats: (wallet: string, profiles: BotProfile[]) => Promise<SeatDirectory>; fetcher?: typeof fetch }) {
@@ -87,7 +87,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       const checked = await context(wallet, ctx, input.asset, input.qty);
       const sharedPrice = checked.sharedPrice ?? String(input.sharedPrice ?? '');
       const expiresAt = Math.min(now() + 300, checked.expiresAt ?? Infinity);
-      const intent: OrderIntent = { side: 'buy', asset: input.asset as 'WETH' | 'cbBTC', qty: '5', funder: wallet, orderType: 'limit', sharedPrice,
+      const intent: OrderIntent = { integratorFeeBps: SWIPR_INTEGRATOR_FEE_BPS, side: 'buy', asset: input.asset as 'WETH' | 'cbBTC', qty: '5', funder: wallet, orderType: 'limit', sharedPrice,
         limitNotionalPrice: sharedPrice, maxPriceImpact: '0.01', expireTime: new Date(expiresAt * 1000).toISOString() };
       const quote = await flash.quote(intent);
       const vault = String(quote.typedData.message.vault);
@@ -100,8 +100,8 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       const raw = quote.raw as { evm?: { approveTx?: unknown; permitTypedData?: unknown }; fees?: { estimatedFeeNotional?: string } };
       if (raw.evm?.permitTypedData) fail('This rehearsal requires a direct, bounded token approval.');
       const approval = raw.evm?.approveTx ? validateApproval(raw.evm.approveTx, intent, 5000000n) : null;
-      return { ticket: encode({ version: 1, expiresAt, intent, quote: { quoteId: quote.quoteId, typedDataRaw: quote.typedDataRaw }, context: ctx, vault }),
-        quoteId: quote.quoteId, intent, typedData: quote.typedData, approval, expiresAt, estimatedFeeNotional: raw.fees?.estimatedFeeNotional ?? null };
+      return { ticket: encode({ version: 1, expiresAt, intent, quote: { quoteId: quote.quoteId, typedDataRaw: quote.typedDataRaw, integratorFeeBps: quote.integratorFeeBps }, context: ctx, vault }),
+        quoteId: quote.quoteId, integratorFeeBps: quote.integratorFeeBps, intent, typedData: quote.typedData, approval, expiresAt, estimatedFeeNotional: raw.fees?.estimatedFeeNotional ?? null };
     },
     async preflight(wallet: string, token: unknown) {
       const t = decode(token, wallet); await network();

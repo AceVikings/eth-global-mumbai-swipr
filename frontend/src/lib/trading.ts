@@ -2,7 +2,7 @@ import type { Hex } from 'viem';
 import type { Session } from '../auth/Session';
 import { apiBase } from './bots';
 export type TradeQuote = {
-  ticket: string; quoteId: string; expiresAt: number; estimatedFeeNotional: string | null;
+  ticket: string; quoteId: string; integratorFeeBps: string; expiresAt: number; estimatedFeeNotional: string | null;
   intent: { funder: string; asset: 'WETH' | 'cbBTC'; qty: string; sharedPrice: string };
   typedData: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, unknown> };
   approval: null | { to: string; data: string; value: string; chainId: number };

@@ -17,12 +17,15 @@ export const FLASH_DOMAIN = {
   verifyingContract: '0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78',
 } as const;
 export const FLASH_ORDER_FIELDS = ['swapper', 'vault', 'recipient', 'fromToken', 'toToken', 'fromAmount', 'salt', 'deadline'];
+export const SWIPR_INTEGRATOR_FEE_BPS = '10'; // 0.1% of each trade, collected by Definitive.
+const LEGACY_INTEGRATOR_FEE_BPS = '25';
 export const ENTRY_USD = { min: 5, max: 50 };
 const API = 'https://flash.definitive.fi/v1';
 const PUBLIC_DEV_KEY_PREFIX = 'dpka_513a2bd7';
 
 export interface OrderIntent {
   side: 'buy' | 'sell';
+  integratorFeeBps?: string;
   asset: Asset;
   /** buy: USDC notional; sell: asset units. Decimal string. */
   qty: string;
@@ -44,7 +47,7 @@ export const FLASH_DOMAIN_TYPES = [
   { name: 'name', type: 'string' }, { name: 'version', type: 'string' },
   { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' },
 ];
-export interface FlashQuote { quoteId: string; typedDataRaw: string; typedData: TypedData; raw: unknown }
+export interface FlashQuote { integratorFeeBps?: string; quoteId: string; typedDataRaw: string; typedData: TypedData; raw: unknown }
 export interface TypedData {
   domain: Record<string, unknown>;
   types: Record<string, { name: string; type: string }[]>;
@@ -73,6 +76,7 @@ function fromTo(i: OrderIntent) {
 }
 
 export function validateIntent(i: OrderIntent): void {
+  if (i.integratorFeeBps !== undefined && (!/^(0|[1-9]\d{0,3})$/.test(i.integratorFeeBps) || Number(i.integratorFeeBps) > 1000)) throw invalid('invalid integrator fee');
   if (!ADDRESS.test(i.funder)) throw invalid('funder is not an address');
   if (!(i.asset in TOKENS) || i.asset === ('USDC' as Asset)) throw invalid('unsupported asset');
   if (i.side !== 'buy' && i.side !== 'sell') throw invalid('unsupported side');
@@ -154,9 +158,9 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
   const base = o.baseUrl ?? API;
   const http = createHttp({ provider: 'flash', fetch: o.fetch, timeoutMs: o.timeoutMs ?? 8000, minIntervalMs: 220, secrets: [o.apiKey], sleep: o.sleep });
   const headers = { 'x-definitive-api-key': o.apiKey, 'content-type': 'application/json' };
-  const body = (i: OrderIntent, expireTime?: string) => ({
+  const body = (i: OrderIntent, expireTime?: string, fee = i.integratorFeeBps ?? SWIPR_INTEGRATOR_FEE_BPS) => ({
     targetChain: 'base', contraChain: 'base', targetAsset: TOKENS[i.asset].address, contraAsset: TOKENS.USDC.address,
-    side: i.side, qty: i.qty, orderType: i.orderType, funderAddress: i.funder, flashIntegratorFeeBps: '25',
+    side: i.side, qty: i.qty, orderType: i.orderType, funderAddress: i.funder, flashIntegratorFeeBps: fee,
     evmUsePermit2: false, forceMinimalAllowance: true,
     ...(expireTime && { expireTime }),
     ...(i.limitNotionalPrice && { limitNotionalPrice: i.limitNotionalPrice }),
@@ -175,16 +179,19 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
       const j = ok(await http.json(`${base}/quote`, { method: 'POST', headers, body: JSON.stringify(body(intent, expiry)) }, { retry: true }), 'quote');
       const raw = j.evm?.orderTypedData;
       if (typeof j.quoteId !== 'string' || !raw) throw new ProviderError('flash', 'bad_response', 'quote missing id or typed data');
-      return { quoteId: j.quoteId, typedDataRaw: typeof raw === 'string' ? raw : JSON.stringify(raw), typedData: parseTypedData(raw), raw: j };
+      return { integratorFeeBps: intent.integratorFeeBps ?? SWIPR_INTEGRATOR_FEE_BPS, quoteId: j.quoteId, typedDataRaw: typeof raw === 'string' ? raw : JSON.stringify(raw), typedData: parseTypedData(raw), raw: j };
     },
     /** Relays a user signature; re-validates first and never retries (an error may be `ambiguous`). */
     async submitOrder(a: { intent: OrderIntent; quote: FlashQuote; userSignature: string; policy: SignPolicy }) {
       validateIntent(a.intent);
       const signedData = parseTypedData(a.quote.typedDataRaw);
       validateTypedData(signedData, a.intent, a.policy);
+      const fee = a.quote.integratorFeeBps ?? a.intent.integratorFeeBps ?? LEGACY_INTEGRATOR_FEE_BPS;
+      if (a.intent.integratorFeeBps !== undefined && a.intent.integratorFeeBps !== fee) throw invalid('fee changed after quote');
+      validateIntent({ ...a.intent, integratorFeeBps: fee });
       if (a.intent.attachedBracket) throw invalid('attached brackets require a separate protective-order signature');
       const j = ok(await http.json(`${base}/order`, { method: 'POST', headers, body: JSON.stringify({
-        ...body(a.intent, new Date(Number(signedData.message.deadline) * 1000).toISOString()), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
+        ...body(a.intent, new Date(Number(signedData.message.deadline) * 1000).toISOString(), fee), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
       }) }), 'order');
       if (typeof j.orderId !== 'string') throw new ProviderError('flash', 'bad_response', 'order id missing', { ambiguous: true });
       return { orderId: j.orderId as string };

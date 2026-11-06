@@ -89,6 +89,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
     {quote && !order && <section className="trade-review"><h2>Review your buy</h2><dl>
       <div><dt>Wallet</dt><dd><code>{quote.intent.funder}</code></dd></div><div><dt>Spend</dt><dd>{quote.intent.qty} USDC</dd></div>
       <div><dt>Buy</dt><dd>{quote.intent.asset}</dd></div><div><dt>Protection</dt><dd>No stop-loss or automatic exit</dd></div><div><dt>Maximum price</dt><dd>${quote.intent.sharedPrice}</dd></div>
+      <div><dt>Swipr fee (estimated, included)</dt><dd>{Number(quote.integratorFeeBps) / 100}% · ${(Number(quote.intent.qty) * Number(quote.integratorFeeBps) / 10000).toFixed(3)}</dd></div>
       <div><dt>Estimated trading fee</dt><dd>{quote.estimatedFeeNotional ? `$${quote.estimatedFeeNotional}` : 'Unavailable'}</dd></div>
       <div><dt>Expires</dt><dd>{new Date(quote.expiresAt * 1000).toLocaleTimeString()}</dd></div>
     </dl><details><summary>Wallet permissions</summary><p>Approval: exactly 5 USDC.</p><p>Settlement contract <code>{String(quote.typedData.domain.verifyingContract)}</code></p><p>Execution vault <code>{String(quote.typedData.message.vault)}</code></p></details><p>This uses real funds. Your wallet will review the token approval and order signature.</p>

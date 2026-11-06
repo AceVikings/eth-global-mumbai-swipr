@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { Session } from '../auth/Session';
 import { sendReviewedTrade, tradeRequest, type TradeQuote } from './trading';
 const wallet = `0x${'12'.repeat(20)}` as const;
-const quote = (): TradeQuote => ({ ticket: 'bound-ticket', quoteId: 'q', expiresAt: Math.floor(Date.now()/1000) + 300, estimatedFeeNotional: '0.02',
+const quote = (): TradeQuote => ({ ticket: 'bound-ticket', quoteId: 'q', integratorFeeBps: '10', expiresAt: Math.floor(Date.now()/1000) + 300, estimatedFeeNotional: '0.02',
  intent: { funder: wallet, qty: '5', asset: 'WETH', sharedPrice: '2500' }, typedData: { domain: {}, types: {}, primaryType: 'FlashOrder', message: {} },
  approval: { to: `0x${'34'.repeat(20)}`, data: '0x095ea7b3', value: '0x0', chainId: 8453 } });
 const session = (request: ReturnType<typeof vi.fn>, address: string = wallet) => ({ address: wallet, getAccessToken: async () => 'test-token',

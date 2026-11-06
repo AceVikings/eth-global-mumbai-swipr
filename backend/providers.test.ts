@@ -197,3 +197,27 @@ describe('readiness', () => {
     expect(JSON.stringify(r)).not.toContain(KEY);
   });
 });
+
+describe('Definitive integrator fee agreement', () => {
+  it('quotes 10 bps and relays the exact same fee on the signed order', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(json({ quoteId: 'fee-quote', evm: { orderTypedData: typedData() } })).mockResolvedValueOnce(json({ orderId: 'fee-order' }));
+    const c = createFlashClient({ apiKey: KEY, fetch: fetcher, sleep: noSleep });
+    const q = await c.quote(buy);
+    expect(q.integratorFeeBps).toBe('10');
+    await c.submitOrder({ intent: buy, quote: q, userSignature: SIG, policy });
+    expect(fetcher.mock.calls.map(c => JSON.parse(c[1].body).flashIntegratorFeeBps)).toEqual(['10', '10']);
+  });
+  it('rejects a changed fee before relaying the signature', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(json({ quoteId: 'fee-quote', evm: { orderTypedData: typedData() } }));
+    const c = createFlashClient({ apiKey: KEY, fetch: fetcher, sleep: noSleep });
+    const q = await c.quote({ ...buy, integratorFeeBps: '10' });
+    await expect(c.submitOrder({ intent: { ...buy, integratorFeeBps: '500' }, quote: q, userSignature: SIG, policy })).rejects.toThrow('fee changed');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('keeps the original 25 bps for legacy reviewed quotes without fee metadata', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(json({ orderId: 'legacy-order' }));
+    const c = createFlashClient({ apiKey: KEY, fetch: fetcher, sleep: noSleep });
+    await c.submitOrder({ intent: buy, quote: { quoteId: 'old', typedDataRaw: JSON.stringify(typedData()), typedData: typedData(), raw: {} }, userSignature: SIG, policy });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).flashIntegratorFeeBps).toBe('25');
+  });
+});
