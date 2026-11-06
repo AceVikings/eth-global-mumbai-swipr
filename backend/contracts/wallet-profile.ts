@@ -20,3 +20,8 @@ export const WALLET_SIGNAL_SCHEMA = 'swipr.wallet-signal.v1';
 export const WalletSignalSchema = defineSchema(WALLET_SIGNAL_SCHEMA, {
   project: str().indexed(), profileId: str().indexed(), signal: bytes(),
 });
+
+export const WALLET_GHOST_SCHEMA = 'swipr.wallet-ghost.v1';
+export const WalletGhostSchema = defineSchema(WALLET_GHOST_SCHEMA, {
+  project: str().indexed(), ghost: bytes(), status: str().indexed(),
+});
