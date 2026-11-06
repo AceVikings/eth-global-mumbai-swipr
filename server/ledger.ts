@@ -328,7 +328,7 @@ export class Ledger {
 
   async completeJob(jobId: string, leaseToken: string): Promise<void> {
     const { rowCount } = await this.db.query(`UPDATE jobs SET status = 'done', lease_token = NULL,
-      lease_until = NULL, updated_at = now() WHERE id = $1 AND status = 'running' AND lease_token = $2`,
+      lease_until = NULL, updated_at = now() WHERE id = $1 AND status = 'running' AND lease_token = $2 AND lease_until > now()`,
       [jobKey(jobId), uuid(leaseToken, 'leaseToken')]);
     if (!rowCount) fail('lease_lost', 'job lease no longer held');
   }
@@ -339,7 +339,7 @@ export class Ledger {
       last_error = $3, updated_at = now(),
       status = CASE WHEN attempts >= max_attempts THEN 'dead' ELSE 'queued' END,
       run_after = now() + $4 * interval '1 millisecond'
-      WHERE id = $1 AND status = 'running' AND lease_token = $2 RETURNING *`,
+      WHERE id = $1 AND status = 'running' AND lease_token = $2 AND lease_until > now() RETURNING *`,
       [jobKey(jobId), uuid(leaseToken, 'leaseToken'), String(error).slice(0, 2000), retryDelayMs]);
     return rows[0] ? jobFrom(rows[0]) : fail('lease_lost', 'job lease no longer held');
   }
