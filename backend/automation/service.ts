@@ -56,8 +56,9 @@ export function createAutomation(options:{control:ReturnType<typeof createPrivyC
    const existing=(await options.grants()).filter(g=>g.wallet===wallet&&g.expiresAt>Date.now());
    if(existing.some(g=>g.seatId!==seatId))throw new ApiError(409,'permission_required','Stop your other automatic pass before enabling this one.');
    // Permission setup is independent of a trader's short copy window. This unsigned
-   // authenticated quote only discovers Flash's vault; the worker still requires a fill.
-   const intent={side:'buy' as const,asset:'WETH' as const,qty:'5',funder:wallet,orderType:'market' as const,maxPriceImpact:'0.01',integratorFeeBps:SWIPR_INTEGRATOR_FEE_BPS};
+   // authenticated sell quote only discovers Flash's vault. It is never signed;
+   // the resulting policy permits only buys and the worker still requires a fill.
+   const intent={side:'sell' as const,asset:'WETH' as const,qty:'0.002',funder:wallet,orderType:'market' as const,maxPriceImpact:'0.01',integratorFeeBps:SWIPR_INTEGRATOR_FEE_BPS};
    const quote=await options.flash.quote(intent);
    validateTypedData(quote.typedData,intent,{now:Math.floor(Date.now()/1000),maxDeadline:Math.floor(Date.now()/1000)+900,expectedVault:String(quote.typedData.message.vault)});
    const user=await control.request(`/users/${encodeURIComponent(identity.userId)}`);

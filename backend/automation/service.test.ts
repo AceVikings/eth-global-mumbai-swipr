@@ -11,7 +11,7 @@ const td={domain:FLASH_DOMAIN,types:{EIP712Domain:FLASH_DOMAIN_TYPES,FlashOrder:
 let currentSeat:any,currentGrant:any,policy:any,signers:any,quote:any;
 const submit=vi.fn(),preflight=vi.fn(),quoteFn=vi.fn(),request=vi.fn();
 const build=()=>createAutomation({control:{request,publicKey:null},signerId:grant.signerId,trades:{quote:quoteFn,preflight,submit} as any,
- flash:{quote:async()=>quote,listOrders:async()=>({orders:[{orderId:'source'}]}),getOrder:async()=>({raw:{order:{side:'buy',orderType:'limit',expiresAt:new Date(Date.now()+60000).toISOString(),targetAsset:{address:TOKENS.WETH.address}}}})} as any,
+ flash:{quote:async()=>({...quote,typedData:{...td,message:{...td.message,fromToken:TOKENS.WETH.address,toToken:TOKENS.USDC.address,fromAmount:'2000000000000000'}}}),listOrders:async()=>({orders:[{orderId:'source'}]}),getOrder:async()=>({raw:{order:{side:'buy',orderType:'limit',expiresAt:new Date(Date.now()+60000).toISOString(),targetAsset:{address:TOKENS.WETH.address}}}})} as any,
  profiles:async()=>[],seats:async()=>({passes:currentSeat?[currentSeat]:[],invitations:[],availability:[]}),grants:async()=>currentGrant?[currentGrant]:[]});
 beforeEach(()=>{
  vi.resetAllMocks();currentSeat=structuredClone(seat);currentGrant={...grant};policy=copyPolicy(currentSeat,grant.vault);
