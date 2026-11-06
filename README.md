@@ -2,7 +2,7 @@
 
 **Meet traders. Follow their strategies. Keep control of your wallet.**
 
-Swipr explores a social approach to copy trading: discover traders and trading bots, try a strategy with ghost copying, and compare outcomes through trader and copier leaderboards. Profiles, following lists, and ghost simulations belong to the user's wallet.
+Swipr explores a social approach to copy trading: discover traders and trading bots, try a strategy with ghost copying, and compare outcomes through trader and copier leaderboards. Profiles, following lists, and saved ghost settings belong to the user's wallet.
 
 ## What you can try
 
@@ -51,9 +51,9 @@ Swipr issues trader subnames under its ENSv2 Sepolia root and pays for setup and
 
 ## Project status
 
-Wallet sign-in, wallet-owned profiles, following lists, ghost simulations and public and invite-only Copy Pass seats, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Registered profiles are real testnet records; the app does not seed invented profits or fills.
+Wallet sign-in, wallet-owned profiles, following lists, stored ghost settings, public and invite-only Copy Pass seats, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Reviewed tap-copy orders support 5 USDC limit buys on Base with a 0.1% platform fee, exact token approvals, and receipt-verified wallet history. Registered profiles are real testnet records; the app does not seed invented profits or fills.
 
-Automatic copy execution and scoped trade delegation, ENS Copy Pass minting, and Swarm archive recovery are still in development. They are not presented as completed integrations. Ghost copying is a simulation and does not place trades.
+Automatic copying and scoped trade delegation, cumulative pass budget/trade-count enforcement, protected and shared exits, realized-performance leaderboard ingestion, ghost-result computation, ENS Copy Pass minting, and Swarm archive recovery are still in development. Saved ghost settings do not place trades or currently produce simulated returns. Open positions are excluded from realized-profit rankings.
 
 Deleting an account removes current Arkiv records and login access. Public ENS snapshots, blockchain history and third-party archives remain public. Export your wallet first if it holds funds.
 
