@@ -94,7 +94,7 @@ describe('ledger over an in-memory journal test double', () => {
 
   it('fences two writers on one journal: stale writers fail and cannot overspend', async () => {
     const { journal, ledger: a } = await setup();
-    const b = await Ledger.open(journal);
+    const b = await Ledger.open({ canWrite: true, read: () => journal.read(), append: (e, n) => journal.append(e, n), close: async () => {} });
     const pass = await activePass(a);
     const reserve = (i: number) => (i % 2 ? a : b).reserveEntry(pass.id, `sig-${i}`, '10000000', `key-${i}`);
     const results = await Promise.all(Array.from({ length: 12 }, (_, i) => code(reserve(i))));
