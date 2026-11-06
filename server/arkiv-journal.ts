@@ -18,6 +18,17 @@ export interface Journal {
   append(event: JournalEvent, expectedNonce: number): Promise<void>;
   close(): Promise<void>;
 }
+// All stores sharing this writer must serialize read/plan/append together.
+// This gate holds no product state; the chain nonce still fences other processes.
+const writeGates = new WeakMap<Journal, Promise<unknown>>();
+export function withJournalWrite<T>(journal: Journal, operation: () => Promise<T>): Promise<T> {
+  const run = (writeGates.get(journal) ?? Promise.resolve()).then(operation);
+  const settled = run.catch(() => undefined);
+  writeGates.set(journal, settled);
+  void settled.then(() => { if (writeGates.get(journal) === settled) writeGates.delete(journal); });
+  return run;
+}
+
 export class JournalError extends Error {
   constructor(public code: 'unavailable' | 'pending' | 'conflict' | 'incomplete' | 'read_only' | 'ambiguous' | 'invalid' | 'expiring' | 'stale_clock', message: string) { super(message); }
 }
