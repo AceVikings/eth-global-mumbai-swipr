@@ -242,7 +242,10 @@ export default function App() {
               {page === "discover" && (
                 <>
                   <div className="discovery-filter">
-                    <span className="eyebrow">FOR YOU</span>
+                    <div className="discovery-actions">
+                      <button className="text-button" onClick={() => setDirectoryVersion(v => v + 1)}>Refresh</button>
+                      <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button>
+                    </div>
                     <label className="filter-select">
                       <Icon name="filter" size={16} />
                       <span className="sr-only">Trading style</span>
@@ -258,7 +261,6 @@ export default function App() {
                       </select>
                     </label>
                   </div>
-                  <div className="directory-status"><button className="text-button" onClick={() => setDirectoryVersion(v => v + 1)}>Refresh</button> <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button></div>
                   <Discover
                     key={`${prefs.vibe}:${traders.map(t => t.id).join(',')}`}
                     traders={traders}

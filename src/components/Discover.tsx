@@ -147,7 +147,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
     : { transform: `translateX(${shown}px) rotate(${rot}deg)` };
 
   return (
-    <section className="dsc" aria-labelledby="dsc-title">
+    <section className={`dsc${trader ? '' : ' is-empty'}`} aria-labelledby="dsc-title">
       <header className="dsc-head">
         <div>
           <h1 id="dsc-title">Meet your next <em>trader.</em></h1>
@@ -171,10 +171,10 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
       <div className="dsc-layout">
         <div
           className="dsc-deck"
-          tabIndex={0}
+          tabIndex={trader ? 0 : -1}
           role="region"
-          aria-roledescription="trader deck"
-          aria-label="Trader deck. Left arrow passes, right arrow ghost-copies."
+          aria-roledescription={trader ? "trader deck" : undefined}
+          aria-label={trader ? "Trader deck. Left arrow passes, right arrow ghost-copies." : "Trader availability"}
           onKeyDown={onKeyDown}
         >
           <div className="dsc-stack">
@@ -201,15 +201,15 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
             ) : (
               <div className="dsc-empty">
                 <h2>{traders.length ? "That’s everyone for now." : "No traders available."}</h2>
-                <p>{traders.length ? "You’ve seen this deck. Check back later or start over." : "Try another trading style. Registered bots appear in the live directory once published to Arkiv."}</p>
-                <button type="button" className="dsc-btn" disabled={!traders.length} onClick={() => { setIndex(0); setToast(null); }}>
+                <p>{traders.length ? "You’ve seen this deck. Check back later or start over." : "Try a different trading style or add your bot."}</p>
+                {traders.length > 0 && <button type="button" className="dsc-btn" onClick={() => { setIndex(0); setToast(null); }}>
                   Start over
-                </button>
+                </button>}
               </div>
             )}
           </div>
 
-          <div className="dsc-controls" role="group" aria-label="Decide on this trader">
+          {trader && <div className="dsc-controls" role="group" aria-label="Decide on this trader">
             <div className="dsc-ctl">
               <button type="button" aria-label={trader ? `Pass on ${trader.name}` : 'Pass'} disabled={!trader || !!exiting} onClick={() => decide('left')}>
                 <Icon name="x" />
@@ -228,7 +228,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
               </button>
               <span aria-hidden="true">Make it real</span>
             </div>
-          </div>
+          </div>}
 
           <div className="dsc-toast-slot" aria-live="polite">
             {toast && (
