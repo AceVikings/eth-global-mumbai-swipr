@@ -51,7 +51,7 @@ def circle(x, y, radius, fill, outline=None):
 def avatar(x, y, who, size=44):
     name, photo = who[0], who[1]
     if photo:
-        pic = Image.open(FONT / photo).convert('RGB')
+        pic = Image.open(ROOT / 'design' / 'leaderboards' / 'assets' / photo).convert('RGB')
         pic = ImageOps.fit(pic, (size * SCALE, size * SCALE), centering=(.5, .36))
         mask = Image.new('L', pic.size, 0)
         ImageDraw.Draw(mask).ellipse((0, 0, pic.width - 1, pic.height - 1), fill=255)

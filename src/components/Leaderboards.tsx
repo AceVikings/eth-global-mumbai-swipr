@@ -3,8 +3,8 @@ import type { FormEvent } from 'react';
 import { socialMessage } from '../../shared/social';
 import { useSession } from '../auth/Session';
 import {
-  ADDRESS, PREVIEW_AVATARS, PREVIEW_ROWS, SocialError, buildSocialAction, formatPct, formatUsd, getLeaderboard, getSocial,
-  loadPreviewFollows, rankBy, same, savePreviewFollows, sendSocialCommand, short,
+  ADDRESS, SocialError, buildSocialAction, formatPct, formatUsd, getLeaderboard, getSocial,
+  same, sendSocialCommand, short,
 } from '../lib/social';
 import type { LeaderboardRow, Role, Scope, SignedSocialAction, Sort } from '../lib/social';
 import '../social.css';
@@ -27,16 +27,14 @@ function Tabs<T extends string>({ label, value, options, onChange }: { label: st
   );
 }
 
-export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
+export default function Leaderboards() {
   const session = useSession();
-  const live = mode === 'live';
-  const wallet = live && session.authenticated ? session.address : null;
+  const wallet = session.authenticated ? session.address : null;
   const [role, setRole] = useState<Role>('trader');
   const [sort, setSort] = useState<Sort>('percentage');
   const [scope, setScope] = useState<Scope>('everyone');
   const [board, setBoard] = useState<Board>({ status: 'loading' });
   const [following, setFollowing] = useState<Following>({ status: 'idle' });
-  const [previewFollows, setPreviewFollows] = useState<string[]>(() => (live ? [] : loadPreviewFollows()));
   const [pending, setPending] = useState<{ signed: SignedSocialAction; wallet: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -66,7 +64,7 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
   }, [wallet, pending]);
 
   useEffect(() => {
-    if (!live || !wallet) { setFollowing({ status: 'idle' }); return; }
+    if (!wallet) { setFollowing({ status: 'idle' }); return; }
     const controller = new AbortController();
     setFollowing({ status: 'loading' });
     (async () => {
@@ -79,10 +77,9 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
         : { status: 'unavailable', message: value.detail || 'Following is unavailable right now.' });
     })().catch(e => { if (!controller.signal.aborted) setFollowing({ status: 'error', message: e instanceof Error ? e.message : 'Could not load who you follow.' }); });
     return () => controller.abort();
-  }, [live, wallet, getAccessToken, reload]);
+  }, [wallet, getAccessToken, reload]);
 
   useEffect(() => {
-    if (!live) return;
     if (scope === 'following' && !wallet) { setBoard({ status: 'ready', rows: [], asOf: null }); return; }
     const controller = new AbortController();
     setBoard({ status: 'loading' });
@@ -96,18 +93,13 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
         : { status: 'unavailable', detail: value.detail || 'Rankings appear once verified fills are recorded.' });
     })().catch(e => { if (!controller.signal.aborted) setBoard({ status: 'error', message: e instanceof Error ? e.message : 'Could not load rankings.' }); });
     return () => controller.abort();
-  }, [live, role, sort, scope, wallet, getAccessToken, reload]);
+  }, [role, sort, scope, wallet, getAccessToken, reload]);
 
-  const followList = live ? (following.status === 'ready' ? following.list : []) : previewFollows;
+  const followList = following.status === 'ready' ? following.list : [];
   const isFollowed = useCallback((a: string) => followList.some(f => same(f, a)), [followList]);
-
-  const view = useMemo((): Board => {
-    if (live) return board;
-    const rows = PREVIEW_ROWS.filter(r => r.kind === role && (scope === 'everyone' || isFollowed(r.address)));
-    return { status: 'ready', rows: rankBy(rows, sort), asOf: null };
-  }, [live, board, role, sort, scope, isFollowed]);
-  const knownNames = useMemo(() => new Map((live ? (board.status === 'ready' ? board.rows : []) : PREVIEW_ROWS)
-    .map(r => [r.address.toLowerCase(), r.name])), [live, board]);
+  const view = board;
+  const knownNames = useMemo(() => new Map((board.status === 'ready' ? board.rows : [])
+    .map(r => [r.address.toLowerCase(), r.name])), [board]);
 
   const submit = async (signed: SignedSocialAction, owner: string) => {
     setBusy(true);
@@ -133,12 +125,6 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
 
   const act = async (action: 'follow' | 'unfollow', target: string) => {
     if (!ADDRESS.test(target)) { setNotice({ tone: 'error', text: 'Enter a 0x wallet address (40 hex characters).' }); return; }
-    if (!live) {
-      const next = action === 'follow' ? [...previewFollows.filter(f => !same(f, target)), target] : previewFollows.filter(f => !same(f, target));
-      setPreviewFollows(next); savePreviewFollows(next);
-      setNotice({ tone: 'info', text: `Preview only: ${action === 'follow' ? 'followed' : 'unfollowed'} ${short(target)} on this device. Nothing was sent.` });
-      return;
-    }
     if (!session.authenticated || !wallet) { session.login(); return; }
     if (pending || busy) return;
     if (following.status !== 'ready') { setNotice({ tone: 'error', text: 'Following is unavailable, so changes cannot be sent right now.' }); return; }
@@ -162,8 +148,8 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
     if (ADDRESS.test(target)) setDraft('');
     void act('follow', target);
   };
-  const locked = live && (busy || !!pending);
-  const needsAuth = live && !wallet;
+  const locked = busy || !!pending;
+  const needsAuth = !wallet;
 
   const followButton = (address: string) => {
     const on = isFollowed(address);
@@ -175,11 +161,8 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
     );
   };
 
-  const avatar = (r: LeaderboardRow) => {
-    const photo = !live ? PREVIEW_AVATARS[r.address.toLowerCase()] : undefined;
-    return photo ? <img className="lb-avatar" src={photo} alt="" />
-      : <span className="lb-avatar lb-initial" aria-hidden="true">{r.name.trim().slice(0, 1).toUpperCase()}</span>;
-  };
+  const avatar = (r: LeaderboardRow) =>
+    <span className="lb-avatar lb-initial" aria-hidden="true">{r.name.trim().slice(0, 1).toUpperCase()}</span>;
 
   return (
     <section className="lb" aria-labelledby="lb-title">
@@ -192,7 +175,6 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
             <p><strong>Return %</strong> is that net profit divided by entry cost, weighted by position size.</p>
             <p>Both cover the same interval since inception. Open positions, ghost copies and proposed signals are excluded.</p>
             <p>Following someone is free and does not copy trades.</p>
-            {!live && <p>These figures are illustrative samples. Preview follows stay on this device.</p>}
           </div>
         </details>
       </header>
@@ -240,7 +222,7 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
             </table>)}
       </div>
       <footer className="lb-footer">
-        <p>{!live && 'Sample figures · '}Net profit after fees · closed positions</p>
+        <p>Net profit after fees · closed positions</p>
         {view.status === 'ready' && view.asOf && <p>As of {new Date(view.asOf).toLocaleString()}</p>}
       </footer>
 
@@ -250,14 +232,13 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
           <form className="lb-add" onSubmit={onAdd}>
             <label htmlFor="lb-address">Follow a wallet address</label>
             <div><input id="lb-address" value={draft} onChange={e => setDraft(e.target.value)} placeholder="0x…" spellCheck={false} autoComplete="off" />
-              <button type="submit" className="lb-btn" disabled={locked || (live && !!wallet && following.status !== 'ready')}>{needsAuth ? 'Sign in' : 'Follow'}</button></div>
+              <button type="submit" className="lb-btn" disabled={locked || (!!wallet && following.status !== 'ready')}>{needsAuth ? 'Sign in' : 'Follow'}</button></div>
           </form>
-          {live && needsAuth && <p className="lb-muted">Sign in with Google to follow people.</p>}
-          {live && following.status === 'loading' && <p className="lb-muted" role="status">Loading who you follow…</p>}
-          {live && (following.status === 'error' || following.status === 'unavailable') && <p className="lb-error" role="alert">Following unavailable: {following.message}</p>}
-          {(!live || following.status === 'ready') && (followList.length === 0 ? <p className="lb-muted">You are not following anyone yet.</p>
+          {needsAuth && <p className="lb-muted">Sign in with Google to follow people.</p>}
+          {following.status === 'loading' && <p className="lb-muted" role="status">Loading who you follow…</p>}
+          {(following.status === 'error' || following.status === 'unavailable') && <p className="lb-error" role="alert">Following unavailable: {following.message}</p>}
+          {(following.status === 'ready') && (followList.length === 0 ? <p className="lb-muted">You are not following anyone yet.</p>
             : <ul className="lb-list">{followList.map(a => <li key={a}><span>{knownNames.get(a.toLowerCase()) || short(a)}</span><button type="button" className="lb-follow-action is-following" disabled={locked} onClick={() => void act('unfollow', a)} aria-label={`Unfollow ${a}`}>Unfollow</button></li>)}</ul>)}
-          {!live && <p className="lb-muted">Preview follows stay on this device. No request is sent.</p>}
         </div>
       </details>
 
@@ -272,7 +253,7 @@ export default function Leaderboards({ mode }: { mode: 'preview' | 'live' }) {
             <div><dt>Closed positions</dt><dd>{selected.closedPositions}</dd></div>
           </dl>
           {followButton(selected.address)}
-          <p className="lb-muted">{live ? 'Based on verified closed positions.' : 'Illustrative profile and sample figures.'} Following does not start a Copy Pass.</p>
+          <p className="lb-muted">Based on verified closed positions. Following does not start a Copy Pass.</p>
         </div>}
       </dialog>
     </section>

@@ -20,7 +20,7 @@ node -e 'const u = new URL(process.argv[1]); if (u.protocol !== "https:" || u.or
 [[ "${ARKIV_CONFIRMATIONS:-2}" =~ ^[0-9]+$ ]] || { echo "ARKIV_CONFIRMATIONS must be an integer" >&2; exit 2; }
 [[ "$API_SERVICE_ACCOUNT" != "$WORKER_SERVICE_ACCOUNT" ]] || { echo "API and worker need separate service accounts" >&2; exit 2; }
 
-APP_MODE="${APP_MODE:-preview}"
+APP_MODE="${APP_MODE:-live}"
 REPOSITORY="${REPOSITORY:-swipr}"
 TAG="${TAG:-$(git rev-parse --short HEAD)}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/backend:${TAG}"

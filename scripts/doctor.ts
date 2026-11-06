@@ -12,6 +12,9 @@ const report = (level: Level, label: string, detail: string) => results.push({ l
 if (existsSync('.env')) process.loadEnvFile('.env');
 const env = (name: string) => (process.env[name] ?? '').trim();
 const has = (name: string) => env(name) !== '';
+// Accept the same server-side aliases as readConfig; never print their values.
+process.env.FLASH_KEY_EXEC ||= env('FLASH_API_KEY');
+process.env.BASE_RPC ||= env('BASE_RPC_URL');
 
 const arg = process.argv.find(value => value.startsWith('--role='))?.slice(7)
   ?? (process.argv.includes('--role') ? process.argv[process.argv.indexOf('--role') + 1] : undefined);
@@ -38,7 +41,7 @@ for (const name of ['api', 'worker', 'doctor', 'dev:stack']) {
   report(scripts[name] ? 'ok' : 'warn', `npm script ${name}`, scripts[name] ? 'present' : 'missing (host pending)');
 }
 
-const mode = env('APP_MODE') || 'preview';
+const mode = env('APP_MODE') || 'live';
 const serverRole = roles.has('api') || roles.has('worker');
 if (serverRole) {
   report(['preview', 'live'].includes(mode) ? 'ok' : 'fail', 'APP_MODE', ['preview', 'live'].includes(mode) ? mode : 'invalid (preview|live)');

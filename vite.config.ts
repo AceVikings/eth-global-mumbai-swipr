@@ -17,7 +17,7 @@ function offlineShell(): Plugin {
       // Only public assets used by this website belong in the offline shell.
       // Fonts are already fingerprinted and present in the emitted bundle.
       const publicPaths = ['/manifest.webmanifest', ...[
-        'alice.jpg', 'dan.jpg', 'priya.jpg', 'mark.svg', 'icon-192.png', 'icon-512.png',
+        'mark.svg', 'icon-192.png', 'icon-512.png',
       ].map(file => `/assets/${file}`)];
       const publicContents = Object.fromEntries(publicPaths.map(path => [path,
         readFileSync(resolve(root, 'public', path.slice(1))),

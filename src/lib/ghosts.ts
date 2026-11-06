@@ -2,11 +2,13 @@ import type { Ghost } from '../../shared/types';
 
 // Local, free simulations started by a right swipe. Only parameters are
 // stored; results are derived later from recorded trades, never invented here.
-export const GHOSTS_KEY = 'swipr.ghosts.v1';
+// v1 mixed design-preview and real ghosts. Read real legacy entries only until v2 is written.
+export const GHOSTS_KEY = 'swipr.ghosts.v2';
 export const GHOST_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 export const MIN_PER_TRADE_USD = 5;
 export const MAX_PER_TRADE_USD = 50;
 const GHOSTS_LOCK = 'swipr.ghosts';
+const LEGACY_PREVIEW_IDS = new Set(['alice', 'dan', 'priya', 'momo']);
 const MAX_DATE_MS = 8_640_000_000_000_000;
 
 const defaultStorage = (): Storage | undefined => {
@@ -42,8 +44,10 @@ export const isGhostExpired = (ghost: Ghost, now: number = Date.now()): boolean 
 function readGhosts(storage: Storage | null | undefined): Ghost[] | null {
   if (!storage) return null;
   let raw: string | null;
+  let legacy = false;
   try {
     raw = storage.getItem(GHOSTS_KEY);
+    if (raw === null) { raw = storage.getItem('swipr.ghosts.v1'); legacy = true; }
   } catch {
     return null;
   }
@@ -58,7 +62,7 @@ function readGhosts(storage: Storage | null | undefined): Ghost[] | null {
   // One ghost per trader; on duplicates the earliest start is the original.
   const byTrader = new Map<string, Ghost>();
   for (const item of parsed) {
-    if (!isGhost(item)) continue;
+    if (!isGhost(item) || (legacy && LEGACY_PREVIEW_IDS.has(item.traderId))) continue;
     const ghost: Ghost = {
       traderId: item.traderId, startedAt: item.startedAt, perTradeUsd: item.perTradeUsd,
       expiresAt: item.expiresAt, includedSignalId: item.includedSignalId,

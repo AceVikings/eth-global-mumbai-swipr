@@ -14,7 +14,6 @@ import {
   MIN_PER_TRADE_USD,
   type GhostChange,
 } from "./lib/ghosts";
-import { previewTraders } from "./fixtures";
 import { getBots } from "./lib/bots";
 import { getRuntime } from "./lib/api";
 
@@ -63,9 +62,7 @@ export default function App() {
   const [directoryState, setDirectoryState] = useState("Loading registered traders…");
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [serviceState, setServiceState] = useState("Not checked");
-  const [mode, setMode] = useState<"preview" | "live">("preview");
   useEffect(() => {
-    if (mode !== "live") return;
     const controller = new AbortController();
     setDirectoryState("Loading registered traders…");
     void getBots(controller.signal).then(value => {
@@ -78,9 +75,9 @@ export default function App() {
       setDirectoryState(value.state === "ready" ? "Registered bot profiles · execution history unverified" : value.detail);
     }).catch(() => { if (!controller.signal.aborted) { setRegisteredTraders([]); setDirectoryState("Trader directory unavailable. Try again from Bots."); } });
     return () => controller.abort();
-  }, [mode, directoryVersion]);
+  }, [directoryVersion]);
   useEffect(() => {
-    if (page !== "you" && mode !== "live") return;
+    if (page !== "you") return;
     const controller = new AbortController();
     const timer = setTimeout(() => { setRuntime(null); setServiceState("Live service unavailable"); controller.abort(); }, 8000);
     setServiceState("Checking service…");
@@ -90,7 +87,7 @@ export default function App() {
     }).catch(() => { if (!controller.signal.aborted) { setRuntime(null); setServiceState("Live service unavailable"); } })
       .finally(() => clearTimeout(timer));
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [page, mode]);
+  }, [page]);
   useEffect(() => {
     const onHash = () => {
       setPage(currentPage());
@@ -155,12 +152,7 @@ export default function App() {
       );
     }
   };
-  const traders =
-    mode === "preview"
-      ? previewTraders.filter(
-          (t) => prefs.vibe === "All" || t.style === prefs.vibe,
-        )
-      : registeredTraders.filter(t => prefs.vibe === "All" || t.style === prefs.vibe);
+  const traders = registeredTraders.filter(t => prefs.vibe === "All" || t.style === prefs.vibe);
   const nav = (
     <nav aria-label="Main navigation">
       {pages.map((p) => (
@@ -185,14 +177,8 @@ export default function App() {
         Skip to content
       </a>
       <div className="preview-banner">
-        {mode === "preview" ? "Design preview" : "Live directory"}
-        <span>
-          {" "}
-          ·{" "}
-          {mode === "preview"
-            ? "Illustrative profiles. No live trades or funds."
-            : "Registered profiles · execution history unverified."}
-        </span>
+        Trader directory
+        <span> · Real registrations only · trading verification pending.</span>
       </div>
       {ghostStorage === "session-only" && (
         <div className="offline-banner" role="status">
@@ -276,9 +262,9 @@ export default function App() {
                       </select>
                     </label>
                   </div>
-                  {mode === "live" && <p className="directory-status" role="status">{directoryState} <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button></p>}
+                  <p className="directory-status" role="status">{directoryState} <button className="text-button" onClick={() => setDirectoryVersion(v => v + 1)}>Refresh</button> <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button></p>
                   <Discover
-              key={`${mode}:${prefs.vibe}`}
+                    key={`${prefs.vibe}:${traders.map(t => t.id).join(',')}`}
                     traders={traders}
                     onGhost={ghost}
                     onReal={setRealTrader}
@@ -290,7 +276,8 @@ export default function App() {
               {page === "ghosts" && (
                 <Ghosts
                   ghosts={ghosts}
-                  traders={[...previewTraders, ...registeredTraders]}
+                  traders={registeredTraders}
+                  directoryStatus={directoryState}
                   onReal={setRealTrader}
                   onRemove={(id) => {
                     void ghostStore
@@ -317,10 +304,10 @@ export default function App() {
                   <div className="empty-illustration">
                     <Icon name="matches" size={44} />
                   </div>
-                  <h2>No real copies yet.</h2>
+                  <h2>Copy Pass service unavailable.</h2>
                   <p>
-                    Start with a ghost. When you’re ready, choose a Copy Pass
-                    and review its limits before connecting your wallet.
+                    Confirmed passes and positions cannot be loaded yet.
+                    This does not mean your wallet has no holdings.
                   </p>
                   <div className="quiet-note">
                     <Icon name="shield" size={20} />
@@ -345,7 +332,7 @@ export default function App() {
                 </section>
               )}
               {page === "bots" && <BotStudio onChanged={() => setDirectoryVersion(v => v + 1)} />}
-              {page === "leaderboards" && <Leaderboards mode={mode} />}
+              {page === "leaderboards" && <Leaderboards />}
               {page === "you" && (
                 <section className="content-page">
                   <span className="eyebrow">MAKE YOURSELF AT HOME</span>
@@ -396,27 +383,6 @@ export default function App() {
                     </p>
                   </div>
                   <SessionPanel />
-                  <div className="settings-group">
-                    <h2>Explore the website</h2>
-                    <p>
-                      Design profiles let you try discovery, ghost tracking and
-                      the pass review. They aren’t live traders.
-                    </p>
-                    <div className="segmented">
-                      <button
-                        aria-pressed={mode === "preview"}
-                        onClick={() => setMode("preview")}
-                      >
-                        Design preview
-                      </button>
-                      <button
-                        aria-pressed={mode === "live"}
-                        onClick={() => setMode("live")}
-                      >
-                        Live directory
-                      </button>
-                    </div>
-                  </div>
                   <div className="settings-group">
                     <h2>Service connections</h2>
                     <p role="status">{serviceState}</p>

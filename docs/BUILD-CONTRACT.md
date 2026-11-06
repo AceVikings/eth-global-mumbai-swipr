@@ -44,8 +44,9 @@ artifacts and archives; secrets stay server-side in Privy/Secret Manager.
 
 ## Implementation and verification
 Build the website first in parallel: discovery, local ghosts and Copy Pass review.
-The website milestone is complete. The authorized next milestone adds the API, worker, durable ledger, Render static site configuration and GCP Cloud Run infrastructure; financial execution remains subject to the real acceptance gates below. Keep preview fixtures permanently labeled; live mode starts empty until
-verified data is configured. Never manufacture fills, identity badges or proofs.
+The website milestone is complete. The authorized next milestone adds the API, worker, durable ledger, Render static site configuration and GCP Cloud Run infrastructure; financial execution remains subject to the real acceptance gates below. The latest user instruction requires no mock data: remove runtime preview fixtures
+and sample mode. Keep illustrative studies in design artifacts only; live views show
+unavailable states until verified data is configured. Never manufacture fills, identity badges or proofs.
 Provider credentials, onchain deployment, real fills, signer policy enforcement,
 Bee setup/BMT and archive recovery are separate live acceptance gates. An installed
 SDK or a configured environment variable does not pass those gates.
