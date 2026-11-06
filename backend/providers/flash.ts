@@ -1,3 +1,4 @@
+import { decodeFunctionData, erc20Abi } from 'viem';
 import { createHttp, ProviderError, type FetchLike } from './http.ts';
 
 // Definitive Flash v1 on Base mainnet. The adapter only relays orders that a wallet
@@ -33,6 +34,8 @@ export interface OrderIntent {
   attachedBracket?: { takeProfit?: { notionalPrice: string }; stopLoss?: { notionalPrice: string } };
   maxSlippage?: string;
   maxPriceImpact?: string;
+  /** ISO-8601 entry expiry. Quotes default to 15 minutes, never good-til-cancelled. */
+  expireTime?: string;
 }
 // Unix seconds; expectedVault must come from trusted provider/onchain verification.
 export interface SignPolicy { now: number; maxDeadline: number; expectedVault?: string }
@@ -87,6 +90,10 @@ export function validateIntent(i: OrderIntent): void {
     throw invalid('brackets only protect buys');
   }
   if (i.orderType === 'limit' && !i.limitNotionalPrice) throw invalid('limit needs limitNotionalPrice');
+  for (const bound of [i.maxSlippage, i.maxPriceImpact]) {
+    if (bound !== undefined && (!DECIMAL.test(bound) || Number(bound) <= 0 || Number(bound) > 0.05)) throw invalid('slippage and price impact must be at most 5%');
+  }
+  if (i.expireTime !== undefined && (!/^\d{4}-\d\d-\d\dT/.test(i.expireTime) || !Number.isFinite(Date.parse(i.expireTime)))) throw invalid('expiry must be an ISO timestamp');
 }
 
 export function parseTypedData(raw: unknown): TypedData {
@@ -121,6 +128,23 @@ export function validateTypedData(td: TypedData, intent: OrderIntent, policy: Si
   if (!Number.isSafeInteger(deadline) || deadline <= policy.now || deadline > policy.maxDeadline) throw invalid('deadline outside allowed window');
 }
 
+/** Never relay a provider-supplied unlimited approval or an arbitrary transaction. */
+export function validateApproval(raw: unknown, intent: OrderIntent, maxAmount: bigint) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalid('approval transaction required');
+  const tx = raw as Record<string, unknown>;
+  const want = fromTo(intent);
+  if (!sameAddr(tx.to, want.fromToken) || typeof tx.data !== 'string' || !/^0x[0-9a-f]+$/i.test(tx.data)
+    || (tx.value !== undefined && tx.value !== '0' && tx.value !== '0x0') || maxAmount < want.fromAmount) throw invalid('unexpected approval transaction');
+  try {
+    const decoded = decodeFunctionData({ abi: erc20Abi, data: tx.data as `0x${string}` });
+    if (decoded.functionName !== 'approve') throw invalid('approval function required');
+    const [spender, amount] = decoded.args as readonly [string, bigint];
+    if (!sameAddr(spender, FLASH_DOMAIN.verifyingContract) || amount < want.fromAmount || amount > maxAmount
+      || tx.data.length !== 138) throw invalid('approval exceeds reviewed scope');
+    return { to: want.fromToken, data: tx.data, value: '0x0', chainId: BASE_CHAIN_ID, amount: amount.toString(), spender };
+  } catch { throw invalid('approval exceeds reviewed scope'); }
+}
+
 export const cancelMessage = (orderId: string) => `Definitive Flash v1 — Cancel Order\nOrder: ${orderId}`;
 const checkId = (id: string) => { if (!/^[\w-]{1,128}$/.test(id)) throw invalid('bad order id'); return id; };
 const checkSig = (s: string) => { if (!/^0x[0-9a-fA-F]{130}$/.test(s)) throw invalid('bad signature'); return s; };
@@ -130,9 +154,11 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
   const base = o.baseUrl ?? API;
   const http = createHttp({ provider: 'flash', fetch: o.fetch, timeoutMs: o.timeoutMs ?? 8000, minIntervalMs: 220, secrets: [o.apiKey], sleep: o.sleep });
   const headers = { 'x-definitive-api-key': o.apiKey, 'content-type': 'application/json' };
-  const body = (i: OrderIntent) => ({
+  const body = (i: OrderIntent, expireTime?: string) => ({
     targetChain: 'base', contraChain: 'base', targetAsset: TOKENS[i.asset].address, contraAsset: TOKENS.USDC.address,
     side: i.side, qty: i.qty, orderType: i.orderType, funderAddress: i.funder, flashIntegratorFeeBps: '25',
+    evmUsePermit2: false, forceMinimalAllowance: true,
+    ...(expireTime && { expireTime }),
     ...(i.limitNotionalPrice && { limitNotionalPrice: i.limitNotionalPrice }),
     ...(i.attachedBracket && { attachedBracket: i.attachedBracket }),
     ...(i.maxSlippage && { maxSlippage: i.maxSlippage }),
@@ -143,7 +169,10 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
   return {
     async quote(intent: OrderIntent): Promise<FlashQuote> {
       validateIntent(intent);
-      const j = ok(await http.json(`${base}/quote`, { method: 'POST', headers, body: JSON.stringify(body(intent)) }, { retry: true }), 'quote');
+      const expiry = intent.expireTime ?? new Date(Date.now() + 900000).toISOString();
+      const duration = Date.parse(expiry) - Date.now();
+      if (duration <= 0 || duration > 900000) throw invalid('entry expiry must be within 15 minutes');
+      const j = ok(await http.json(`${base}/quote`, { method: 'POST', headers, body: JSON.stringify(body(intent, expiry)) }, { retry: true }), 'quote');
       const raw = j.evm?.orderTypedData;
       if (typeof j.quoteId !== 'string' || !raw) throw new ProviderError('flash', 'bad_response', 'quote missing id or typed data');
       return { quoteId: j.quoteId, typedDataRaw: typeof raw === 'string' ? raw : JSON.stringify(raw), typedData: parseTypedData(raw), raw: j };
@@ -153,7 +182,7 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
       validateIntent(a.intent);
       validateTypedData(parseTypedData(a.quote.typedDataRaw), a.intent, a.policy);
       const j = ok(await http.json(`${base}/order`, { method: 'POST', headers, body: JSON.stringify({
-        ...body(a.intent), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
+        ...body(a.intent, new Date(Number(a.quote.typedData.message.deadline) * 1000).toISOString()), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
       }) }), 'order');
       if (typeof j.orderId !== 'string') throw new ProviderError('flash', 'bad_response', 'order id missing', { ambiguous: true });
       return { orderId: j.orderId as string };

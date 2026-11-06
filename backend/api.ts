@@ -256,9 +256,9 @@ export function createApi({ config, ledger, projects = null, social = null, wall
         validateTypedData(quote.typedData, intent, { now: Math.floor(Date.now() / 1000), maxDeadline: Math.floor(Date.now() / 1000) + 900 });
         signingCheck = 'validated';
       } catch { /* A verified vault and bounded deadline are required before signing. */ }
-      const raw = quote.raw as { estimatedFeeNotional?: unknown };
+      const raw = quote.raw as { fees?: { estimatedFeeNotional?: unknown } };
       return send(200, { quote: { quoteId: quote.quoteId, asset: intent.asset, qty: intent.qty,
-        sharedPrice: intent.sharedPrice, estimatedFeeNotional: typeof raw.estimatedFeeNotional === 'string' ? raw.estimatedFeeNotional : null },
+        sharedPrice: intent.sharedPrice, estimatedFeeNotional: typeof raw.fees?.estimatedFeeNotional === 'string' ? raw.fees.estimatedFeeNotional : null },
         signingCheck, executable: false, detail: 'Indicative live quote. Signing needs a verified vault and bounded deadline. No order submitted.' });
     } catch (error) {
       if (error instanceof BotError) return send(error.status, { error: { code: error.code, message: error.message }, requestId });
