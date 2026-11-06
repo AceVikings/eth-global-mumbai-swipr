@@ -7,6 +7,8 @@ type Props = {
   traders: Trader[];
   onReal: (t: Trader) => void;
   onRemove: (id: string) => void;
+  loading?: boolean; busy?: boolean; error?: string; signedIn?: boolean;
+  onSignIn?: () => void; onRefresh?: () => void;
 };
 
 const HOUR = 60 * 60 * 1000;
@@ -31,9 +33,9 @@ function Avatar({ trader }: { trader?: Trader }) {
   return <span className="gh-avatar gh-monogram" aria-hidden="true">{trader ? trader.name.slice(0, 1) : '?'}</span>;
 }
 
-function Row({ ghost, trader, now, onReal, onRemove }: {
+function Row({ ghost, trader, now, onReal, onRemove, busy }: {
   ghost: Ghost; trader?: Trader; now: number;
-  onReal: Props['onReal']; onRemove: Props['onRemove'];
+  onReal: Props['onReal']; onRemove: Props['onRemove']; busy?: boolean;
 }) {
   const expired = isGhostExpired(ghost, now);
   const name = trader?.name ?? 'Unknown trader';
@@ -77,7 +79,7 @@ function Row({ ghost, trader, now, onReal, onRemove }: {
           </button>
         )}
         <button type="button" className="gh-btn gh-btn-quiet" aria-label={`Remove ghost of ${name}`}
-          onClick={() => onRemove(ghost.traderId)}>
+          disabled={busy} onClick={() => onRemove(ghost.traderId)}>
           {expired ? 'Remove to restart' : 'Remove'}
         </button>
       </div>
@@ -85,7 +87,7 @@ function Row({ ghost, trader, now, onReal, onRemove }: {
   );
 }
 
-export default function Ghosts({ ghosts, traders, onReal, onRemove }: Props) {
+export default function Ghosts({ ghosts, traders, onReal, onRemove, loading, busy, error, signedIn = true, onSignIn, onRefresh }: Props) {
   const now = Date.now();
   const byId = new Map(traders.map((t) => [t.id, t]));
   const sorted = [...ghosts].sort((a, b) =>
@@ -101,10 +103,14 @@ export default function Ghosts({ ghosts, traders, onReal, onRemove }: Props) {
         </p>
       </header>
 
-      {sorted.length === 0 ? (
+      {!signedIn ? <div className="gh-empty"><h2 className="gh-empty-title">Your ghosts, wherever you go</h2>
+        <button type="button" className="gh-btn gh-btn-primary" onClick={onSignIn}>Sign in</button></div>
+      : loading ? <p role="status">Loading your ghosts…</p>
+      : error ? <div className="gh-empty"><p role="alert">{error}</p><button type="button" className="gh-btn gh-btn-quiet" onClick={onRefresh}>Try again</button></div>
+      : sorted.length === 0 ? (
         <div className="gh-empty">
           <h2 className="gh-empty-title">No ghosts yet</h2>
-          <p className="gh-note">Find a trader in Discover and tap Ghost copy. Your simulation stays on this device.</p>
+          <p className="gh-note">Find a trader in Discover and tap Ghost copy. Your ghosts are saved to your account.</p>
         </div>
       ) : (
         <>
@@ -114,7 +120,7 @@ export default function Ghosts({ ghosts, traders, onReal, onRemove }: Props) {
           <ul className="gh-list">
             {sorted.map((g) => (
               <Row key={g.traderId} ghost={g} trader={byId.get(g.traderId)} now={now}
-                onReal={onReal} onRemove={onRemove} />
+                onReal={onReal} onRemove={onRemove} busy={busy} />
             ))}
           </ul>
           <p className="gh-note">

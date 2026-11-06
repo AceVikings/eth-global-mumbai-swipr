@@ -6,7 +6,7 @@ import '../discover.css';
 
 type Props = {
   traders: Trader[];
-  onGhost: (t: Trader) => void;
+  onGhost: (t: Trader) => Promise<boolean>;
   onReal: (t: Trader) => void;
   perTradeUsd: number;
   vibe: string;
@@ -28,6 +28,7 @@ const isTyping = (el: EventTarget | null) =>
 const usd = (n: number) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 
 export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }: Props) {
+  const [saving, setSaving] = useState(false);
   const [index, setIndex] = useState(0);
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -54,9 +55,12 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  const act = useCallback((dir: Dir, t: Trader, i: number) => {
+  const act = useCallback(async (dir: Dir, t: Trader, i: number) => {
     if (dir === 'right') {
-      onGhost(t);
+      setExiting(null); setDx(0); setSaving(true);
+      const saved = await onGhost(t);
+      setSaving(false);
+      if (!saved) { busy.current = false; return; }
       setToast(null);
     } else {
       setToast({ trader: t, index: i });
@@ -211,19 +215,19 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
 
           {trader && <div className="dsc-controls" role="group" aria-label="Decide on this trader">
             <div className="dsc-ctl">
-              <button type="button" aria-label={trader ? `Pass on ${trader.name}` : 'Pass'} disabled={!trader || !!exiting} onClick={() => decide('left')}>
+              <button type="button" aria-label={trader ? `Pass on ${trader.name}` : 'Pass'} disabled={!trader || !!exiting || saving} onClick={() => decide('left')}>
                 <Icon name="x" />
               </button>
               <span aria-hidden="true">Pass</span>
             </div>
             <div className="dsc-ctl dsc-ctl-ghost">
-              <button type="button" aria-label={trader ? `Ghost-copy ${trader.name} for free` : 'Ghost copy'} disabled={!trader || !!exiting} onClick={() => decide('right')}>
+              <button type="button" aria-label={trader ? `Ghost-copy ${trader.name} for free` : 'Ghost copy'} disabled={!trader || !!exiting || saving} onClick={() => decide('right')}>
                 <Icon name="ghost" size={28} />
               </button>
               <span aria-hidden="true">Ghost copy</span>
             </div>
             <div className="dsc-ctl">
-              <button type="button" aria-label={trader ? `Make it real: set up a Copy Pass with ${trader.name}` : 'Make it real'} disabled={!trader || !!exiting} onClick={() => trader && onReal(trader)}>
+              <button type="button" aria-label={trader ? `Make it real: set up a Copy Pass with ${trader.name}` : 'Make it real'} disabled={!trader || !!exiting || saving} onClick={() => trader && onReal(trader)}>
                 <Icon name="star" />
               </button>
               <span aria-hidden="true">Make it real</span>
@@ -235,7 +239,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
               <div className="dsc-toast dsc-toast-pass">
                 <Icon name="x" size={18} />
                 <span>Passed on {toast.trader.name}</span>
-                <button type="button" disabled={!!exiting} onClick={undo}><Icon name="undo" size={16} />Undo</button>
+                <button type="button" disabled={!!exiting || saving} onClick={undo}><Icon name="undo" size={16} />Undo</button>
               </div>
             )}
           </div>

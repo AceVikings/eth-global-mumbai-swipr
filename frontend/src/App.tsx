@@ -9,20 +9,16 @@ import Ghosts from "./components/Ghosts";
 import PassSetup from "./components/PassSetup";
 import { Icon } from "./components/Icons";
 import {
-  createGhostStore,
-  GHOSTS_KEY,
   MAX_PER_TRADE_USD,
   MIN_PER_TRADE_USD,
-  type GhostChange,
 } from "./lib/ghosts";
 import { getBots } from "./lib/bots";
+import { useWalletGhosts } from "./auth/useWalletGhosts";
 
 type Page = "discover" | "ghosts" | "matches" | "bots" | "leaderboards" | "you";
 const pages: Page[] = ["discover", "ghosts", "matches", "leaderboards", "bots", "you"];
 const vibes = ["All", "Steady", "Balanced", "Spicy"];
 const PREFS_KEY = "swipr.preferences.v1";
-const SESSION_ONLY_NOTICE =
-  "Browser storage is unavailable. Your ghosts will last for this visit only.";
 function currentPage(): Page {
   const hash = location.hash.slice(1);
   return pages.includes(hash as Page) ? (hash as Page) : "discover";
@@ -59,10 +55,7 @@ function AccountButton({ onAccount }: { onAccount: () => void }) {
 export default function App() {
   const session = useSession();
   const [page, setPage] = useState<Page>(currentPage);
-  const [ghostStore] = useState(() => createGhostStore());
-  const [{ ghosts, status: ghostStorage }, setGhostSnapshot] = useState(
-    ghostStore.getSnapshot,
-  );
+  const { store: ghostStore, ghosts, loading: ghostsLoading, busy: ghostsBusy, error: ghostsError } = useWalletGhosts(session);
   const [prefs, setPrefs] = useState(readPrefs);
   const [realTrader, setRealTrader] = useState<Trader | null>(null);
   const [notice, setNotice] = useState("");
@@ -97,19 +90,6 @@ export default function App() {
     };
   }, []);
   useEffect(() => {
-    const unsubscribe = ghostStore.subscribe(setGhostSnapshot);
-    // Other tabs write the same key; storage events keep this tab current.
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === null || e.key === GHOSTS_KEY) ghostStore.refresh();
-    };
-    window.addEventListener("storage", onStorage);
-    ghostStore.refresh();
-    return () => {
-      unsubscribe();
-      window.removeEventListener("storage", onStorage);
-    };
-  }, [ghostStore]);
-  useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 6500);
     return () => clearTimeout(timer);
@@ -120,19 +100,16 @@ export default function App() {
     setRealTrader(null);
     window.scrollTo(0, 0);
   };
-  const ghost = (trader: Trader) => {
-    const amount = prefs.amount;
-    void ghostStore
-      .start(trader.id, amount)
-      .then(({ existed, status }: GhostChange) =>
-        setNotice(
-          status === "session-only"
-            ? SESSION_ONLY_NOTICE
-            : existed
-              ? `${trader.name} is already in your ghosts. Original start time kept.`
-              : `Ghost-copying ${trader.name} · $${amount}/trade · no funds moved.`,
-        ),
-      );
+  const ghost = async (trader: Trader): Promise<boolean> => {
+    if (!ghostStore) { session.login(); return false; }
+    if (!online) { setNotice("Reconnect to save your ghost."); return false; }
+    setNotice("Saving your ghost…");
+    try {
+      const { existed } = await ghostStore.start(trader.id, prefs.amount);
+      setNotice(existed ? `${trader.name} is already in your ghosts. Original start time kept.`
+        : `Ghost-copying ${trader.name} · $${prefs.amount}/trade · no funds moved.`);
+      return true;
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Your ghost could not be saved."); return false; }
   };
   const updatePrefs = (amount: number, vibe: string) => {
     const next = { amount, vibe };
@@ -169,15 +146,9 @@ export default function App() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      {ghostStorage === "session-only" && (
-        <div className="offline-banner" role="status">
-          {SESSION_ONLY_NOTICE}
-        </div>
-      )}
       {!online && (
         <div className="offline-banner" role="status">
-          You’re offline. Local ghosts are available; prices and trading need a
-          connection.
+          You’re offline. Reconnect to sync ghosts and load prices.
         </div>
       )}
       <div className={`app-shell ${realTrader ? "focused-flow" : ""}`}>
@@ -245,16 +216,16 @@ export default function App() {
                   ghosts={ghosts}
                   traders={registeredTraders}
                   onReal={setRealTrader}
+                  loading={ghostsLoading}
+                  busy={ghostsBusy}
+                  error={ghostsError}
+                  signedIn={!!ghostStore}
+                  onSignIn={session.login}
+                  onRefresh={() => { void ghostStore?.refresh(); }}
                   onRemove={(id) => {
-                    void ghostStore
-                      .remove(id)
-                      .then(({ status }) =>
-                        setNotice(
-                          status === "session-only"
-                            ? SESSION_ONLY_NOTICE
-                            : "Ghost removed from this browser.",
-                        ),
-                      );
+                    if (!ghostStore) return;
+                    void ghostStore.remove(id).then(() => setNotice("Ghost removed."))
+                      .catch(error => setNotice(error instanceof Error ? error.message : "Your ghost could not be removed."));
                   }}
                 />
               )}
@@ -305,9 +276,7 @@ export default function App() {
                   <h1>
                     Your kind of trading<span>.</span>
                   </h1>
-                  <p className="page-lead">
-                    Sign in and make yourself at home.
-                  </p>
+                  {!session.authenticated && <p className="page-lead">Sign in and make yourself at home.</p>}
                   <div className="settings-group">
                     <h2>Your ghost defaults</h2>
                     <label className="setting-label" htmlFor="trade-size">
@@ -357,8 +326,7 @@ export default function App() {
                       the address bar or browser menu.
                     </p>
                     <p className="muted">
-                      Local ghosts stay on this browser. Clearing site data
-                      removes them.
+                      Your ghosts follow your wallet across browsers and devices.
                     </p>
                   </div>
                 </section>

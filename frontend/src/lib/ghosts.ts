@@ -1,13 +1,12 @@
 import type { Ghost } from '../contracts/types';
 
-// Local, free simulations started by a right swipe. Only parameters are
-// stored; results are derived later from recorded trades, never invented here.
+// Simulation parameters and legacy browser imports. New ghosts live on Arkiv.
+// Results are derived later from recorded trades, never invented here.
 // v1 mixed design-preview and real ghosts. Read real legacy entries only until v2 is written.
 export const GHOSTS_KEY = 'swipr.ghosts.v2';
 export const GHOST_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 export const MIN_PER_TRADE_USD = 5;
 export const MAX_PER_TRADE_USD = 50;
-const GHOSTS_LOCK = 'swipr.ghosts';
 const LEGACY_PREVIEW_IDS = new Set(['alice', 'dan', 'priya', 'momo']);
 const MAX_DATE_MS = 8_640_000_000_000_000;
 
@@ -102,93 +101,3 @@ export function startGhost(ghosts: Ghost[], traderId: string, perTradeUsd: numbe
 export function removeGhost(ghosts: Ghost[], traderId: string): Ghost[] {
   return ghosts.some((g) => g.traderId === traderId) ? ghosts.filter((g) => g.traderId !== traderId) : ghosts;
 }
-
-export type GhostStorageStatus = 'saved' | 'session-only';
-export type GhostSnapshot = { ghosts: Ghost[]; status: GhostStorageStatus };
-export type GhostChange = GhostSnapshot & { existed: boolean };
-// The subset of navigator.locks used here; requests for one name run exclusively.
-export type GhostLocks = { request(name: string, callback: () => unknown): Promise<unknown> };
-
-type GhostOp = { traderId: string } & ({ kind: 'start'; perTradeUsd: number; now: number } | { kind: 'remove' });
-
-const applyOp = (ghosts: Ghost[], op: GhostOp): Ghost[] =>
-  op.kind === 'start' ? startGhost(ghosts, op.traderId, op.perTradeUsd, op.now) : removeGhost(ghosts, op.traderId);
-
-const defaultLocks = (): GhostLocks | null => {
-  try {
-    return globalThis.navigator?.locks ?? null;
-  } catch {
-    return null;
-  }
-};
-
-// Every change is an intent (start or remove one trader) replayed over a fresh
-// read of storage, so tabs never overwrite each other with stale lists and a
-// ghost deleted elsewhere is not written back. Intents that could not be saved
-// stay pending and are replayed over the next successful read.
-export function createGhostStore({ storage = defaultStorage(), locks = defaultLocks() }: {
-  storage?: Storage | null; locks?: GhostLocks | null;
-} = {}) {
-  const initial = readGhosts(storage);
-  let snapshot: GhostSnapshot = { ghosts: initial ?? [], status: initial ? 'saved' : 'session-only' };
-  let pending: GhostOp[] = [];
-  const listeners = new Set<(snapshot: GhostSnapshot) => void>();
-
-  const publish = (next: GhostSnapshot) => {
-    const same = next.status === snapshot.status && JSON.stringify(next.ghosts) === JSON.stringify(snapshot.ghosts);
-    snapshot = next;
-    if (!same) listeners.forEach((listener) => listener(snapshot));
-  };
-
-  const commit = (op: GhostOp): GhostChange => {
-    // Read immediately before the synchronous write; unreadable storage keeps memory.
-    const fresh = readGhosts(storage);
-    const base = pending.reduce(applyOp, fresh ?? snapshot.ghosts);
-    const ghosts = applyOp(base, op);
-    pending = [...pending, op];
-    let saved = false;
-    if (fresh) {
-      try {
-        storage!.setItem(GHOSTS_KEY, JSON.stringify(ghosts));
-        saved = true;
-        pending = [];
-      } catch {
-        // Quota or privacy settings: keep the intent for the next attempt.
-      }
-    }
-    publish({ ghosts, status: saved ? 'saved' : 'session-only' });
-    return { ...snapshot, existed: ghosts === base && op.kind === 'start' };
-  };
-
-  const run = async (op: GhostOp): Promise<GhostChange> => {
-    if (!locks) return commit(op);
-    let result: GhostChange | undefined;
-    try {
-      await locks.request(GHOSTS_LOCK, () => { result = commit(op); });
-    } catch {
-      // Lock manager refused (e.g. opaque origin); commit didn't run.
-    }
-    return result ?? commit(op);
-  };
-
-  return {
-    getSnapshot: () => snapshot,
-    subscribe(listener: (snapshot: GhostSnapshot) => void) {
-      listeners.add(listener);
-      return () => { listeners.delete(listener); };
-    },
-    start(traderId: string, perTradeUsd: number, now: number = Date.now()) {
-      startGhost([], traderId, perTradeUsd, now); // validate before queueing
-      return run({ kind: 'start', traderId, perTradeUsd, now });
-    },
-    remove: (traderId: string) => run({ kind: 'remove', traderId }),
-    // Call on `storage` events from other tabs.
-    refresh() {
-      const fresh = readGhosts(storage);
-      if (!fresh) return publish({ ...snapshot, status: 'session-only' });
-      publish({ ghosts: pending.reduce(applyOp, fresh), status: pending.length ? 'session-only' : 'saved' });
-    },
-  };
-}
-
-export type GhostStore = ReturnType<typeof createGhostStore>;

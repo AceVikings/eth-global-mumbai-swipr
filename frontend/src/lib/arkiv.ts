@@ -9,7 +9,7 @@ export const arkivChain = defineChain({ id: 7794095, name: 'Arkiv Rabdi',
   nativeCurrency: { name: 'Golem', symbol: 'tGLM', decimals: 18 },
   rpcUrls: { default: { http: ['https://rpc.rabdi.db-chain.testnet.arkiv.network'] } }, testnet: true });
 const base = ((import.meta.env.VITE_API_URL as string | undefined) || '').replace(/\/$/, '');
-async function request(session: Session, path: string, body?: unknown) {
+export async function accountRequest(session: Session, path: string, body?: unknown) {
   const token = await session.getAccessToken();
   if (!token) throw new Error('Sign in again to continue.');
   const response = await fetch(`${base}${path}`, { method: body === undefined ? 'GET' : 'POST',
@@ -19,31 +19,31 @@ async function request(session: Session, path: string, body?: unknown) {
   if (!response.ok) throw new Error(result.error?.message || 'Account storage is unavailable.');
   return result;
 }
-async function connection(session: Session) {
+export async function arkivConnection(session: Session) {
   const { address, provider } = await session.getArkivWallet();
   const transport = custom({ async request({ method, params }) {
     if (method === 'eth_sendTransaction' || method.startsWith('eth_sign') || method === 'personal_sign') {
       return provider.request({ method, params } as Parameters<EIP1193Provider['request']>[0]);
     }
-    const result = await request(session, '/api/arkiv/rpc', { jsonrpc: '2.0', id: 1, method, params: params ?? [] });
+    const result = await accountRequest(session, '/api/arkiv/rpc', { jsonrpc: '2.0', id: 1, method, params: params ?? [] });
     if (result.error) throw new Error('Arkiv could not process this request.');
     return result.result;
   } });
   return { address, reader: createPublicClient({ chain: arkivChain, transport }), client: createWalletClient({ account: address, chain: arkivChain, transport }) };
 }
-async function fund(session: Session, wallet: string) {
+export async function fundArkivWrite(session: Session, wallet: string) {
   // This endpoint checks the confirmed balance and daily limits. Login never invokes it.
-  await request(session, '/api/arkiv/gas', { wallet });
+  await accountRequest(session, '/api/arkiv/gas', { wallet });
 }
 export async function saveWalletProfile(session: Session, data: ProfileUpsertData) {
-  const { client, reader, address } = await connection(session);
+  const { client, reader, address } = await arkivConnection(session);
   const { profileId, ...profile } = data;
   if (profileId && !/^0x[0-9a-f]{64}$/i.test(profileId)) throw new Error('Create a wallet-owned profile to replace this older registration.');
   if (profileId) {
     const record = await reader.getEntity(profileId as Hex);
     if (record.$owner.toLowerCase() !== address.toLowerCase()) throw new Error('Your wallet does not own this profile.');
   }
-  await fund(session, address);
+  await fundArkivWrite(session, address);
   const result = profileId
     ? await client.patchEntity(WalletProfileSchema, profileId as Hex, { set: { profile: walletJson(profile) } })
     : await client.createEntity(WalletProfileSchema, { project: WALLET_PROFILE_PROJECT, profile: walletJson(profile), status: 'active' }, { expiration: ExpirationTime.fromDays(30) });
@@ -51,24 +51,24 @@ export async function saveWalletProfile(session: Session, data: ProfileUpsertDat
   return result;
 }
 export async function haltWalletProfile(session: Session, key: string) {
-  const { client, reader, address } = await connection(session);
+  const { client, reader, address } = await arkivConnection(session);
   if (!/^0x[0-9a-f]{64}$/i.test(key)) throw new Error('This older registration is not wallet-owned.');
   const record = await reader.getEntity(key as Hex);
   if (record.$owner.toLowerCase() !== address.toLowerCase()) throw new Error('Your wallet does not own this profile.');
-  await fund(session, address);
+  await fundArkivWrite(session, address);
   const result = await client.patchEntity(WalletProfileSchema, key as Hex, { set: { status: 'halted' } });
   await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
   return result;
 }
 export async function writeWalletFollow(session: Session, target: string, follow: boolean) {
-  const { client, address } = await connection(session);
-  const current = await request(session, `/api/social?wallet=${address}`) as { entityKey: Hex | null; following: string[] };
+  const { client, address } = await arkivConnection(session);
+  const current = await accountRequest(session, `/api/social?wallet=${address}`) as { entityKey: Hex | null; following: string[] };
   const set = new Set(current.following.map(a => a.toLowerCase()));
   const changed = follow ? !set.has(target.toLowerCase()) : set.has(target.toLowerCase());
   if (!changed) return;
   if (follow) set.add(target.toLowerCase()); else set.delete(target.toLowerCase());
   if (set.size > 200) throw new Error('You can follow up to 200 wallets.');
-  await fund(session, address);
+  await fundArkivWrite(session, address);
   const following = walletJson([...set].sort());
   const result = current.entityKey
     ? await client.patchEntity(WalletSocialSchema, current.entityKey, { set: { following } })
@@ -76,13 +76,13 @@ export async function writeWalletFollow(session: Session, target: string, follow
   await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
 }
 export async function deleteWalletAccount(session: Session, progress: (text: string) => void) {
-  const { client, reader, address } = await connection(session);
+  const { client, reader, address } = await arkivConnection(session);
   type Manifest = { entities: { key: Hex }[]; expires: number; deletionMessage: string };
   const manifest = await clearWalletRecords(
-    () => request(session, `/api/account/data?wallet=${address}`) as Promise<Manifest>,
+    () => accountRequest(session, `/api/account/data?wallet=${address}`) as Promise<Manifest>,
     async keys => {
       progress('Preparing gas for your data deletion…');
-      await fund(session, address);
+      await fundArkivWrite(session, address);
       progress('Approve deletion of your Swipr records in your wallet…');
       const result = await client.executeBatch({ deletes: keys.map(key => ({ entityKey: key as Hex })) });
       await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
@@ -92,7 +92,7 @@ export async function deleteWalletAccount(session: Session, progress: (text: str
   const signed = await session.signMessage(manifest.deletionMessage);
   if (signed.address.toLowerCase() !== address.toLowerCase()) throw new Error('Your account changed. Sign in to retry.');
   progress('Removing your Swipr login…');
-  await request(session, '/api/account/delete', { wallet: address, expires: manifest.expires, signature: signed.signature });
+  await accountRequest(session, '/api/account/delete', { wallet: address, expires: manifest.expires, signature: signed.signature });
   for (const key of Object.keys(localStorage)) if (key.startsWith('swipr.')) localStorage.removeItem(key);
   window.dispatchEvent(new StorageEvent('storage', { key: null }));
   await session.logout();

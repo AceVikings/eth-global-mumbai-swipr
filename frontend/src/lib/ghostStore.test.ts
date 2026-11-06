@@ -1,173 +1,65 @@
-import { describe, expect, it } from 'vitest';
-import type { Ghost } from '../contracts/types';
-import { GHOSTS_KEY, createGhostStore, startGhost, type GhostLocks } from './ghosts';
-
-class MemoryStorage implements Storage {
-  items = new Map<string, string>();
-  blocked = false;
-  full = false;
-  get length() { return this.items.size; }
-  clear() { this.items.clear(); }
-  getItem(key: string) {
-    if (this.blocked) throw new DOMException('blocked', 'SecurityError');
-    return this.items.get(key) ?? null;
-  }
-  key(index: number) { return [...this.items.keys()][index] ?? null; }
-  removeItem(key: string) { this.items.delete(key); }
-  setItem(key: string, value: string) {
-    if (this.blocked) throw new DOMException('blocked', 'SecurityError');
-    if (this.full) throw new DOMException('full', 'QuotaExceededError');
-    this.items.set(key, value);
-  }
-}
-
-// Exclusive FIFO lock shared by every "tab" using it, like navigator.locks.
-const fifoLocks = (): GhostLocks & { names: string[] } => {
-  let tail: Promise<unknown> = Promise.resolve();
-  const names: string[] = [];
-  return {
-    names,
-    request(name, callback) {
-      names.push(name);
-      const run = tail.then(callback);
-      tail = run.catch(() => {});
-      return run;
-    },
+import { describe, expect, it, vi } from 'vitest';
+import { createAccountGhostStore, type GhostIO } from './wallet-ghosts';
+import type { WalletGhostRecord } from '../contracts/ghosts';
+const first = { traderId: `0x${'ab'.repeat(32)}`, startedAt: 1700000000000, expiresAt: 1700604800000, perTradeUsd: 10, includedSignalId: null };
+const row: WalletGhostRecord = { entityKey: `0x${'cd'.repeat(32)}`, ghost: first, status: 'active' };
+function fixture() {
+  let records: WalletGhostRecord[] = [];
+  const io: GhostIO = {
+    read: async () => structuredClone(records),
+    start: async () => { const existed = records.length > 0; if (!existed) records = [row]; return { records: structuredClone(records), existed }; },
+    remove: async () => { records = records.map(r => ({ ...r, status: 'removed' })); return structuredClone(records); },
   };
-};
-
-const T0 = Date.UTC(2026, 10, 6, 14, 2);
-const DAY = 24 * 60 * 60 * 1000;
-const stored = (storage: MemoryStorage): string[] =>
-  (JSON.parse(storage.items.get(GHOSTS_KEY) ?? '[]') as Ghost[]).map((g) => g.traderId).sort();
-
-describe('createGhostStore across tabs', () => {
-  it('keeps both ghosts when two tabs that loaded [] each start one', async () => {
-    const storage = new MemoryStorage();
-    const locks = fifoLocks();
-    const a = createGhostStore({ storage, locks });
-    const b = createGhostStore({ storage, locks });
-    await a.start('alice', 10, T0);
-    const result = await b.start('dan', 20, T0 + 1000);
-    expect(stored(storage)).toEqual(['alice', 'dan']);
-    expect(result.ghosts.map((g) => g.traderId).sort()).toEqual(['alice', 'dan']);
-    expect(result.status).toBe('saved');
-    expect(locks.names.every((n) => n === 'swipr.ghosts')).toBe(true);
+  return { io };
+}
+describe('account ghost store', () => {
+  it('loads saved records in a fresh browser without browser storage', async () => {
+    const { io } = fixture();
+    const firstBrowser = createAccountGhostStore(io);
+    await firstBrowser.start(first.traderId, 10);
+    const anotherBrowser = createAccountGhostStore(io);
+    expect(anotherBrowser.getSnapshot().ghosts).toEqual([]);
+    await anotherBrowser.refresh();
+    expect(anotherBrowser.getSnapshot().ghosts).toEqual([first]);
   });
-
-  it('keeps both when the operations are issued concurrently', async () => {
-    const storage = new MemoryStorage();
-    const locks = fifoLocks();
-    const a = createGhostStore({ storage, locks });
-    const b = createGhostStore({ storage, locks });
-    await Promise.all([a.start('alice', 10, T0), b.start('dan', 10, T0), a.start('priya', 10, T0)]);
-    expect(stored(storage)).toEqual(['alice', 'dan', 'priya']);
+  it('preserves the original ghost when another browser starts it again', async () => {
+    const { io } = fixture();
+    await createAccountGhostStore(io).start(first.traderId, 10);
+    const second = createAccountGhostStore(io);
+    expect((await second.start(first.traderId, 40)).existed).toBe(true);
+    expect(second.getSnapshot().ghosts).toEqual([first]);
   });
-
-  it('re-reads storage right before writing when Web Locks are unavailable', async () => {
-    const storage = new MemoryStorage();
-    const a = createGhostStore({ storage, locks: null });
-    const b = createGhostStore({ storage, locks: null });
-    await a.start('alice', 10, T0);
-    await b.start('dan', 10, T0);
-    expect(stored(storage)).toEqual(['alice', 'dan']);
-  });
-
-  it('falls back to a direct read/modify/write if the lock request fails', async () => {
-    const storage = new MemoryStorage();
-    const broken: GhostLocks = { request: () => Promise.reject(new DOMException('no', 'SecurityError')) };
-    const result = await createGhostStore({ storage, locks: broken }).start('alice', 10, T0);
-    expect(result.status).toBe('saved');
-    expect(stored(storage)).toEqual(['alice']);
-  });
-
-  it('does not resurrect a ghost another tab deleted', async () => {
-    const storage = new MemoryStorage();
-    storage.setItem(GHOSTS_KEY, JSON.stringify(startGhost([], 'alice', 10, T0)));
-    const locks = fifoLocks();
-    const a = createGhostStore({ storage, locks });
-    const b = createGhostStore({ storage, locks });
-    expect(a.getSnapshot().ghosts.map((g) => g.traderId)).toEqual(['alice']);
-    await b.remove('alice');
-    await a.start('dan', 10, T0 + DAY);
-    expect(stored(storage)).toEqual(['dan']);
-    expect(a.getSnapshot().ghosts.map((g) => g.traderId)).toEqual(['dan']);
-  });
-
-  it('keeps another tab\'s original ghost instead of restarting it', async () => {
-    const storage = new MemoryStorage();
-    const locks = fifoLocks();
-    const a = createGhostStore({ storage, locks });
-    const b = createGhostStore({ storage, locks });
-    await a.start('alice', 10, T0);
-    const result = await b.start('alice', 40, T0 + DAY);
-    expect(result.existed).toBe(true);
-    expect(result.ghosts).toEqual(startGhost([], 'alice', 10, T0));
-  });
-
-  it('refresh picks up other tabs\' changes and notifies subscribers', async () => {
-    const storage = new MemoryStorage();
-    const a = createGhostStore({ storage, locks: null });
-    const b = createGhostStore({ storage, locks: null });
-    const seen: string[][] = [];
-    const unsubscribe = b.subscribe((s) => seen.push(s.ghosts.map((g) => g.traderId)));
-    await a.start('alice', 10, T0);
-    b.refresh();
-    expect(seen).toEqual([['alice']]);
-    unsubscribe();
-    await a.remove('alice');
-    b.refresh();
-    expect(seen).toHaveLength(1);
+  it('reflects removals across browsers after a fresh account read', async () => {
+    const { io } = fixture();
+    const a = createAccountGhostStore(io), b = createAccountGhostStore(io);
+    await a.start(first.traderId, 10);
+    await b.refresh();
+    await a.remove(first.traderId);
+    await b.refresh();
     expect(b.getSnapshot().ghosts).toEqual([]);
   });
-});
-
-describe('createGhostStore when storage is unavailable', () => {
-  it('reports session-only and keeps ghosts in memory when storage is blocked', async () => {
-    const storage = new MemoryStorage();
-    storage.blocked = true;
-    const store = createGhostStore({ storage, locks: fifoLocks() });
-    expect(store.getSnapshot().status).toBe('session-only');
-    const result = await store.start('alice', 10, T0);
-    expect(result).toMatchObject({ status: 'session-only', existed: false });
-    expect(result.ghosts.map((g) => g.traderId)).toEqual(['alice']);
-    store.refresh();
-    expect(store.getSnapshot().ghosts.map((g) => g.traderId)).toEqual(['alice']);
+  it('never creates a local ghost if the wallet write fails', async () => {
+    const { io } = fixture();
+    io.start = vi.fn().mockRejectedValue(new Error('Wallet rejected'));
+    const store = createAccountGhostStore(io);
+    await expect(store.start(first.traderId, 10)).rejects.toThrow('Wallet rejected');
+    expect(store.getSnapshot()).toMatchObject({ ghosts: [], busy: false });
   });
-
-  it('keeps memory when a write fails and persists it once storage recovers', async () => {
-    const storage = new MemoryStorage();
-    const store = createGhostStore({ storage, locks: null });
-    storage.full = true;
-    expect((await store.start('alice', 10, T0)).status).toBe('session-only');
-    expect(store.getSnapshot().ghosts.map((g) => g.traderId)).toEqual(['alice']);
-    storage.full = false;
-    const result = await store.start('dan', 10, T0 + 1000);
-    expect(result.status).toBe('saved');
-    expect(stored(storage)).toEqual(['alice', 'dan']);
+  it('isolates accounts and surfaces unavailable storage instead of an empty success', async () => {
+    const { io } = fixture();
+    await createAccountGhostStore(io).start(first.traderId, 10);
+    const other = createAccountGhostStore({ ...io, read: async () => [] });
+    await other.refresh();
+    expect(other.getSnapshot().ghosts).toEqual([]);
+    io.read = vi.fn().mockRejectedValue(new Error('Sign in again'));
+    const blocked = createAccountGhostStore(io);
+    await blocked.refresh();
+    expect(blocked.getSnapshot()).toMatchObject({ loading: false, ghosts: [], error: 'Sign in again' });
   });
-
-  it('keeps a session-only deletion when storage recovers', async () => {
-    const storage = new MemoryStorage();
-    storage.setItem(GHOSTS_KEY, JSON.stringify(startGhost([], 'alice', 10, T0)));
-    const store = createGhostStore({ storage, locks: null });
-    storage.full = true;
-    await store.remove('alice');
-    storage.full = false;
-    await store.start('dan', 10, T0);
-    expect(stored(storage)).toEqual(['dan']);
-  });
-
-  it('works with no storage at all', async () => {
-    const store = createGhostStore({ storage: null, locks: null });
-    const result = await store.start('alice', 10, T0);
-    expect(result.status).toBe('session-only');
-    expect(result.ghosts).toHaveLength(1);
-  });
-
-  it('validates input before queueing', () => {
-    const store = createGhostStore({ storage: new MemoryStorage(), locks: null });
-    expect(() => store.start('alice', 51, T0)).toThrow(RangeError);
-    expect(() => store.start('', 10, T0)).toThrow(TypeError);
+  it('serializes writes and refreshes so a stale read cannot replace a confirmed change', async () => {
+    const { io } = fixture();
+    const store = createAccountGhostStore(io);
+    await Promise.all([store.start(first.traderId, 10), store.refresh()]);
+    expect(store.getSnapshot().ghosts).toEqual([first]);
   });
 });
