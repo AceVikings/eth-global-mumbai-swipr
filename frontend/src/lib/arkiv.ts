@@ -91,5 +91,7 @@ export async function deleteWalletAccount(session: Session, progress: (text: str
   progress('Removing your Swipr login…');
   await request(session, '/api/account/delete', { wallet: address, expires: manifest.expires, signature: signed.signature });
   for (const key of Object.keys(localStorage)) if (key.startsWith('swipr.')) localStorage.removeItem(key);
+  window.dispatchEvent(new StorageEvent('storage', { key: null }));
   await session.logout();
+  window.location.reload();
 }
