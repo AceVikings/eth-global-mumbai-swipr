@@ -1,6 +1,6 @@
 # Leaderboards: simplify before the next UI build
 
-Status: visual planning. The current implementation is a functional draft, not an approved visual target.
+Status: People first selected by the user. The layout is implemented; live data acceptance is tracked in DEMO-CHECKLIST.md.
 User direction: plan with images first; current page is too dense for simple information.
 
 ## Job
@@ -57,7 +57,7 @@ One short empty-state action leads to Everyone. No separate follow-management pa
 
 - [x] Document why the current draft is dense and the simpler information hierarchy.
 - [x] Render three separate static image mockups locally from the existing visual language.
-- [ ] Review the images with the user and select a direction.
+- [x] Review the images with the user and select a direction: People first.
 - [ ] Apply the chosen direction, then verify desktop and mobile spacing and interactions.
 
 The user selected regular mockups without an API. The local Pillow renderer is
@@ -68,6 +68,6 @@ Run `uv run --with pillow python design/leaderboards/render_mockups.py` to repro
 - `.context/leaderboards/02-numbers-first.png`
 - `.context/leaderboards/03-your-circle.png`
 
-These are static image studies with illustrative figures; the running app is unchanged.
+These are static image studies with illustrative figures. The selected layout has been applied to the running app.
 PNG previews live in the gitignored `.context` directory; the renderer and brief are committed.
-No redesign implementation is authorized by selecting this document alone.
+The user selected the first mockup and authorized implementation. Static study figures are not live trading evidence.
