@@ -3,8 +3,8 @@
 React + TypeScript + Tailwind + Vite PWA, with a separate Node API/worker.
 The implementation contract is in [docs/BUILD-CONTRACT.md](docs/BUILD-CONTRACT.md).
 
-Node 22.18+ is required. Install with `npm install --package-lock=false`.
-Run `npm run dev` and, in another terminal, `npm run dev:api`.
+Node 22.18+ is required. Install with `npm ci`.
+Run `npm run dev` to start the website.
 Run `npm test`, `npm run typecheck` and `npm run build` to verify.
 
 This initial checkout uses a permanently labeled design preview. Local ghost
