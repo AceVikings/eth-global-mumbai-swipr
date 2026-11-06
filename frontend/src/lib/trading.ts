@@ -9,6 +9,7 @@ export type TradeQuote = {
 };
 export type TradeStatus = { orderId: string; status: string; unverifiedFills: number;
   fills: { txHash: string; asset: string; side: string; usdcMicros: string; assetUnits: string; price: string; confirmations: number }[] };
+export type TradeHistory = { orders: TradeStatus[]; hasMore: boolean; scope: 'latest20Orders' };
 export class TradeError extends Error { constructor(message: string, readonly uncertain = false) { super(message); } }
 export async function tradeRequest<T>(session: Session, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const wallet = session.address;

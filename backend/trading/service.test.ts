@@ -132,3 +132,20 @@ it('allows a default tap seat to reach trader fill verification instead of requi
  expect(fetcher).toHaveBeenCalledOnce();
  expect(sent).toBe(0);
 });
+
+it('reloads wallet order history from the provider, deduplicates IDs and verifies order ownership',async()=>{
+ const {service,fetcher}=setup();
+ fetcher.mockImplementation(async(url:string)=>new Response(JSON.stringify(url.includes('/orders?')
+  ?{orders:[{orderId:'order-1',funderAddress:trader.address},{orderId:'order-1',funderAddress:trader.address}],nextPageToken:'more'}
+  :{order:{orderId:'order-1',funderAddress:trader.address,status:'ACCEPTED'},fills:[]})));
+ expect(await service.history(trader.address)).toMatchObject({scope:'latest20Orders',hasMore:true,orders:[{orderId:'order-1',status:'ACCEPTED',fills:[],unverifiedFills:0}]});
+ expect(fetcher).toHaveBeenCalledTimes(2);
+ fetcher.mockResolvedValueOnce(new Response(JSON.stringify({orders:[{orderId:'order-1',funderAddress:copier.address}]})));
+ await expect(service.history(trader.address)).rejects.toThrow('another wallet');
+});
+it('returns a genuine empty history and keeps provider failures distinct',async()=>{
+ const {service,fetcher}=setup();fetcher.mockResolvedValueOnce(new Response(JSON.stringify({orders:[]})));
+ expect(await service.history(trader.address)).toMatchObject({orders:[],hasMore:false});
+ fetcher.mockResolvedValueOnce(new Response(JSON.stringify({unexpected:true})));
+ await expect(service.history(trader.address)).rejects.toThrow('history');
+});

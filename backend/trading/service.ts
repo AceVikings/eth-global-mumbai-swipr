@@ -151,6 +151,21 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
         return result;
       } catch { throw new ApiError(409, 'submission_uncertain', 'Submission could not be confirmed. Check Flash order history; do not submit again.'); }
     },
+    async history(wallet: string) {
+      await network();
+      const history = await flash.listOrders(wallet);
+      const orders = [], seen = new Set<string>();
+      for (const row of history.orders.slice(0, 20)) {
+        if (!same(row.funderAddress, wallet)) fail('Order history contains another wallet.');
+        const orderId = id(row.orderId ?? row.id);
+        if (seen.has(orderId)) continue;
+        seen.add(orderId);
+        const { result } = await order(orderId, wallet);
+        const fills = await verifyFills(result, wallet);
+        orders.push({ orderId, status: result.status, fills, unverifiedFills: Math.max(0, result.fills.length - fills.length) });
+      }
+      return { orders, hasMore: history.hasMore, scope: 'latest20Orders' as const };
+    },
     async status(wallet: string, orderId: string) {
       await network(); const { result } = await order(orderId, wallet); const fills = await verifyFills(result, wallet);
       return { orderId, status: result.status, fills, unverifiedFills: result.fills.length - fills.length };

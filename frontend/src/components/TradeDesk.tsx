@@ -7,6 +7,7 @@ import { getBots } from '../lib/bots';
 import { readSeats } from '../lib/wallet-seats';
 import { sendReviewedTrade, tradeRequest, TradeError, type TradeQuote, type TradeStatus } from '../lib/trading';
 import Dropdown from './Dropdown';
+import WalletTradeHistory from './WalletTradeHistory';
 import '../trades.css';
 export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?: string }) {
   const session = useSession();
@@ -111,6 +112,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
       {order.fills.map(fill => <p key={fill.txHash}>Bought {formatUnits(BigInt(fill.assetUnits), fill.asset === 'cbBTC' ? 8 : 18)} {fill.asset} · {(Number(fill.usdcMicros) / 1e6).toFixed(2)} USDC · <a target="_blank" rel="noreferrer" href={`https://basescan.org/tx/${fill.txHash}`}>Verified on Base</a></p>)}
       {order.unverifiedFills > 0 && <p>Some provider fills are still waiting for receipt verification.</p>}
     </section>}
+    <WalletTradeHistory />
     <form className="trade-lookup" onSubmit={async e => {
       e.preventDefault(); setError(''); setBusy(true); const signal = controller.current.signal;
       try { await checkStatus(lookup.trim(), signal); } catch (e) { if (!signal.aborted) stopIfDeclined(e); }
