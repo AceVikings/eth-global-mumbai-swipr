@@ -20,6 +20,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     privySecret: env.PRIVY_APP_SECRET, privyVerificationKey: env.PRIVY_VERIFICATION_KEY,
     flashKey: env.FLASH_KEY_EXEC || env.FLASH_API_KEY,
     baseRpc: env.BASE_RPC, sepoliaRpc: env.SEPOLIA_RPC,
+    arkivMaintainerKey: env.ARKIV_MAINTAINER_PK,
     beeUrl: env.BEE_URL, swarmBatchId: env.SWARM_BATCH_ID,
   };
 }

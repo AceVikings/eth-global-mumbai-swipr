@@ -4,11 +4,12 @@ import type { Hex } from 'viem';
 const writer = `0x${'1'.repeat(40)}`;
 // Protocol-contract double only. Runtime always uses Rabdi; no local DB fallback.
 function fixture() {
+  const epoch = BigInt(Math.floor(Date.now() / 1000)) - 100n;
   const state = { count: 0, tip: 100n, rows: [] as StoredEvent[], pending: false, lostAck: false, sends: [] as number[] };
   const port: ArkivPort = {
     canWrite: true,
     async chainId() { return 7794095; },
-    async block(number = state.tip) { return { number, hash: `block-${number}`, timestamp: 1700000000n + number }; },
+    async block(number = state.tip) { return { number, hash: `block-${number}`, timestamp: epoch + number }; },
     async nonce(which) { return state.count + (which === 'pending' && state.pending ? 1 : 0); },
     async page(offset) { return { rows: state.rows.slice(offset, offset + 100), blockNumber: state.tip }; },
     async send(event, nonce) {
@@ -86,4 +87,44 @@ describe('Arkiv nonce-fenced journal', () => {
     f.port.page = async () => { f.state.count++; return { rows: [], blockNumber: f.state.tip }; };
     await expect(f.journal.read()).rejects.toMatchObject({ code: 'conflict' });
   });
+});
+
+it('blocks near-expiry history before it disappears', async () => {
+  const f = fixture(); await f.journal.append(await f.event(), 0);
+  f.state.rows[0].expiresAt = f.state.tip + 43200n;
+  await expect(f.journal.read()).rejects.toMatchObject({ code: 'expiring' });
+});
+it('rejects secret-shaped values in ordinary public fields before broadcasting', async () => {
+  const f = fixture(), event = await f.event();
+  for (const value of [`0x${'a'.repeat(130)}`, '-----BEGIN PRIVATE KEY-----', 'eyJhbGci.eyJzdWI.signature', `0x02f8${'a'.repeat(220)}`]) {
+    await expect(f.journal.append({ ...event, command: { label: value } }, 0)).rejects.toMatchObject({ code: 'invalid' });
+  }
+  await expect(f.journal.append({ ...event, command: { accessKey: 'value' } }, 0)).rejects.toMatchObject({ code: 'invalid' });
+  expect(f.state.sends).toEqual([]);
+});
+it('rejects a reorg of the confirmed anchor', async () => {
+  const f = fixture(); let anchors = 0; const block = f.port.block;
+  f.port.block = async number => ({ ...await block(number), ...(number === 99n && ++anchors > 1 ? { hash: 'reorg' } : {}) });
+  await expect(f.journal.read()).rejects.toMatchObject({ code: 'conflict' });
+});
+it('reads multiple pages and rejects regressing query heights', async () => {
+  const f = fixture(), event = await f.event(); f.state.count = 101;
+  f.state.rows = Array.from({ length: 101 }, (_, i) => ({ event: { ...event, revision: i + 1, id: `event-${i}` }, creator: writer, owner: writer, readonly: true, expiresAt: 1000000n, createdAt: 1n }));
+  expect((await f.journal.read()).events).toHaveLength(101);
+  const page = f.port.page;
+  f.port.page = async offset => ({ ...await page(offset), blockNumber: offset ? 99n : 100n });
+  await expect(f.journal.read()).rejects.toMatchObject({ code: 'pending' });
+});
+it('rejects future query heights and treats unconfirmed rows as a read conflict', async () => {
+  const f = fixture(); const page = f.port.page;
+  f.port.page = async offset => ({ ...await page(offset), blockNumber: 101n });
+  await expect(f.journal.read()).rejects.toMatchObject({ code: 'unavailable' });
+  f.port.page = page; await f.journal.append(await f.event(), 0);
+  f.state.rows[0].createdAt = f.state.tip + 1n;
+  await expect(f.journal.read()).rejects.toMatchObject({ code: 'conflict' });
+});
+it('blocks a stalled confirmed chain clock', async () => {
+  const f = fixture();
+  const journal = new ArkivJournal(f.port, writer, 2, () => Date.now() + 60000);
+  await expect(journal.read()).rejects.toMatchObject({ code: 'stale_clock' });
 });
