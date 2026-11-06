@@ -42,3 +42,11 @@ it('refuses a grant prepared for a different wallet before any approval',async()
  f.request.mockResolvedValue({...grant,wallet:`0x${'77'.repeat(20)}`});
  await expect(enableAutomation(session,seat,()=>{})).rejects.toThrow('another pass');expect(provider.request).not.toHaveBeenCalled();
 });
+
+it('reuses the exact existing pass allowance without another approval transaction',async()=>{
+ const original=provider.request.getMockImplementation()!;
+ provider.request.mockImplementation(async args=>args.method==='eth_call'?'0x4c4b40':original(args));
+ await enableAutomation(session,seat,()=>{});
+ expect(provider.request.mock.calls.some(([args])=>args.method==='eth_sendTransaction')).toBe(false);
+ expect(addSigner).toHaveBeenCalledOnce();
+});

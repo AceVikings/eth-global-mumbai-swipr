@@ -12,6 +12,8 @@ export async function enableAutomation(session:Session,seat:SeatPass,progress:(m
  const {address,provider}=await session.getBaseWallet();
  if(address.toLowerCase()!==grant.wallet)throw Error('Your account changed.');
  const cap=BigInt(seat.terms.perTradeUsd*seat.terms.tradeCount)*1000000n;
+ const allowance=await provider.request({method:'eth_call',params:[{to:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',data:encodeFunctionData({abi:erc20Abi,functionName:'allowance',args:[address,'0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78']})},'latest']});
+ if(BigInt(allowance as Hex)!==cap){
  progress(`Approve the ${seat.terms.perTradeUsd*seat.terms.tradeCount} USDC pass budget in your wallet.`);
  const hash=await provider.request({method:'eth_sendTransaction',params:[{from:address,to:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',value:'0x0',data:encodeFunctionData({abi:erc20Abi,functionName:'approve',args:['0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78',cap]})}]});
  let confirmed=false;
@@ -23,6 +25,7 @@ export async function enableAutomation(session:Session,seat:SeatPass,progress:(m
   await new Promise(r=>setTimeout(r,2000));
  }
  if(!confirmed)throw Error('Approval remains pending. Automatic copying has not been enabled.');
+ }
  progress('Approve the bounded copy permission in your wallet.');
  try {
  await session.addSigner(grant.signerId,grant.policyId);
