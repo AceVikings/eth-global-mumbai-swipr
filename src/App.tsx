@@ -275,7 +275,6 @@ export default function App() {
                 <Ghosts
                   ghosts={ghosts}
                   traders={registeredTraders}
-                  directoryStatus={directoryState}
                   onReal={setRealTrader}
                   onRemove={(id) => {
                     void ghostStore

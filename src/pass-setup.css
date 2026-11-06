@@ -29,9 +29,9 @@
 .ps-person small { display: block; color: var(--muted); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .ps-avatar { width: 48px; height: 48px; border-radius: 999px; object-fit: cover; flex: none; }
 .ps-monogram { display: grid; place-items: center; background: var(--ink); color: var(--canvas); font: 800 16px/1 Manrope, sans-serif; }
-.ps-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 11px; line-height: 16px; font-weight: 600; white-space: nowrap; }
-.ps-pill-preview { background: var(--ghost-soft); color: var(--ghost); }
-.ps-pill-frozen { background: var(--ink); color: var(--canvas); white-space: normal; margin: 12px 0 16px; }
+.ps-pill { display: inline-flex; align-items: center; font-size: 11px; line-height: 16px; font-weight: 600; white-space: nowrap; }
+.ps-pill-preview { color: var(--muted); }
+.ps-pill-frozen { color: var(--ink); white-space: normal; margin: 12px 0 16px; }
 
 .ps-main { padding-top: 24px; animation: ps-in .26s var(--ease); }
 .ps-title { margin: 0; font: 800 29px/33px Manrope, sans-serif; letter-spacing: -.02em; }
