@@ -18,9 +18,9 @@ const setup = (overrides: Record<string, unknown> = {}, directory: SeatDirectory
   posts.push({ path: url, body });
   if (url.endsWith('/quote')) return new Response(JSON.stringify({ quoteId: 'quote-1', evm: {
    orderTypedData: JSON.stringify({ domain: FLASH_DOMAIN, types: { FlashOrder: FLASH_ORDER_TYPES, EIP712Domain: FLASH_DOMAIN_TYPES }, primaryType: 'FlashOrder',
-    message: { swapper: body.funderAddress, vault, recipient: body.funderAddress, fromToken: TOKENS.USDC.address, toToken: TOKENS.WETH.address,
-    fromAmount: '5000000', salt: '1', deadline: String(Math.floor(Date.parse(body.expireTime) / 1000)), ...overrides } }),
-   approveTx: { to: TOKENS.USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [FLASH_DOMAIN.verifyingContract, 5000000n] }) } }, fees: { estimatedFeeNotional: '0.02' } }));
+    message: { swapper: body.funderAddress, vault, recipient: body.funderAddress, fromToken: body.side === 'sell' ? TOKENS.WETH.address : TOKENS.USDC.address, toToken: body.side === 'sell' ? TOKENS.USDC.address : TOKENS.WETH.address,
+    fromAmount: body.side === 'sell' ? '2000000000000000' : '5000000', salt: '1', deadline: String(Math.floor(Date.parse(body.expireTime) / 1000)), ...overrides } }),
+   approveTx: { to: body.side === 'sell' ? TOKENS.WETH.address : TOKENS.USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [FLASH_DOMAIN.verifyingContract, body.side === 'sell' ? 2000000000000000n : 5000000n] }) } }, fees: { estimatedFeeNotional: '0.02' } }));
   if (url.endsWith('/order')) { sent++; return new Response(JSON.stringify({ orderId: 'order-1' })); }
   return new Response(JSON.stringify({ order: { orderId: 'order-1', funderAddress: trader.address, recipientAddress: trader.address, status: 'ACCEPTED' }, fills: [] }));
  });
@@ -159,4 +159,31 @@ it('follows opaque history cursors and rejects repeated pages instead of guessin
  expect(fetcher.mock.calls[1][0]).toContain('pageToken=opaque%20%2B%2F%3D');
  fetcher.mockImplementation(async()=>new Response(JSON.stringify({orders:[],nextPageToken:'same'})));
  await expect(service.completeHistory(trader.address)).rejects.toThrow('pagination');
+});
+
+it('prepares reviewed sells with asset-unit amounts and exact asset approvals, even after a trader halt',async()=>{
+ const {service}=setup();
+ const q=await service.quote(trader.address,{...input,side:'sell',qty:'0.002',sharedPrice:'2000'});
+ expect(q.intent).toMatchObject({side:'sell',qty:'0.002',asset:'WETH'});
+ expect(q.approval?.to).toBe(TOKENS.WETH.address);expect(q.approval?.amount).toBe('2000000000000000');
+});
+
+it('checks exact sell token allowance and balance, independently of a seat',async()=>{
+ const {service}=setup();const q=await service.quote(copier.address,{...input,side:'sell',qty:'0.002'});
+ chain.getCode.mockImplementation(async({address})=>address.toLowerCase()===FLASH_DOMAIN.verifyingContract.toLowerCase()?'0x1234':undefined);
+ chain.readContract.mockResolvedValue(2000000000000000n);
+ expect(await service.preflight(copier.address,q.ticket)).toEqual({ready:true});
+ expect(chain.readContract).toHaveBeenCalledWith(expect.objectContaining({address:TOKENS.WETH.address}));
+ const sig=await copier.signTypedData(q.typedData as never);
+ expect(await service.submit(copier.address,q.ticket,sig)).toEqual({orderId:'order-1'});
+});
+it('verifies cancellation ownership and canonical wallet signature before relaying',async()=>{
+ const {service,fetcher}=setup();
+ await expect(service.prepareCancel(copier.address,'order-1')).rejects.toThrow('does not belong');
+ const prepared=await service.prepareCancel(trader.address,'order-1');
+ expect(prepared.message).toBe('Definitive Flash v1 — Cancel Order\nOrder: order-1');
+ await expect(service.cancel(trader.address,'order-1',await copier.signMessage({message:prepared.message}))).rejects.toThrow('signed by');
+ fetcher.mockResolvedValueOnce(new Response(JSON.stringify({order:{funderAddress:trader.address}})))
+ .mockResolvedValueOnce(new Response(JSON.stringify({ok:true})));
+ expect(await service.cancel(trader.address,'order-1',await trader.signMessage({message:prepared.message}))).toMatchObject({cancellationAccepted:true});
 });

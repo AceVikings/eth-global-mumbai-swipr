@@ -13,6 +13,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
   const session = useSession();
   const [profiles, setProfiles] = useState<BotProfile[]>([]), [seats, setSeats] = useState<SeatPass[]>([]);
   const [profileId, setProfileId] = useState(''), [asset, setAsset] = useState<'WETH' | 'cbBTC'>('WETH');
+  const [side, setSide] = useState<'buy' | 'sell'>('buy'), [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState(''), [source, setSource] = useState(''), [lookup, setLookup] = useState('');
   const [quote, setQuote] = useState<TradeQuote | null>(null), [order, setOrder] = useState<TradeStatus | null>(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState(''), [uncertain, setUncertain] = useState(false);
@@ -29,7 +30,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
     if (!session.authenticated || !session.address) { setLoading(false); return; }
     void Promise.all([getBots(signal), readSeats(session)]).then(([bots, directory]) => {
       if (signal.aborted) return;
-      const active = bots.profiles.filter(p => p.status === 'active' && (p.owner.toLowerCase() === wallet || directory.passes.some(s => s.traderId === p.id && s.owner.toLowerCase() === wallet && s.status === 'joined')));
+      const active = bots.profiles.filter(p => (p.owner.toLowerCase() === wallet || directory.passes.some(s => s.traderId === p.id && s.owner.toLowerCase() === wallet)));
       setProfiles(active); setSeats(directory.passes); setProfileId(active.find(p => p.id === initialProfileId)?.id || active[0]?.id || '');
     }).catch(e => { if (!signal.aborted) setError(e instanceof Error ? e.message : 'Could not load trading accounts.'); })
       .finally(() => { if (!signal.aborted) setLoading(false); });
@@ -66,34 +67,35 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
     setError(text); if (e instanceof TradeError && e.uncertain) setUncertain(true);
   };
   if (!session.authenticated) return <section className="content-page"><h1>Trade<span>.</span></h1><p>Sign in to trade from your wallet.</p><button className="primary-button" onClick={session.login}>Sign in</button></section>;
-  return <section className="trade-desk content-page"><header><div><h1>Trade<span>.</span></h1><p className="page-lead">Review a 5 USDC limit buy on Base.</p></div><WalletBalance /></header>
+  return <section className="trade-desk content-page"><header><div><h1>Trade<span>.</span></h1><p className="page-lead">Trade from your wallet on Base.</p></div><WalletBalance /></header>
     <p className="trade-wallet">Your Base wallet <code>{session.address}</code></p>
     {loading ? <p role="status">Loading your profiles and seats…</p> : !profiles.length ? <p>Create a trader profile or join a seat to place a trade.</p> : <form onSubmit={async e => {
       e.preventDefault(); setBusy(true); setError(''); setMessage('Getting a live quote…'); setQuote(null);
       const signal = controller.current.signal;
       try {
-        const result = await tradeRequest<TradeQuote>(session, 'quote', { profileId, asset, qty: '5', sharedPrice: price,
-          ...(!own ? { seatId: seat?.id, sourceOrderId: source.trim() } : {}) }, signal);
+        const result = await tradeRequest<TradeQuote>(session, 'quote', { profileId, side, asset, qty: side === 'sell' ? quantity : '5', sharedPrice: price,
+          ...(!own && side === 'buy' ? { seatId: seat?.id, sourceOrderId: source.trim() } : {}) }, signal);
         if (!signal.aborted) { setQuote(result); setMessage(''); }
       } catch (e) { if (!signal.aborted) { stopIfDeclined(e); setMessage(''); } }
       finally { if (!signal.aborted) setBusy(false); }
     }}>
       <fieldset disabled={busy || uncertain || !!order}><legend className="sr-only">Trade details</legend>
         <label>Trading as<Dropdown label="Trading profile" value={profileId} options={profiles.map(p => [p.id, `${p.name}${p.owner.toLowerCase() === wallet ? ' · Trader' : ' · Copier'}`])} onChange={setProfileId} /></label>
-        <label>Buy<Dropdown label="Buy asset" value={asset} options={(selected?.assets || ['WETH']).map(a => [a, a])} onChange={value => { setAsset(value); setQuote(null); }} /></label>
-        <label>Spend<input readOnly value="5.00 USDC" /></label>
-        {own ? <label>Maximum price per {asset} (USD)<input required inputMode="decimal" autoComplete="off" placeholder="Enter your limit price" value={price} onChange={e => { setPrice(e.target.value); setQuote(null); }} /></label>
+        <label>Action<Dropdown label="Trade action" value={side} options={[["buy", "Buy"], ["sell", "Sell"]]} onChange={value => { setSide(value as 'buy' | 'sell'); setQuote(null); }} /></label>
+        <label>Asset<Dropdown label="Buy asset" value={asset} options={(selected?.assets || ['WETH']).map(a => [a, a])} onChange={value => { setAsset(value); setQuote(null); }} /></label>
+        {side === 'buy' ? <label>Spend<input readOnly value="5.00 USDC" /></label> : <label>Sell amount ({asset})<input required inputMode="decimal" value={quantity} onChange={e => { setQuantity(e.target.value); setQuote(null); }} placeholder="Amount to sell" /><small>Proceeds settle as USDC into your wallet.</small></label>}
+        {own || side === 'sell' ? <label>{side === 'sell' ? 'Minimum' : 'Maximum'} price per {asset} (USD)<input required inputMode="decimal" autoComplete="off" placeholder="Enter your limit price" value={price} onChange={e => { setPrice(e.target.value); setQuote(null); }} /></label>
           : <label>Trader’s confirmed order ID<input required autoComplete="off" value={source} onChange={e => { setSource(e.target.value); setQuote(null); }} placeholder="Order ID from your trader" /><small>Your copy uses the trader’s original limit price and remaining window.</small></label>}
         <button className="primary-button" type="submit">{busy ? 'Preparing…' : 'Review quote'}</button>
       </fieldset>
     </form>}
-    {quote && !order && <section className="trade-review"><h2>Review your buy</h2><dl>
-      <div><dt>Wallet</dt><dd><code>{quote.intent.funder}</code></dd></div><div><dt>Spend</dt><dd>{quote.intent.qty} USDC</dd></div>
-      <div><dt>Buy</dt><dd>{quote.intent.asset}</dd></div><div><dt>Protection</dt><dd>No stop-loss or automatic exit</dd></div><div><dt>Maximum price</dt><dd>${quote.intent.sharedPrice}</dd></div>
-      <div><dt>Swipr fee (estimated, included)</dt><dd>{Number(quote.integratorFeeBps) / 100}% · ${(Number(quote.intent.qty) * Number(quote.integratorFeeBps) / 10000).toFixed(3)}</dd></div>
+    {quote && !order && <section className="trade-review"><h2>Review your {quote.intent.side}</h2><dl>
+      <div><dt>Wallet</dt><dd><code>{quote.intent.funder}</code></dd></div><div><dt>Spend</dt><dd>{quote.intent.qty} {quote.intent.side === 'sell' ? quote.intent.asset : 'USDC'}</dd></div>
+      <div><dt>Receive</dt><dd>{quote.intent.side === 'sell' ? 'USDC' : quote.intent.asset}</dd></div><div><dt>Protection</dt><dd>No stop-loss or automatic exit</dd></div><div><dt>{quote.intent.side === 'sell' ? 'Minimum' : 'Maximum'} price</dt><dd>${quote.intent.sharedPrice}</dd></div>
+      <div><dt>Swipr fee (estimated, included)</dt><dd>{Number(quote.integratorFeeBps) / 100}% · ${(Number(quote.intent.qty) * (quote.intent.side === 'sell' ? Number(quote.intent.sharedPrice) : 1) * Number(quote.integratorFeeBps) / 10000).toFixed(3)}</dd></div>
       <div><dt>Estimated trading fee</dt><dd>{quote.estimatedFeeNotional ? `$${quote.estimatedFeeNotional}` : 'Unavailable'}</dd></div>
       <div><dt>Expires</dt><dd>{new Date(quote.expiresAt * 1000).toLocaleTimeString()}</dd></div>
-    </dl><details><summary>Wallet permissions</summary><p>Approval: exactly 5 USDC.</p><p>Settlement contract <code>{String(quote.typedData.domain.verifyingContract)}</code></p><p>Execution vault <code>{String(quote.typedData.message.vault)}</code></p></details><p>This uses real funds. Your wallet will review the token approval and order signature.</p>
+    </dl><details><summary>Wallet permissions</summary><p>Approval: exactly {quote.intent.qty} {quote.intent.side === 'sell' ? quote.intent.asset : 'USDC'}.</p><p>Settlement contract <code>{String(quote.typedData.domain.verifyingContract)}</code></p><p>Execution vault <code>{String(quote.typedData.message.vault)}</code></p></details><p>This uses real funds. Your wallet will review the token approval and order signature.</p>
       <button type="button" className="primary-button" disabled={busy || uncertain} onClick={async () => {
         setBusy(true); setError(''); const signal = controller.current.signal;
         try {
@@ -104,13 +106,26 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
           await checkStatus(result.orderId, signal);
         } catch (e) { if (!signal.aborted) stopIfDeclined(e); }
         finally { if (!signal.aborted) setBusy(false); }
-      }}>{busy ? 'Waiting for wallet…' : 'Approve and sign 5 USDC buy'}</button>
+      }}>{busy ? 'Waiting for wallet…' : `Approve and sign ${quote.intent.side}`}</button>
     </section>}
     {message && <p role="status">{message}</p>}{error && <p className="trade-error" role="alert">{error}</p>}
     {order && <section className="trade-review"><h2>Your order</h2><p><code>{order.orderId}</code></p><p>{order.status.replace(/^ORDER_STATUS_/, '').toLowerCase().replaceAll('_', ' ')}</p>
       {!order.fills.length && <p>No verified fill yet. Submission does not mean the trade filled.</p>}
-      {order.fills.map(fill => <p key={fill.txHash}>Bought {formatUnits(BigInt(fill.assetUnits), fill.asset === 'cbBTC' ? 8 : 18)} {fill.asset} · {(Number(fill.usdcMicros) / 1e6).toFixed(2)} USDC · <a target="_blank" rel="noreferrer" href={`https://basescan.org/tx/${fill.txHash}`}>Verified on Base</a></p>)}
+      {order.fills.map(fill => <p key={fill.txHash}>{fill.side === 'sell' ? 'Sold' : 'Bought'} {formatUnits(BigInt(fill.assetUnits), fill.asset === 'cbBTC' ? 8 : 18)} {fill.asset} · {(Number(fill.usdcMicros) / 1e6).toFixed(2)} USDC · <a target="_blank" rel="noreferrer" href={`https://basescan.org/tx/${fill.txHash}`}>Verified on Base</a></p>)}
       {order.unverifiedFills > 0 && <p>Some provider fills are still waiting for receipt verification.</p>}
+      {!['FILLED', 'CANCELLED', 'REJECTED', 'TERMINATED', 'EXPIRED'].includes(order.status.replace(/^ORDER_STATUS_/, '').toUpperCase()) && <button type="button" className="secondary-button" disabled={busy} onClick={async () => {
+        setBusy(true); setError(''); const signal = controller.current.signal;
+        try {
+          const prepared = await tradeRequest<{message:string}>(session, 'cancel-prepare', {orderId:order.orderId}, signal);
+          if (signal.aborted) return;
+          const signed = await session.signMessage(prepared.message);
+          if (signal.aborted) return;
+          await tradeRequest(session, 'cancel', {orderId:order.orderId,signature:signed.signature}, signal);
+          if (!signal.aborted) { setMessage('Cancellation requested. Checking status…'); await checkStatus(order.orderId, signal); }
+        } catch (e) { if (!signal.aborted) stopIfDeclined(e); }
+        finally { if (!signal.aborted) setBusy(false); }
+      }}>Cancel order</button>}
+      {['FILLED', 'CANCELLED', 'REJECTED', 'TERMINATED', 'EXPIRED'].includes(order.status.replace(/^ORDER_STATUS_/, '').toUpperCase()) && <button className="secondary-button" onClick={() => {setOrder(null);setQuote(null);setMessage('');setError('');setUncertain(false);}}>New trade</button>}
     </section>}
     <WalletTradeHistory />
     <form className="trade-lookup" onSubmit={async e => {

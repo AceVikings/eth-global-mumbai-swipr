@@ -82,9 +82,9 @@ Saved ghosts restore wallet-owned parameters and derive hypothetical fixed-size 
 
 **Talking point:** “The copier uses the trader's limit price and remaining order window, with settlement into the copier's own wallet.”
 
-- The implemented tap-copy flow submits reviewed 5 USDC limit buys on Base through Definitive Flash. Supported assets are WETH and cbBTC, subject to the trader's enabled assets.
+- The implemented tap-copy flow submits reviewed 5 USDC limit buys on Base through Definitive Flash. Wallets can also review limit sells back to USDC and sign cancellation requests for their own resting orders. Supported assets are WETH and cbBTC, subject to the trader's enabled assets.
 - A copy requires a confirmed matching trader fill and inherits its limit and expiry. An expired source window is rejected before requesting a wallet signature. A shared limit does not imply identical actual execution prices.
-- Quotes bind the reviewed fields, wallet signatures are verified, and approvals are checked for exactly 5 USDC. Swipr's integrator fee is **10 bps (0.1%) per trade**, not a percentage of profit.
+- Quotes bind the reviewed fields, wallet signatures are verified, and approvals are checked for exactly 5 USDC on buys or the reviewed asset amount on sells. Swipr's integrator fee is **10 bps (0.1%) per trade**, not a percentage of profit.
 - Wallet history checks successful Base receipts and token movements with at least two confirmations. An order proposal or pending provider response is never displayed as a confirmed fill.
 
 **Show the judges:** compare the completed [trader buy](https://basescan.org/tx/0x357532ba9b39b71e079a882d362a9b60ae5bd6d6d6f90d32c65f04d224946f14) and [copier buy](https://basescan.org/tx/0x570171b7b506492de5060fa70436695919bf8deaaf8fb897231a1d18303b32ac), then reload wallet history. Both spent 5 USDC; their WETH proceeds differ. These are team-operated rehearsal trades, not evidence of external adoption or profitable performance. See the [execution and receipt checks](backend/trading/service.ts).
@@ -106,7 +106,7 @@ Hash-chained trading archives and a frontend hosted entirely on Swarm remain roa
 
 ## Project status
 
-Wallet sign-in, wallet-owned profiles, following lists, stored ghost settings, public and invite-only Copy Pass seats, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Reviewed tap-copy orders support 5 USDC limit buys on Base with a 0.1% platform fee, exact token approvals, and receipt-verified wallet history. Registered profiles are real testnet records; the app does not seed invented profits or fills.
+Wallet sign-in, wallet-owned profiles, following lists, stored ghost settings, public and invite-only Copy Pass seats, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Reviewed tap-copy orders support 5 USDC limit buys on Base, asset-denominated limit sells and wallet-signed cancellation, with a 0.1% platform fee, exact token approvals, and receipt-verified wallet history. Registered profiles are real testnet records; the app does not seed invented profits or fills.
 
 Automatic copying and scoped trade delegation, cumulative pass budget/trade-count enforcement, protected and shared exits, ENS Copy Pass minting, and Swarm archive recovery are still in development. Ghost settings do not place trades. Trader and copier rankings reconstruct FIFO round trips from complete available Flash wallet order history and verified Base receipts. Execution fees are included in wallet cash flows; outside trades and separately paid profit share are excluded. Roles identify registered trader wallets and seat holders, not bot-specific attribution. Missing history produces an unavailable state; open buys produce no realized profit.
 

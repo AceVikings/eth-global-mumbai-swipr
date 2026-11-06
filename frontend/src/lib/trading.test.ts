@@ -3,7 +3,7 @@ import type { Session } from '../auth/Session';
 import { sendReviewedTrade, tradeRequest, type TradeQuote } from './trading';
 const wallet = `0x${'12'.repeat(20)}` as const;
 const quote = (): TradeQuote => ({ ticket: 'bound-ticket', quoteId: 'q', integratorFeeBps: '10', expiresAt: Math.floor(Date.now()/1000) + 300, estimatedFeeNotional: '0.02',
- intent: { funder: wallet, qty: '5', asset: 'WETH', sharedPrice: '2500' }, typedData: { domain: {}, types: {}, primaryType: 'FlashOrder', message: {} },
+ intent: { side: 'buy', funder: wallet, qty: '5', asset: 'WETH', sharedPrice: '2500' }, typedData: { domain: {}, types: {}, primaryType: 'FlashOrder', message: {} },
  approval: { to: `0x${'34'.repeat(20)}`, data: '0x095ea7b3', value: '0x0', chainId: 8453 } });
 const session = (request: ReturnType<typeof vi.fn>, address: string = wallet) => ({ address: wallet, getAccessToken: async () => 'test-token',
  getBaseWallet: vi.fn(async () => ({ address, provider: { request } })) } as unknown as Session);
@@ -47,4 +47,13 @@ it('does not open the wallet when preflight reports missing Base funds', async (
  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'Add at least 5 USDC on Base.' } }), { status: 409 })));
  await expect(sendReviewedTrade(s, quote(), vi.fn(), new AbortController().signal)).rejects.toThrow('5 USDC on Base');
  expect(s.getBaseWallet).not.toHaveBeenCalled(); expect(request).not.toHaveBeenCalled();
+});
+
+it('reviews a sell in asset units and keeps the approval before the order signature',async()=>{
+ const q=quote();q.intent={...q.intent,side:'sell',qty:'0.002'};
+ const request=vi.fn().mockResolvedValueOnce(`0x${'ab'.repeat(32)}`).mockResolvedValueOnce(`0x${'cd'.repeat(65)}`);
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>new Response(JSON.stringify(url.endsWith('approval')?{status:'confirmed'}:{orderId:'sell-1'}))));
+ const progress=vi.fn();await sendReviewedTrade(session(request),q,progress,new AbortController().signal);
+ expect(progress).toHaveBeenCalledWith('Approve exactly 0.002 WETH in your wallet.');
+ expect(request.mock.calls.map(c=>c[0].method)).toEqual(['eth_sendTransaction','eth_signTypedData_v4']);
 });

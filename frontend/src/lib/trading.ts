@@ -3,7 +3,7 @@ import type { Session } from '../auth/Session';
 import { apiBase } from './bots';
 export type TradeQuote = {
   ticket: string; quoteId: string; integratorFeeBps: string; expiresAt: number; estimatedFeeNotional: string | null;
-  intent: { funder: string; asset: 'WETH' | 'cbBTC'; qty: string; sharedPrice: string };
+  intent: { side: 'buy' | 'sell'; funder: string; asset: 'WETH' | 'cbBTC'; qty: string; sharedPrice: string };
   typedData: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, unknown> };
   approval: null | { to: string; data: string; value: string; chainId: number };
 };
@@ -35,10 +35,10 @@ export async function sendReviewedTrade(session: Session, quote: TradeQuote, pro
   valid();
   const { address, provider } = await session.getBaseWallet();
   if (address.toLowerCase() !== quote.intent.funder.toLowerCase()) throw new TradeError('This quote belongs to another wallet.');
-  if (quote.intent.qty !== '5') throw new TradeError('Rehearsal trades are limited to 5 USDC.');
+  if (quote.intent.side === 'buy' && quote.intent.qty !== '5') throw new TradeError('Rehearsal trades are limited to 5 USDC.');
   valid();
   if (quote.approval) {
-    progress('Approve exactly 5 USDC in your wallet.');
+    progress(`Approve exactly ${quote.intent.qty} ${quote.intent.side === 'sell' ? quote.intent.asset : 'USDC'} in your wallet.`);
     const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ from: address, to: quote.approval.to as Hex, data: quote.approval.data as Hex, value: '0x0', chainId: '0x2105' }] });
     progress('Waiting for the approval to confirm…');
     let confirmed = false;
@@ -52,7 +52,7 @@ export async function sendReviewedTrade(session: Session, quote: TradeQuote, pro
     if (!confirmed) throw new TradeError('Approval is still pending. No order was submitted; check your wallet before continuing.');
   }
   valid();
-  progress('Review and sign the 5 USDC limit buy in your wallet.');
+  progress(`Review and sign your limit ${quote.intent.side} in your wallet.`);
   const signature = await provider.request({ method: 'eth_signTypedData_v4', params: [address, JSON.stringify(quote.typedData)] });
   valid();
   progress('Submitting your signed order once…');

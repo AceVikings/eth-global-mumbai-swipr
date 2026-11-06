@@ -1,15 +1,16 @@
 import type { VerifiedFill } from './performance';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { createPublicClient, http, erc20Abi, recoverTypedDataAddress, type Address, type Hex } from 'viem';
+import { createPublicClient, http, erc20Abi, recoverTypedDataAddress, recoverMessageAddress, type Address, type Hex } from 'viem';
 import { base } from 'viem/chains';
 import { ApiError } from '../auth';
-import { createFlashClient, SWIPR_INTEGRATOR_FEE_BPS, FLASH_DOMAIN, TOKENS, toUnits, validateApproval, validateTypedData, type FlashQuote, type OrderIntent } from '../providers/flash';
+import { createFlashClient, SWIPR_INTEGRATOR_FEE_BPS, FLASH_DOMAIN, TOKENS, toUnits, validateApproval, validateTypedData, cancelMessage, type FlashQuote, type OrderIntent } from '../providers/flash';
 import { decodeTransferLegs, type Receipt } from '../providers/base';
 import type { BotProfile } from '../contracts/bots';
 import type { SeatDirectory } from '../contracts/seats';
 const same = (a: unknown, b: string) => typeof a === 'string' && a.toLowerCase() === b.toLowerCase();
 const id = (v: unknown) => { if (typeof v !== 'string' || !/^[a-z0-9-]{1,128}$/i.test(v)) throw new ApiError(400, 'invalid_order', 'Choose a valid order ID.'); return v; };
 function fail(text: string): never { throw new ApiError(409, 'trade_blocked', text); }
+const spend = (intent: OrderIntent) => ({ token: intent.side === 'sell' ? TOKENS[intent.asset].address : TOKENS.USDC.address, amount: toUnits(intent.qty, intent.side === 'sell' ? TOKENS[intent.asset].decimals : 6) });
 const now = () => Math.floor(Date.now() / 1000);
 type Context = { profileId: string; seatId?: string; sourceOrderId?: string };
 type Ticket = { version: 1; expiresAt: number; intent: OrderIntent; quote: Pick<FlashQuote, 'quoteId' | 'typedDataRaw' | 'integratorFeeBps'>; context: Context; vault: string };
@@ -56,7 +57,13 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     if (raw.order.recipientAddress && !same(raw.order.recipientAddress, wallet)) fail('This order has another recipient.');
     return { result, row: raw.order };
   };
-  const context = async (wallet: string, input: Context, asset: unknown, qty: unknown) => {
+  const context = async (wallet: string, input: Context, asset: unknown, qty: unknown, side: unknown = 'buy') => {
+    if (side !== 'buy' && side !== 'sell') fail('Choose buy or sell.');
+    if (side === 'sell') {
+      if ((asset !== 'WETH' && asset !== 'cbBTC') || typeof qty !== 'string' || toUnits(qty, TOKENS[asset].decimals) <= 0n) fail('Choose a supported asset and a positive sell amount.');
+      // Exits remain available after a profile halt, seat revocation or expiry.
+      return {};
+    }
     const profiles = await options.profiles();
     const profile = profiles.find(p => p.id === input.profileId && p.status === 'active');
     if (!profile || (asset !== 'WETH' && asset !== 'cbBTC') || !profile.assets.includes(asset)) fail('Choose an active trader and an enabled asset.');
@@ -88,10 +95,10 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     async quote(wallet: string, input: Record<string, unknown>) {
       await network();
       const ctx: Context = { profileId: String(input.profileId ?? ''), ...(input.seatId ? { seatId: String(input.seatId) } : {}), ...(input.sourceOrderId ? { sourceOrderId: id(input.sourceOrderId) } : {}) };
-      const checked = await context(wallet, ctx, input.asset, input.qty);
+      const checked = await context(wallet, ctx, input.asset, input.qty, input.side ?? 'buy');
       const sharedPrice = checked.sharedPrice ?? String(input.sharedPrice ?? '');
       const expiresAt = Math.min(now() + 300, checked.expiresAt ?? Infinity);
-      const intent: OrderIntent = { integratorFeeBps: SWIPR_INTEGRATOR_FEE_BPS, side: 'buy', asset: input.asset as 'WETH' | 'cbBTC', qty: '5', funder: wallet, orderType: 'limit', sharedPrice,
+      const intent: OrderIntent = { integratorFeeBps: SWIPR_INTEGRATOR_FEE_BPS, side: input.side === 'sell' ? 'sell' : 'buy', asset: input.asset as 'WETH' | 'cbBTC', qty: String(input.qty), funder: wallet, orderType: 'limit', sharedPrice,
         limitNotionalPrice: sharedPrice, maxPriceImpact: '0.01', expireTime: new Date(expiresAt * 1000).toISOString() };
       const quote = await flash.quote(intent);
       const vault = String(quote.typedData.message.vault);
@@ -103,20 +110,21 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       validateTypedData(quote.typedData, intent, { now: now(), maxDeadline: expiresAt, expectedVault: vault });
       const raw = quote.raw as { evm?: { approveTx?: unknown; permitTypedData?: unknown }; fees?: { estimatedFeeNotional?: string } };
       if (raw.evm?.permitTypedData) fail('This rehearsal requires a direct, bounded token approval.');
-      const approval = raw.evm?.approveTx ? validateApproval(raw.evm.approveTx, intent, 5000000n) : null;
+      const approval = raw.evm?.approveTx ? validateApproval(raw.evm.approveTx, intent, spend(intent).amount) : null;
       return { ticket: encode({ version: 1, expiresAt, intent, quote: { quoteId: quote.quoteId, typedDataRaw: quote.typedDataRaw, integratorFeeBps: quote.integratorFeeBps }, context: ctx, vault }),
         quoteId: quote.quoteId, integratorFeeBps: quote.integratorFeeBps, intent, typedData: quote.typedData, approval, expiresAt, estimatedFeeNotional: raw.fees?.estimatedFeeNotional ?? null };
     },
     async preflight(wallet: string, token: unknown) {
       const t = decode(token, wallet); await network();
-      await context(wallet, t.context, t.intent.asset, t.intent.qty);
+      await context(wallet, t.context, t.intent.asset, t.intent.qty, t.intent.side);
+      const spending = spend(t.intent);
       const [code, balance, allowance] = await Promise.all([chain.getCode({ address: wallet as Address }),
-        chain.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] }),
-        chain.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] })]);
+        chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] }),
+        chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] })]);
       if (code && code !== '0x') fail('This rehearsal requires a plain EOA wallet.');
-      if (balance < 5000000n) fail('Add at least 5 USDC on Base to your wallet before trading. No signature was requested.');
-      if (allowance !== 5000000n && await chain.getBalance({ address: wallet as Address }) === 0n)
-        fail('Add ETH on Base for the USDC approval gas. No signature was requested.');
+      if (balance < spending.amount) fail(t.intent.side === 'buy' ? 'Add at least 5 USDC on Base to your wallet before trading. No signature was requested.' : 'Your wallet does not hold enough of this asset.');
+      if (allowance !== spending.amount && await chain.getBalance({ address: wallet as Address }) === 0n)
+        fail('Add ETH on Base for the token approval gas. No signature was requested.');
       return { ready: true };
     },
     async approval(wallet: string, token: unknown, hash: unknown) {
@@ -125,22 +133,23 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       try {
         const [tx, receipt, head] = await Promise.all([chain.getTransaction({ hash: hash as Hex }), chain.getTransactionReceipt({ hash: hash as Hex }), chain.getBlockNumber({ cacheTime: 0 })]);
         if (!same(tx.from, wallet)) fail('Approval belongs to another wallet.');
-        validateApproval({ to: tx.to, data: tx.input, value: `0x${tx.value.toString(16)}` }, ticket.intent, 5000000n);
+        validateApproval({ to: tx.to, data: tx.input, value: `0x${tx.value.toString(16)}` }, ticket.intent, spend(ticket.intent).amount);
         return { status: receipt.status !== 'success' ? 'failed' : head - receipt.blockNumber >= 1n ? 'confirmed' : 'pending' };
       } catch (e) { if (e instanceof ApiError) throw e; return { status: 'pending' }; }
     },
     async submit(wallet: string, token: unknown, signature: unknown) {
       const t = decode(token, wallet); await network();
-      await context(wallet, t.context, t.intent.asset, t.intent.qty);
+      await context(wallet, t.context, t.intent.asset, t.intent.qty, t.intent.side);
       if (typeof signature !== 'string' || !/^0x[0-9a-f]{130}$/i.test(signature)) fail('A wallet order signature is required.');
       const td = JSON.parse(t.quote.typedDataRaw);
       const signer = await recoverTypedDataAddress({ ...td, signature: signature as Hex });
       if (!same(signer, wallet)) fail('The order signature belongs to another wallet.');
+      const spending = spend(t.intent);
       const [code, allowance, balance] = await Promise.all([chain.getCode({ address: wallet as Address }),
-        chain.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] }),
-        chain.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] })]);
+        chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] }),
+        chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] })]);
       if (code && code !== '0x') fail('This rehearsal requires a plain EOA wallet.');
-      if (allowance !== 5000000n || balance < 5000000n) fail('This order needs 5 USDC and an exact 5 USDC approval.');
+      if (allowance !== spending.amount || balance < spending.amount) fail(t.intent.side === 'buy' ? 'This order needs 5 USDC and an exact 5 USDC approval.' : 'This sell needs sufficient asset balance and an exact token approval.');
       for (const [key, attempt] of submitted) if (attempt.expiresAt < now() - 86400) submitted.delete(key);
       const previous = submitted.get(t.quote.quoteId);
       if (previous?.orderId) return { orderId: previous.orderId };
@@ -154,6 +163,17 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
         attempt.orderId = result.orderId;
         return result;
       } catch { throw new ApiError(409, 'submission_uncertain', 'Submission could not be confirmed. Check Flash order history; do not submit again.'); }
+    },
+    async prepareCancel(wallet: string, orderId: string) {
+      await network(); await order(orderId, wallet);
+      return { orderId, message: cancelMessage(id(orderId)) };
+    },
+    async cancel(wallet: string, orderId: string, signature: unknown) {
+      await network(); await order(orderId, wallet);
+      if (typeof signature !== 'string' || !/^0x[0-9a-f]{130}$/i.test(signature)
+        || !same(await recoverMessageAddress({ message: cancelMessage(id(orderId)), signature: signature as Hex }), wallet)) fail('Cancellation must be signed by the order wallet.');
+      try { await flash.cancelOrder(orderId, signature); return { orderId, cancellationAccepted: true }; }
+      catch { throw new ApiError(409, 'submission_uncertain', 'Cancellation could not be confirmed. Check the order status.'); }
     },
     async history(wallet: string) {
       await network();

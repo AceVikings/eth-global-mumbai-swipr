@@ -181,6 +181,8 @@ export function createApi({ config, ledger, projects = null, social = null, wall
         if (req.method === 'POST' && path === '/api/trades/preflight') return send(200, await trades.preflight(wallet, input.ticket));
         if (req.method === 'POST' && path === '/api/trades/approval') return send(200, await trades.approval(wallet, input.ticket, input.txHash));
         if (req.method === 'POST' && path === '/api/trades/submit') return send(200, await trades.submit(wallet, input.ticket, input.signature));
+        if (req.method === 'POST' && path === '/api/trades/cancel-prepare') return send(200, await trades.prepareCancel(wallet, String(input.orderId || '')));
+        if (req.method === 'POST' && path === '/api/trades/cancel') return send(200, await trades.cancel(wallet, String(input.orderId || ''), input.signature));
         if (req.method === 'GET' && path === '/api/trades/history') return send(200, await trades.history(wallet));
         if (req.method === 'GET' && path === '/api/trades/status') return send(200, await trades.status(wallet, url.searchParams.get('orderId') || ''));
         throw new ApiError(404, 'not_found', 'Route not found.');
