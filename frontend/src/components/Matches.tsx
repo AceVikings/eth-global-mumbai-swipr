@@ -1,3 +1,4 @@
+import AutomationControl from './AutomationControl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../auth/Session';
 import type { SeatDirectory } from '../contracts/seats';
@@ -42,6 +43,7 @@ export default function Matches({ onDiscover, onJoin, onTrade }: { onDiscover: (
           <h2>{p.owner === account ? p.traderName : `${short(p.owner)} · ${p.traderName}`}</h2>
           <p>{status[p.status]} · {p.seatType === 'public' ? 'Public' : 'Private'}{p.seatNumber ? ` seat ${p.seatNumber}` : ''} · {p.terms.mode === 'tap' ? 'Review each trade' : 'Auto-copy requested'}</p>
           <dl><div><dt>Per trade</dt><dd>${p.terms.perTradeUsd}</dd></div><div><dt>Trades</dt><dd>{p.terms.tradeCount}</dd></div><div><dt>Budget</dt><dd>${p.terms.perTradeUsd * p.terms.tradeCount}</dd></div><div><dt>Ends</dt><dd>{new Date(p.expiresAt).toLocaleDateString()}</dd></div></dl>
+          {p.owner === account && p.status === 'joined' && p.terms.mode === 'auto' && <AutomationControl seat={p} />}
           {p.owner === account && p.status === 'joined' && onTrade && <button className="primary-button" disabled={!!busy} onClick={() => onTrade(p.traderId)}>Copy a trade</button>}
           {p.owner === account && <button className="secondary-button" disabled={!!busy} onClick={() => void act(p.id, () => leaveSeat(session, p.id))}>{busy === p.id ? 'Leaving…' : 'Leave seat'}</button>}
         </article>)}</div>

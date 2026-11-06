@@ -49,6 +49,11 @@ export class CopyAccounting {
    return step.result;
   });
  }
+ async hasSource(seatId:string,sourceOrderId:string){return [...replay((await this.journal.read()).events).values()].some(r=>r.seatId===seatId&&r.sourceOrderId===sourceOrderId);}
+ async available(seat:SeatPass){
+  const snapshot=await this.journal.read(),rows=[...replay(snapshot.events).values()].filter(r=>r.seatId===seat.id&&r.settled!=='0');
+  return seat.budgetVersion===1&&snapshot.timestampMs<seat.expiresAt&&rows.length<seat.terms.tradeCount&&rows.reduce((n,r)=>n+BigInt(r.settled??r.amount),0n)+5000000n<=BigInt(seat.terms.perTradeUsd*seat.terms.tradeCount)*1000000n;
+ }
  reserve(seat:SeatPass,sourceOrderId:string,quoteId:string,value:bigint){
   return this.write<{created:boolean;orderId?:string}>((rows,at)=>{
    const existing=[...rows.values()].find(r=>r.quoteId===quoteId||r.seatId===seat.id&&r.sourceOrderId===sourceOrderId);

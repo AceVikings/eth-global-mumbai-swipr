@@ -34,3 +34,8 @@ export const WALLET_SEAT_INVITE_SCHEMA = 'swipr.wallet-seat-invite.v1';
 export const WalletSeatInviteSchema = defineSchema(WALLET_SEAT_INVITE_SCHEMA, {
   project: str().indexed(), profileId: str().indexed(), invitee: str().indexed(), status: str().indexed(),
 });
+
+export const WALLET_AUTOMATION_SCHEMA = 'swipr.wallet-automation.v1';
+export const WalletAutomationSchema = defineSchema(WALLET_AUTOMATION_SCHEMA, {
+  project: str().indexed(), grant: bytes(),
+});

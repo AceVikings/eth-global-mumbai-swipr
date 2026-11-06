@@ -27,6 +27,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     arkiv: { rpcUrl: env.ARKIV_RPC_URL, accessKey: env.ARKIV_ACCESS_KEY,
       writerAddress: env.ARKIV_WRITER_ADDRESS || '', privateKey: env.ARKIV_RELAYER_PK,
       stream: env.ARKIV_ENGINE_STREAM || 'swipr-engine-v1', confirmations },
+    automation: { signerId: env.PRIVY_AUTOMATION_SIGNER_ID, key: env.PRIVY_AUTOMATION_KEY },
     privyAppId: env.PRIVY_APP_ID || env.VITE_PRIVY_APP_ID,
     privySecret: env.PRIVY_APP_SECRET, privyVerificationKey: env.PRIVY_VERIFICATION_KEY,
     flashKey: env.FLASH_KEY_EXEC || env.FLASH_API_KEY,

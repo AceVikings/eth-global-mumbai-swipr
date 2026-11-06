@@ -1,3 +1,6 @@
+import { createAutomation } from './automation/service';
+import { createPrivyControl } from './automation/privy';
+import { createGrants } from './automation/grants';
 import { CopyAccounting } from './trading/accounting';
 import { createSeatDirectory } from './passes/seats';
 import { createEnsRegistrar } from './ens/registrar';
@@ -37,7 +40,10 @@ async function main() {
   const social = journal ? new SocialStore(journal, config.botAudience) : null;
   const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
   const directory = config.arkiv.accessKey ? createWalletDirectory(config.arkiv) : null;
-  const trades = directory && config.flashKey && config.privySecret ? createTradingService({ apiKey:config.flashKey,ticketSecret:config.privySecret,rpcUrl:config.baseRpc,profiles:directory,seats:createSeatDirectory(config.arkiv),accounting:journal ? new CopyAccounting(journal) : undefined }) : null;
+  const trades = directory && config.flashKey && config.privySecret ? createTradingService({ allowAuto:!!config.automation.signerId,apiKey:config.flashKey,ticketSecret:config.privySecret,rpcUrl:config.baseRpc,profiles:directory,seats:createSeatDirectory(config.arkiv),accounting:journal ? new CopyAccounting(journal) : undefined }) : null;
+  const automation = config.automation.signerId && config.automation.key && config.privyAppId && config.privySecret && directory && trades && config.flashKey
+    ? createAutomation({control:createPrivyControl({appId:config.privyAppId,appSecret:config.privySecret,authorizationKey:config.automation.key}),signerId:config.automation.signerId,trades,flash:createFlashClient({apiKey:config.flashKey,fetch}),profiles:directory,seats:createSeatDirectory(config.arkiv),grants:createGrants(config.arkiv)}) : null;
+  let lastAutomation = 0;
   const names = directory ? createEnsService({rpcUrl:config.sepoliaRpc,rootName:config.ensRootName,profiles:directory,stats:trades&&config.flashKey?createEnsStats(createFlashClient({apiKey:config.flashKey,fetch}),trades):undefined}) : null;
   const ens = directory && names && config.ensRegistrarKey ? createEnsRegistrar({key:config.ensRegistrarKey as `0x${string}`,rootName:config.ensRootName,rpcUrl:config.sepoliaRpc,profiles:directory,snapshot:names.snapshot}) : null;
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
@@ -78,6 +84,7 @@ async function main() {
             await ledger.failJob(job.id, job.leaseToken!, 'provider_probe_failed', 10000);
           }
         }
+        if(automation && Date.now()-lastAutomation>30000){lastAutomation=Date.now();const result=await automation.tick();if(result.failed||result.submitted)console.log(JSON.stringify({service:'worker',code:'automation_cycle',...result}));}
         lastHealthy = Date.now();
       } catch { console.error(JSON.stringify({ severity: 'ERROR', service: 'worker', code: 'worker_cycle_failed' })); }
       if (!stopping) await delay(2000);

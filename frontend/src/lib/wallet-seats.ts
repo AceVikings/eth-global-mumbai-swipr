@@ -47,6 +47,7 @@ export async function joinSeat(session: Session, traderId: string, terms: Terms,
 export async function leaveSeat(session: Session, id: string) {
   const current = (await readSeats(session)).passes.find(p => p.id === id);
   if (!current || current.owner !== session.address?.toLowerCase()) throw new Error('Your wallet does not own this seat.');
+  if(current.terms.mode==='auto') await (await import('./automation')).stopAutomation(session,id);
   const { client, reader, address } = await arkivConnection(session);
   const native = await reader.getEntity(id as Hex);
   if (native.$owner.toLowerCase() !== address.toLowerCase()) throw new Error('Your wallet does not own this seat.');

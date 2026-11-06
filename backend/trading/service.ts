@@ -17,7 +17,7 @@ type Context = { profileId: string; seatId?: string; sourceOrderId?: string };
 type Ticket = { version: 1; expiresAt: number; intent: OrderIntent; quote: Pick<FlashQuote, 'quoteId' | 'typedDataRaw' | 'integratorFeeBps'>; context: Context; vault: string };
 export type TradingService = ReturnType<typeof createTradingService>;
 export function createTradingService(options: { apiKey: string; ticketSecret: string; rpcUrl: string;
-  accounting?: CopyAccounting; profiles: () => Promise<BotProfile[]>; seats: (wallet: string, profiles: BotProfile[]) => Promise<SeatDirectory>; fetcher?: typeof fetch }) {
+  allowAuto?: boolean; accounting?: CopyAccounting; profiles: () => Promise<BotProfile[]>; seats: (wallet: string, profiles: BotProfile[]) => Promise<SeatDirectory>; fetcher?: typeof fetch }) {
   const flash = createFlashClient({ apiKey: options.apiKey, fetch: options.fetcher ?? fetch });
   const chain = createPublicClient({ chain: base, transport: http(options.rpcUrl, { timeout: 8000, retryCount: 0 }) });
   // Tickets bind every reviewed field; neither intent nor vault can be replaced on submission.
@@ -76,7 +76,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     const directory = await options.seats(wallet, profiles);
     const seat = directory.passes.find(p => p.id === input.seatId && p.owner === wallet.toLowerCase() && p.traderId === profile!.id && p.status === 'joined');
     if (!seat || seat.terms.perTradeUsd < 5) fail('Join an available seat before copying this trader.');
-    if (seat!.terms.safetyNetBps > 0 || seat!.terms.mode === 'auto' || seat!.terms.liquidateOnBreakup) fail('This pass requires protected or automatic execution. Those permissions are not ready; no order was submitted.');
+    if (seat!.terms.safetyNetBps > 0 || (seat!.terms.mode === 'auto' && !options.allowAuto) || seat!.terms.liquidateOnBreakup) fail('This pass requires protected or automatic execution. Those permissions are not ready; no order was submitted.');
     if (!input.sourceOrderId) fail('Choose a confirmed trader order to copy.');
     const source = await order(input.sourceOrderId!, profile!.owner);
     const token = source.row.targetAsset as { address?: unknown } | undefined;
@@ -97,6 +97,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       await network();
       const ctx: Context = { profileId: String(input.profileId ?? ''), ...(input.seatId ? { seatId: String(input.seatId) } : {}), ...(input.sourceOrderId ? { sourceOrderId: id(input.sourceOrderId) } : {}) };
       const checked = await context(wallet, ctx, input.asset, input.qty, input.side ?? 'buy');
+      if (checked.seat && options.accounting && (!await options.accounting.available(checked.seat) || await options.accounting.hasSource(checked.seat.id, ctx.sourceOrderId!))) fail('This pass has no available copy budget for this source.');
       const sharedPrice = checked.sharedPrice ?? String(input.sharedPrice ?? '');
       const expiresAt = Math.min(now() + 300, checked.expiresAt ?? Infinity);
       const intent: OrderIntent = { integratorFeeBps: SWIPR_INTEGRATOR_FEE_BPS, side: input.side === 'sell' ? 'sell' : 'buy', asset: input.asset as 'WETH' | 'cbBTC', qty: String(input.qty), funder: wallet, orderType: 'limit', sharedPrice,
@@ -117,14 +118,16 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     },
     async preflight(wallet: string, token: unknown) {
       const t = decode(token, wallet); await network();
-      await context(wallet, t.context, t.intent.asset, t.intent.qty, t.intent.side);
+      const checked = await context(wallet, t.context, t.intent.asset, t.intent.qty, t.intent.side);
       const spending = spend(t.intent);
       const [code, balance, allowance] = await Promise.all([chain.getCode({ address: wallet as Address }),
         chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] }),
         chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] })]);
       if (code && code !== '0x') fail('This rehearsal requires a plain EOA wallet.');
+      if (checked.seat?.terms.mode === 'auto' && allowance < spending.amount) fail('Enable the bounded USDC approval for this pass first.');
       if (balance < spending.amount) fail(t.intent.side === 'buy' ? 'Add at least 5 USDC on Base to your wallet before trading. No signature was requested.' : 'Your wallet does not hold enough of this asset.');
-      if (allowance !== spending.amount && await chain.getBalance({ address: wallet as Address }) === 0n)
+      const boundedAuto = checked.seat?.terms.mode === 'auto' && options.allowAuto && allowance >= spending.amount && allowance <= BigInt(checked.seat.terms.perTradeUsd * checked.seat.terms.tradeCount) * 1000000n;
+      if (!boundedAuto && allowance !== spending.amount && await chain.getBalance({ address: wallet as Address }) === 0n)
         fail('Add ETH on Base for the token approval gas. No signature was requested.');
       return { ready: true };
     },
@@ -150,7 +153,8 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
         chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] }),
         chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] })]);
       if (code && code !== '0x') fail('This rehearsal requires a plain EOA wallet.');
-      if (allowance !== spending.amount || balance < spending.amount) fail(t.intent.side === 'buy' ? 'This order needs 5 USDC and an exact 5 USDC approval.' : 'This sell needs sufficient asset balance and an exact token approval.');
+      const boundedAuto = checked.seat?.terms.mode === 'auto' && options.allowAuto && allowance >= spending.amount && allowance <= BigInt(checked.seat.terms.perTradeUsd * checked.seat.terms.tradeCount) * 1000000n;
+      if ((!boundedAuto && allowance !== spending.amount) || balance < spending.amount) fail(t.intent.side === 'buy' ? 'This order needs 5 USDC and an exact 5 USDC approval.' : 'This sell needs sufficient asset balance and an exact token approval.');
       for (const [key, attempt] of submitted) if (attempt.expiresAt < now() - 86400) submitted.delete(key);
       const previous = submitted.get(t.quote.quoteId);
       if (previous?.orderId) return { orderId: previous.orderId };

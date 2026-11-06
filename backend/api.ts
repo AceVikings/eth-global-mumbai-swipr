@@ -1,3 +1,6 @@
+import { createAutomation } from './automation/service';
+import { createPrivyControl } from './automation/privy';
+import { createGrants } from './automation/grants';
 import { createHistorySource, createPerformanceSource } from './trading/history-source';
 import { activeWalletGhosts } from './contracts/ghosts';
 import { ghostResult } from './trading/performance';
@@ -56,11 +59,13 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   const allowUpload = requestLimiter(12);
   const mediaStore = media ?? (config.beeUrl && config.swarmBatchId
     ? createMedia(createBee({ url: config.beeUrl, batchId: config.swarmBatchId, fetch: fetcher, maxBytes: MAX_PROFILE_IMAGE_BYTES })) : null);
-  const trades = trading ?? (config.flashKey && config.privySecret && walletProfiles && seatDirectory ? createTradingService({ apiKey: config.flashKey, ticketSecret: config.privySecret, rpcUrl: config.baseRpc, profiles: walletProfiles, seats: seatDirectory, fetcher }) : null);
+  const trades = trading ?? (config.flashKey && config.privySecret && walletProfiles && seatDirectory ? createTradingService({ allowAuto: !!config.automation.signerId, apiKey: config.flashKey, ticketSecret: config.privySecret, rpcUrl: config.baseRpc, profiles: walletProfiles, seats: seatDirectory, fetcher }) : null);
   const history = trades ? createHistorySource(trades) : null;
   const performance = verifiedPositions ?? (history && walletProfiles && seatDirectory ? createPerformanceSource(history, walletProfiles, seatDirectory) : null);
   const readBalance = walletBalance ?? createWalletBalance(config.baseRpc);
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
+  const automation = config.automation.signerId && config.privyAppId && config.privySecret && walletProfiles && seatDirectory && trades && flash
+    ? createAutomation({ control:createPrivyControl({appId:config.privyAppId,appSecret:config.privySecret,fetcher}),signerId:config.automation.signerId,trades,flash,profiles:walletProfiles,seats:seatDirectory,grants:createGrants(config.arkiv) }) : null;
   const names = ens ?? (walletProfiles ? createEnsService({rpcUrl:config.sepoliaRpc,profiles:walletProfiles,rootName:config.ensRootName,
     stats: flash&&trades?createEnsStats(flash,trades):undefined}) : null);
   const listBots = async () => {
@@ -172,6 +177,21 @@ export function createApi({ config, ledger, projects = null, social = null, wall
           return send(200,await names.receipt(hash as `0x${string}`));
         }
         throw new ApiError(404,'not_found','Route not found.');
+      }
+      if (req.method === 'GET' && path === '/api/automation') {
+        const identity=await authenticate(req.headers.authorization),wallet=requireWallet(identity,url.searchParams.get('wallet'));
+        if(!automation)return send(200,{grants:[],configured:false});
+        return send(200,{...await automation.state(wallet),configured:true,signerId:config.automation.signerId});
+      }
+      if (req.method === 'GET' && path === '/api/automation/signers') {
+        const identity=await authenticate(req.headers.authorization),wallet=requireWallet(identity,url.searchParams.get('wallet'));
+        if(!automation)throw new ApiError(503,'permissions_unavailable','Automatic copying is not configured.');
+        return send(200,await automation.signers(identity,wallet));
+      }
+      if (req.method === 'POST' && path === '/api/automation/prepare') {
+        const identity=await authenticate(req.headers.authorization),input=await body(req),wallet=requireWallet(identity,input.wallet);
+        if(!automation)throw new ApiError(503,'permissions_unavailable','Automatic copying is not configured.');
+        return send(200,await automation.prepare(identity,wallet,String(input.seatId||'')));
       }
       if (path.startsWith('/api/trades/')) {
         const identity = await authenticate(req.headers.authorization);

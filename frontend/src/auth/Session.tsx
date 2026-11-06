@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { PrivyProvider, useExportWallet, useLogin, useLogout, usePrivy, useSendTransaction, useWallets } from '@privy-io/react-auth';
+import { PrivyProvider, useExportWallet, useLogin, useLogout, usePrivy, useSendTransaction, useSigners, useUpdateWallet, useWallets } from '@privy-io/react-auth';
 import type { ConnectedWallet, PrivyClientConfig } from '@privy-io/react-auth';
 import { getAddress, isAddress, recoverMessageAddress, toHex } from 'viem';
 import { base } from 'viem/chains';
 import type { EIP1193Provider } from 'viem';
-import { arkivChain, deleteWalletAccount } from '../lib/arkiv';
+import { accountRequest, arkivChain, deleteWalletAccount } from '../lib/arkiv';
 import { arkivWalletTransaction } from './arkiv-transaction';
 import './session.css';
 
@@ -30,6 +30,8 @@ export type Session = {
   getBaseWallet: () => Promise<{ address: Address; provider: EIP1193Provider }>;
   getArkivWallet: () => Promise<{ address: Address; provider: EIP1193Provider }>;
   exportWallet: () => Promise<void>;
+  addSigner: (signerId: string, policyId: string) => Promise<void>;
+  removeSigner: (signerId: string) => Promise<void>;
 };
 
 const appId = (import.meta.env.VITE_PRIVY_APP_ID as string | undefined)?.trim() || '';
@@ -54,6 +56,8 @@ const unconfigured: Session = {
   getBaseWallet: async () => { throw new Error(notConfigured); },
   getArkivWallet: async () => { throw new Error(notConfigured); },
   exportWallet: async () => { throw new Error(notConfigured); },
+  addSigner: async () => { throw new Error(notConfigured); },
+  removeSigner: async () => { throw new Error(notConfigured); },
 };
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -86,6 +90,8 @@ function PrivySession({ children }: { children: ReactNode }) {
   const { logout: privyLogout } = useLogout();
   const { exportWallet: openExport } = useExportWallet();
   const { sendTransaction } = useSendTransaction();
+  const { addSigners } = useSigners();
+  const { updateWallet } = useUpdateWallet();
 
   // Only wallets Privy has linked to this user count; the server checks the same list.
   const linked = useMemo(() => new Set((user?.linkedAccounts ?? [])
@@ -178,7 +184,20 @@ function PrivySession({ children }: { children: ReactNode }) {
     address: authenticated ? address : null,
     userLabel: authenticated ? google?.name || google?.email || email || null : null,
     getAccessToken: accessToken, getBaseWallet, getArkivWallet, exportWallet,
-  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getBaseWallet, getArkivWallet, exportWallet]);
+    addSigner: async (signerId:string, policyId:string) => {
+      const owner=address;if(!owner||current.current.address!==owner)throw Error('Your account changed. Sign in again.');
+      await addSigners({address:owner,signers:[{signerId,policyIds:[policyId]}]});
+      if(current.current.address!==owner)throw Error('Your account changed.');
+    },
+    removeSigner: async (signerId:string) => {
+      const owner=address;if(!owner||current.current.address!==owner)throw Error('Your account changed. Sign in again.');
+      const state=await accountRequest({getAccessToken:accessToken} as Session,`/api/automation/signers?wallet=${owner}`) as {walletId:string;signers:{signer_id:string;override_policy_ids:string[]}[]};
+      if(current.current.address!==owner)throw Error('Your account changed.');
+      if(!state.signers.some(s=>s.signer_id===signerId))return;
+      await updateWallet(state.walletId,{additional_signers:state.signers.filter(s=>s.signer_id!==signerId)});
+      if(current.current.address!==owner)throw Error('Your account changed.');
+    },
+  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getBaseWallet, getArkivWallet, exportWallet, addSigners, updateWallet]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

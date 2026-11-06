@@ -78,6 +78,8 @@ export async function writeWalletFollow(session: Session, target: string, follow
   await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
 }
 export async function deleteWalletAccount(session: Session, progress: (text: string) => void) {
+  progress('Stopping automatic copying…');
+  await (await import('./automation')).stopAutomation(session, '');
   const { client, reader, address } = await arkivConnection(session);
   type Manifest = { entities: { key: Hex }[]; expires: number; deletionMessage: string };
   const manifest = await clearWalletRecords(

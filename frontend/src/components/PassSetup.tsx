@@ -244,7 +244,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
                 { value: 'auto', label: 'Auto-copy', sub: 'Requires separate trading permissions' },
               ]} />
             {d.mode === 'auto' && (
-              <p className="ps-note ps-note-warn">Auto-copy needs a verified policy signer. It isn’t verified in this build, so an auto pass can’t activate yet.</p>
+              <p className="ps-note ps-note-warn">After joining, enable automatic entries with a bounded wallet permission in Matches. Exits remain separately reviewed.</p>
             )}
             <div className="ps-actions">
               <button type="submit" className="ps-primary" disabled={!valid}>Review Copy Pass<span aria-hidden="true">→</span></button>

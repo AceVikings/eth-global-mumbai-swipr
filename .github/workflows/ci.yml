@@ -114,9 +114,11 @@ jobs:
           ARKIV_RELAYER_PK: ${{ secrets.ARKIV_RELAYER_PK }}
           ARKIV_MAINTAINER_PK: ${{ secrets.ARKIV_MAINTAINER_PK }}
           ENS_REGISTRAR_PK: ${{ secrets.ENS_REGISTRAR_PK }}
+          PRIVY_AUTOMATION_KEY: ${{ secrets.PRIVY_AUTOMATION_KEY }}
+          PRIVY_AUTOMATION_SIGNER_ID: ${{ secrets.PRIVY_AUTOMATION_SIGNER_ID }}
         run: |
           set -euo pipefail
-          for mapping in PRIVY_APP_ID:swipr-privy-app-id PRIVY_APP_SECRET:swipr-privy-app-secret PRIVY_VERIFICATION_KEY:swipr-privy-verification-key FLASH_KEY_EXEC:swipr-flash-key-exec ARKIV_ACCESS_KEY:swipr-arkiv-access-key ARKIV_RELAYER_PK:swipr-arkiv-relayer-pk ARKIV_MAINTAINER_PK:swipr-arkiv-maintainer-pk ENS_REGISTRAR_PK:swipr-ens-registrar-pk; do
+          for mapping in PRIVY_APP_ID:swipr-privy-app-id PRIVY_APP_SECRET:swipr-privy-app-secret PRIVY_VERIFICATION_KEY:swipr-privy-verification-key FLASH_KEY_EXEC:swipr-flash-key-exec ARKIV_ACCESS_KEY:swipr-arkiv-access-key ARKIV_RELAYER_PK:swipr-arkiv-relayer-pk ARKIV_MAINTAINER_PK:swipr-arkiv-maintainer-pk ENS_REGISTRAR_PK:swipr-ens-registrar-pk PRIVY_AUTOMATION_KEY:swipr-privy-automation-key PRIVY_AUTOMATION_SIGNER_ID:swipr-privy-automation-signer-id; do
             key="${mapping%%:*}"
             secret="${mapping#*:}"
             test -n "${!key}"
@@ -146,11 +148,11 @@ jobs:
             expected="${service}@${PROJECT_ID}.iam.gserviceaccount.com"
             actual="$(gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.serviceAccountName)')"
             [[ "$actual" == "$expected" ]] || { echo "Unexpected runtime identity on ${service}" >&2; exit 3; }
-            extra=()
+            extra=(--update-secrets "PRIVY_AUTOMATION_SIGNER_ID=swipr-privy-automation-signer-id:latest")
             if [[ "$role" == worker ]]; then
               [[ "$FUNDING_START_NONCE" =~ ^[0-9]+$ ]]
               extra+=(--update-env-vars "ARKIV_FUNDING_ENABLED=true,ARKIV_FUNDING_START_NONCE=${FUNDING_START_NONCE}")
-              extra+=(--update-secrets "ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest,ENS_REGISTRAR_PK=swipr-ens-registrar-pk:latest")
+              extra+=(--update-secrets "ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest,ENS_REGISTRAR_PK=swipr-ens-registrar-pk:latest,PRIVY_AUTOMATION_KEY=swipr-privy-automation-key:latest")
             fi
             if [[ "$role" == api && -n "$MEDIA_BEE_URL" ]]; then
               [[ "$MEDIA_BEE_URL" =~ ^http://10\.[0-9]+\.[0-9]+\.[0-9]+:1633$ ]]

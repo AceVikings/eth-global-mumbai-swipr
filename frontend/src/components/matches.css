@@ -12,3 +12,6 @@
 .match-invites { list-style: none; padding: 0; }
 .match-invites li { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 12px 0; }
 .matches-page > .match-card { margin-top: 28px; }
+
+.match-automation { display: grid; justify-items: start; gap: 12px; margin-top: 16px; }
+.match-automation p { margin: 0; }
