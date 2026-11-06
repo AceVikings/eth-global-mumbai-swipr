@@ -1,3 +1,4 @@
+import type { VerifiedFill } from './performance';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createPublicClient, http, erc20Abi, recoverTypedDataAddress, type Address, type Hex } from 'viem';
 import { base } from 'viem/chains';
@@ -40,7 +41,10 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
         if (confirmations < 2 || r.status !== 'success') continue;
         const decoded = decodeTransferLegs({ transactionHash: r.transactionHash, status: '0x1', blockNumber: `0x${r.blockNumber.toString(16)}`, from: r.from,
           logs: r.logs.map(l => ({ address: l.address, topics: l.topics as string[], data: l.data })) } as Receipt, wallet);
-        if (decoded.ok) fills.push({ txHash: hash, asset: decoded.asset, side: decoded.side, usdcMicros: decoded.usdcMicros.toString(), assetUnits: decoded.assetUnits.toString(), price: decoded.price, blockNumber: Number(r.blockNumber), confirmations });
+        if (decoded.ok) {
+          const block = await chain.getBlock({ blockNumber: r.blockNumber });
+          fills.push({ txHash: hash, asset: decoded.asset, side: decoded.side, usdcMicros: decoded.usdcMicros.toString(), assetUnits: decoded.assetUnits.toString(), price: decoded.price, blockNumber: Number(r.blockNumber), confirmations, timestamp: Number(block.timestamp) * 1000, transactionIndex: r.transactionIndex });
+        }
       } catch { /* Pending, unavailable or malformed receipts are never displayed as fills. */ }
     }
     return fills;
@@ -165,6 +169,28 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
         orders.push({ orderId, status: result.status, fills, unverifiedFills: Math.max(0, result.fills.length - fills.length) });
       }
       return { orders, hasMore: history.hasMore, scope: 'latest20Orders' as const };
+    },
+    /** Complete provider history or an explicit error. Missing pages cannot supply a cost basis. */
+    async completeHistory(wallet: string): Promise<VerifiedFill[]> {
+      await network();
+      const fills: VerifiedFill[] = [], seenOrders = new Set<string>(), seenPages = new Set<string>();
+      let cursor: string | undefined;
+      for (let page = 0; page < 50; page++) {
+        const history = await flash.listOrders(wallet, cursor);
+        for (const row of history.orders) {
+          if (!same(row.funderAddress, wallet)) fail('Order history contains another wallet.');
+          const orderId = id(row.orderId ?? row.id);
+          if (seenOrders.has(orderId)) continue; seenOrders.add(orderId);
+          const { result } = await order(orderId, wallet);
+          const verified = await verifyFills(result, wallet);
+          if (verified.length !== result.fills.length) fail('History still has unverified settlements.');
+          fills.push(...verified);
+        }
+        if (!history.hasMore) return fills;
+        if (!history.nextPageToken || seenPages.has(history.nextPageToken)) fail('Order history pagination could not be verified.');
+        seenPages.add(history.nextPageToken!); cursor = history.nextPageToken;
+      }
+      return fail('Order history exceeds the verification limit.');
     },
     async status(wallet: string, orderId: string) {
       await network(); const { result } = await order(orderId, wallet); const fills = await verifyFills(result, wallet);

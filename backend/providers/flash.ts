@@ -196,11 +196,11 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
       if (typeof j.orderId !== 'string') throw new ProviderError('flash', 'bad_response', 'order id missing', { ambiguous: true });
       return { orderId: j.orderId as string };
     },
-    async listOrders(funder: string) {
+    async listOrders(funder: string, pageToken?: string): Promise<{ orders: { orderId?: string; id?: string; funderAddress?: string }[]; hasMore: boolean; nextPageToken?: string }> {
       if (!ADDRESS.test(funder)) throw invalid('invalid funder');
-      const j = ok(await http.json(`${base}/orders?funderAddress=${encodeURIComponent(funder)}&pageSize=20`, { headers }, { retry: true }), 'orders');
+      const j = ok(await http.json(`${base}/orders?funderAddress=${encodeURIComponent(funder)}&pageSize=20${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`, { headers }, { retry: true }), 'orders');
       if (!Array.isArray(j.orders)) throw new ProviderError('flash', 'bad_response', 'Order history is unavailable');
-      return { orders: j.orders as { orderId?: string; id?: string; funderAddress?: string }[], hasMore: !!j.nextPageToken };
+      return { orders: j.orders as { orderId?: string; id?: string; funderAddress?: string }[], hasMore: !!j.nextPageToken, nextPageToken: typeof j.nextPageToken === 'string' ? j.nextPageToken : undefined };
     },
     async getOrder(orderId: string, funder: string) {
       if (!ADDRESS.test(funder)) throw invalid('funder is not an address');

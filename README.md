@@ -76,7 +76,7 @@ ENS Copy Pass names, Agent Charters and emancipated “Forever” identities rem
 
 **Show the judges:** save a following list or ghost, reload, inspect its native owner, and demonstrate an approved edit or deletion. A rejected signature leaves the record unchanged. See the [wallet ghost reader](backend/ghosts/wallet.ts) and [Arkiv event journal](backend/arkiv-journal.ts).
 
-Saved ghosts currently persist parameters; simulated returns, a complete sealed trade/exit history and independently recomputable performance snapshots are not yet connected.
+Saved ghosts restore wallet-owned parameters and derive hypothetical fixed-size entries and proportional exits from receipt-verified Flash wallet fills during the ghost window. Open assets are unpriced; simulated outcomes are excluded from real rankings. A complete sealed trade/exit archive remains separate work.
 
 ### Definitive Flash — copy a real order under the same limit
 
@@ -108,7 +108,7 @@ Hash-chained trading archives and a frontend hosted entirely on Swarm remain roa
 
 Wallet sign-in, wallet-owned profiles, following lists, stored ghost settings, public and invite-only Copy Pass seats, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Reviewed tap-copy orders support 5 USDC limit buys on Base with a 0.1% platform fee, exact token approvals, and receipt-verified wallet history. Registered profiles are real testnet records; the app does not seed invented profits or fills.
 
-Automatic copying and scoped trade delegation, cumulative pass budget/trade-count enforcement, protected and shared exits, realized-performance leaderboard ingestion, ghost-result computation, ENS Copy Pass minting, and Swarm archive recovery are still in development. Saved ghost settings do not place trades or currently produce simulated returns. Open positions are excluded from realized-profit rankings.
+Automatic copying and scoped trade delegation, cumulative pass budget/trade-count enforcement, protected and shared exits, ENS Copy Pass minting, and Swarm archive recovery are still in development. Ghost settings do not place trades. Trader and copier rankings reconstruct FIFO round trips from complete available Flash wallet order history and verified Base receipts. Execution fees are included in wallet cash flows; outside trades and separately paid profit share are excluded. Roles identify registered trader wallets and seat holders, not bot-specific attribution. Missing history produces an unavailable state; open buys produce no realized profit.
 
 Deleting an account removes current Arkiv records and login access. Public ENS snapshots, blockchain history and distributed media or third-party archives may remain public. Export your wallet first if it holds funds.
 

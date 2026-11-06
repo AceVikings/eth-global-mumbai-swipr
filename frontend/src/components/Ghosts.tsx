@@ -1,3 +1,4 @@
+import type { GhostResult } from '../auth/useGhostResults';
 import { portraitFallback } from '../lib/profile-images';
 import { short as shortWallet } from '../lib/bots';
 import type { Ghost, Trader } from '../contracts/types';
@@ -5,6 +6,7 @@ import { isGhostExpired } from '../lib/ghosts';
 import '../ghosts.css';
 
 type Props = {
+  results?: GhostResult[];
   ghosts: Ghost[];
   traders: Trader[];
   onReal: (t: Trader) => void;
@@ -35,9 +37,9 @@ function Avatar({ trader }: { trader?: Trader }) {
   return <span className="gh-avatar gh-monogram" aria-hidden="true">{trader ? trader.name.slice(0, 1) : '?'}</span>;
 }
 
-function Row({ ghost, trader, now, onReal, onRemove, busy }: {
+function Row({ ghost, trader, now, onReal, onRemove, busy, result }: {
   ghost: Ghost; trader?: Trader; now: number;
-  onReal: Props['onReal']; onRemove: Props['onRemove']; busy?: boolean;
+  onReal: Props['onReal']; onRemove: Props['onRemove']; busy?: boolean; result?: GhostResult;
 }) {
   const expired = isGhostExpired(ghost, now);
   const name = trader?.name ?? 'Unknown trader';
@@ -52,7 +54,7 @@ function Row({ ghost, trader, now, onReal, onRemove, busy }: {
             {trader?.kind === 'agent' && trader.owner ? ` · agent by ${trader.owner ? shortWallet(trader.owner) : 'Owner'}` : ''}
           </p>
           <div className="gh-tags">
-            <span className="gh-pill">{expired ? 'Expired' : 'Simulated'}</span>
+            <span>{expired ? 'Expired' : 'Simulated'}</span>
           </div>
         </div>
       </div>
@@ -71,8 +73,11 @@ function Row({ ghost, trader, now, onReal, onRemove, busy }: {
         </div>
       </dl>
       <p className="gh-result">
-        <span className="gh-dash" aria-hidden="true">—</span>
-        No trade results yet.
+        {!result ? 'Loading simulation…' : result.state === 'unavailable' ? 'Simulation history is unavailable.'
+          : !result.buys ? 'No confirmed trader buys during this ghost yet.'
+          : <>{result.buys} simulated {result.buys === 1 ? 'buy' : 'buys'} · {result.closedTrades} exits<br />
+            {result.closedTrades ? `Realized simulation: ${Number(result.realizedPnlUsd).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}` : 'No simulated exits yet.'}
+            {!!result.openTrades && <><br />{result.openTrades} open {result.openTrades === 1 ? 'asset' : 'assets'} · value not estimated</>}</>}
       </p>
       <div className="gh-actions">
         {trader && (
@@ -89,7 +94,7 @@ function Row({ ghost, trader, now, onReal, onRemove, busy }: {
   );
 }
 
-export default function Ghosts({ ghosts, traders, onReal, onRemove, loading, busy, error, signedIn = true, onSignIn, onRefresh }: Props) {
+export default function Ghosts({ results = [], ghosts, traders, onReal, onRemove, loading, busy, error, signedIn = true, onSignIn, onRefresh }: Props) {
   const now = Date.now();
   const byId = new Map(traders.map((t) => [t.id, t]));
   const sorted = [...ghosts].sort((a, b) =>
@@ -122,11 +127,11 @@ export default function Ghosts({ ghosts, traders, onReal, onRemove, loading, bus
           <ul className="gh-list">
             {sorted.map((g) => (
               <Row key={g.traderId} ghost={g} trader={byId.get(g.traderId)} now={now}
-                onReal={onReal} onRemove={onRemove} busy={busy} />
+                onReal={onReal} onRemove={onRemove} busy={busy} result={results.find(r => r.traderId === g.traderId)} />
             ))}
           </ul>
           <p className="gh-note">
-            Estimates use the trader’s recorded prices. Real results may differ.
+            Simulated at confirmed Flash wallet prices during your ghost. Open assets are unpriced. Real executions and fees can differ.
           </p>
         </>
       )}

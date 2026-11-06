@@ -233,3 +233,9 @@ describe('Ghosts component', () => {
     expect(html).toMatch(/Unknown trader/);
   });
 });
+
+it('renders derived simulation exits without claiming an open asset has a marked value',()=>{
+ const ghost=startGhost([], 'real', 10, T0)[0];
+ const html=renderToStaticMarkup(createElement(Ghosts,{ghosts:[ghost],traders:[],onReal:()=>{},onRemove:()=>{},results:[{traderId:'real',state:'ready',buys:1,closedTrades:1,openTrades:1,realizedPnlUsd:'-0.250000'}]}));
+ expect(html).toContain('Realized simulation');expect(html).toContain('-$0.25');expect(html).toContain('value not estimated');
+});

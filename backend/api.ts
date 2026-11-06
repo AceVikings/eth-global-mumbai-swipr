@@ -1,3 +1,6 @@
+import { createHistorySource, createPerformanceSource } from './trading/history-source';
+import { activeWalletGhosts } from './contracts/ghosts';
+import { ghostResult } from './trading/performance';
 import { MAX_PROFILE_IMAGE_BYTES } from './contracts/profile-image';
 import { createMedia, type MediaService } from './media';
 import { createBee } from './providers/bee';
@@ -54,6 +57,8 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   const mediaStore = media ?? (config.beeUrl && config.swarmBatchId
     ? createMedia(createBee({ url: config.beeUrl, batchId: config.swarmBatchId, fetch: fetcher, maxBytes: MAX_PROFILE_IMAGE_BYTES })) : null);
   const trades = trading ?? (config.flashKey && config.privySecret && walletProfiles && seatDirectory ? createTradingService({ apiKey: config.flashKey, ticketSecret: config.privySecret, rpcUrl: config.baseRpc, profiles: walletProfiles, seats: seatDirectory, fetcher }) : null);
+  const history = trades ? createHistorySource(trades) : null;
+  const performance = verifiedPositions ?? (history && walletProfiles && seatDirectory ? createPerformanceSource(history, walletProfiles, seatDirectory) : null);
   const readBalance = walletBalance ?? createWalletBalance(config.baseRpc);
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const names = ens ?? (walletProfiles ? createEnsService({rpcUrl:config.sepoliaRpc,profiles:walletProfiles,rootName:config.ensRootName,
@@ -252,6 +257,20 @@ export function createApi({ config, ledger, projects = null, social = null, wall
           ['swarm', !!(config.beeUrl && config.swarmBatchId), 'Profile media transport with BMT integrity verification; live availability depends on Bee'],
         ].map(([name, configured, detail]) => ({ name, configured, verified: false, detail })),
       });
+      if (req.method === 'GET' && path === '/api/ghosts/results') {
+        const identity = await authenticate(req.headers.authorization);
+        const wallet = requireWallet(identity, url.searchParams.get('wallet'));
+        if (!walletGhosts || !walletProfiles || !history) throw new ApiError(503, 'ghosts_unavailable', 'Simulation history is unavailable.');
+        const [records, profiles] = await Promise.all([walletGhosts(wallet), walletProfiles()]);
+        const results = [];
+        for (const ghost of activeWalletGhosts(records)) {
+          const profile = profiles.find(p => p.id === ghost.traderId);
+          if (!profile) { results.push({ traderId: ghost.traderId, state: 'unavailable' }); continue; }
+          try { results.push(ghostResult(ghost, await history(profile.owner))); }
+          catch { results.push({ traderId: ghost.traderId, state: 'unavailable' }); }
+        }
+        return send(200, { results, asOf: new Date().toISOString(), basis: 'Confirmed Flash wallet fills; simulated amounts, no open-position valuation.' });
+      }
       if (req.method === 'GET' && path === '/api/ghosts') {
         const identity = await authenticate(req.headers.authorization);
         const wallet = requireWallet(identity, url.searchParams.get('wallet'));
@@ -286,10 +305,11 @@ export function createApi({ config, ledger, projects = null, social = null, wall
           if (!social && !walletSocial) return send(200, { state: 'unavailable', rows: [], asOf: null, detail: 'Arkiv social storage is not configured.' });
           following = walletSocial ? (await walletSocial(wallet)).following : await social!.following(wallet);
         }
-        if (!verifiedPositions) return send(200, { state: 'unavailable', rows: [], asOf: null, detail: 'Verified closed fill history is not connected. Ghosts and proposed signals are excluded.' });
-        const data = await verifiedPositions();
+        if (!performance) return send(200, { state: 'unavailable', rows: [], asOf: null, detail: 'Verified closed fill history is not connected. Ghosts and proposed signals are excluded.' });
+        let data;
+        try { data = await performance(); } catch { throw new ApiError(503, 'history_unavailable', 'Verified performance history is temporarily unavailable.'); }
         return send(200, { state: 'ready', rows: rankClosedPositions(data.positions, { role: role as 'trader' | 'copier', sort: sort as 'percentage' | 'absolute', following }), asOf: data.asOf,
-          detail: 'Since inception. Closed-position net profit after fees and profit share; return = net profit / entry cost.' });
+          detail: 'Confirmed Flash wallet round trips using FIFO cost basis. Cash flows include execution fees. Outside trades and separately paid profit share are excluded; open positions are unranked. Roles identify registered traders and seat holders, not bot attribution.' });
       }
       if (req.method === 'GET' && path === '/api/traders') return send(200, {
         traders: [], source: 'arkiv', asOfBlock: null, state: 'unavailable',

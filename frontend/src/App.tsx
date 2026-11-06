@@ -1,3 +1,4 @@
+import { useGhostResults } from './auth/useGhostResults';
 import TradeDesk from './components/TradeDesk';
 import { botPortrait } from './lib/profile-images';
 import Matches from './components/Matches';
@@ -60,6 +61,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(currentPage);
   const [tradeProfileId, setTradeProfileId] = useState('');
   const { store: ghostStore, ghosts, loading: ghostsLoading, busy: ghostsBusy, error: ghostsError } = useWalletGhosts(session);
+  const ghostResults = useGhostResults(session, ghosts);
   const [prefs, setPrefs] = useState(readPrefs);
   const [realTrader, setRealTrader] = useState<Trader | null>(null);
   const [notice, setNotice] = useState("");
@@ -223,7 +225,7 @@ export default function App() {
               )}
               {page === "trades" && <TradeDesk initialProfileId={tradeProfileId} />}
               {page === "ghosts" && (
-                <Ghosts
+                <Ghosts results={ghostResults}
                   ghosts={ghosts}
                   traders={registeredTraders}
                   onReal={setRealTrader}

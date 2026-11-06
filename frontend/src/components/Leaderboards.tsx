@@ -172,9 +172,9 @@ export default function Leaderboards() {
         <details className="lb-info">
           <summary aria-label="How profit is measured">?</summary>
           <div>
-            <p><strong>Net profit</strong> is realized profit on closed positions after trading fees and profit share.</p>
+            <p><strong>Net profit</strong> is realized profit on confirmed Flash wallet round trips, including execution fees. Separate profit-share payments and outside trades are excluded.</p>
             <p><strong>Return %</strong> is that net profit divided by entry cost, weighted by position size.</p>
-            <p>Both cover the same interval since inception. Open positions, ghost copies and proposed signals are excluded.</p>
+            <p>Both use complete available Flash order history with FIFO entry costs. Roles identify registered trader wallets and seat holders. Open positions, ghost copies and proposed signals are excluded.</p>
             <p>Following someone is free and does not copy trades.</p>
           </div>
         </details>

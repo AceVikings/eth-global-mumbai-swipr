@@ -6,7 +6,7 @@ import { FLASH_DOMAIN, FLASH_ORDER_TYPES, FLASH_DOMAIN_TYPES, TOKENS } from '../
 import type { BotProfile } from '../contracts/bots';
 import {DEFAULT_TERMS} from '../contracts/types';
 import type { SeatDirectory } from '../contracts/seats';
-const chain = vi.hoisted(() => ({ getChainId: vi.fn(), getBalance: vi.fn(), getCode: vi.fn(), getBlockNumber: vi.fn(), getTransactionReceipt: vi.fn(), getTransaction: vi.fn(), readContract: vi.fn() }));
+const chain = vi.hoisted(() => ({ getBlock: vi.fn(), getChainId: vi.fn(), getBalance: vi.fn(), getCode: vi.fn(), getBlockNumber: vi.fn(), getTransactionReceipt: vi.fn(), getTransaction: vi.fn(), readContract: vi.fn() }));
 vi.mock('viem', async original => ({ ...await original<typeof import('viem')>(), createPublicClient: () => chain }));
 const trader = privateKeyToAccount(`0x${'11'.repeat(32)}`), copier = privateKeyToAccount(`0x${'22'.repeat(32)}`);
 const profile = { id: `0x${'ab'.repeat(32)}`, owner: trader.address, operator: trader.address, status: 'active', assets: ['WETH'], name: 'Trader' } as BotProfile;
@@ -29,7 +29,7 @@ const setup = (overrides: Record<string, unknown> = {}, directory: SeatDirectory
 };
 const input = { profileId: profile.id, asset: 'WETH', qty: '5', sharedPrice: '2500' };
 beforeEach(() => {
- vi.resetAllMocks(); posts = []; sent = 0;
+ vi.resetAllMocks(); chain.getBlock.mockResolvedValue({timestamp: 1800000000n}); posts = []; sent = 0;
  chain.getChainId.mockResolvedValue(8453); chain.getCode.mockImplementation(async ({ address }) => address.toLowerCase() === trader.address.toLowerCase() ? undefined : '0x1234');
  chain.getBalance.mockResolvedValue(1000000000000000n);
  chain.getBlockNumber.mockResolvedValue(100n); chain.readContract.mockResolvedValue(5000000n);
@@ -88,7 +88,7 @@ it('requires two confirmations for receipt-backed fills and verifies real transf
  const topic = (address: string) => `0x${address.slice(2).toLowerCase().padStart(64, '0')}`;
  const zero = `0x${'00'.repeat(20)}`;
  const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
- chain.getTransactionReceipt.mockResolvedValue({ transactionHash: txHash, from: zero, status: 'success', blockNumber: 100n,
+ chain.getTransactionReceipt.mockResolvedValue({ transactionHash: txHash, from: zero, status: 'success', blockNumber: 100n, transactionIndex: 0,
   logs: [{ address: TOKENS.USDC.address, topics: [transferTopic, topic(trader.address), topic(vault)], data: '0x4c4b40' },
    { address: TOKENS.WETH.address, topics: [transferTopic, topic(vault), topic(trader.address)], data: `0x${2000000000000000n.toString(16)}` }] });
  expect(await service.status(trader.address, 'order-1')).toMatchObject({ fills: [], unverifiedFills: 1 });
@@ -148,4 +148,15 @@ it('returns a genuine empty history and keeps provider failures distinct',async(
  expect(await service.history(trader.address)).toMatchObject({orders:[],hasMore:false});
  fetcher.mockResolvedValueOnce(new Response(JSON.stringify({unexpected:true})));
  await expect(service.history(trader.address)).rejects.toThrow('history');
+});
+
+it('follows opaque history cursors and rejects repeated pages instead of guessing a cost basis',async()=>{
+ const {service,fetcher}=setup();
+ fetcher.mockImplementation(async(url:string)=>new Response(JSON.stringify(url.includes('/orders?')
+  ?{orders:[],nextPageToken:url.includes('pageToken=')?undefined:'opaque +/='}
+  :{order:{funderAddress:trader.address},fills:[]})));
+ expect(await service.completeHistory(trader.address)).toEqual([]);
+ expect(fetcher.mock.calls[1][0]).toContain('pageToken=opaque%20%2B%2F%3D');
+ fetcher.mockImplementation(async()=>new Response(JSON.stringify({orders:[],nextPageToken:'same'})));
+ await expect(service.completeHistory(trader.address)).rejects.toThrow('pagination');
 });
