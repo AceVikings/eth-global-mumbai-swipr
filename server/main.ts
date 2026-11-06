@@ -1,8 +1,10 @@
 import { createApi } from './api';
 import { readConfig } from './config';
 import { Ledger } from './ledger';
+import { createArkivJournal } from './arkiv-journal';
 const config = readConfig();
-const ledger = config.databaseUrl ? await Ledger.open(config.databaseUrl) : null;
+// API has no signing key: commands belong to the serialized worker.
+const ledger = config.arkiv.writerAddress ? await Ledger.open(createArkivJournal({ ...config.arkiv, privateKey: undefined })) : null;
 const server = createApi({ config, ledger });
 server.listen(config.port, '0.0.0.0', () => console.log(JSON.stringify({ service: 'api', port: config.port })));
 let closing = false;

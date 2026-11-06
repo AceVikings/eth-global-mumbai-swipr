@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Ledger, type Job } from './ledger';
 import { readConfig } from './config';
+import { createArkivJournal } from './arkiv-journal';
 import { createBaseRpc } from './providers/base';
 export async function runJob(job: Job, baseRpc?: string, fetcher: typeof fetch = fetch) {
   if (job.kind === 'probe-base') {
@@ -14,8 +15,8 @@ export async function runJob(job: Job, baseRpc?: string, fetcher: typeof fetch =
 }
 async function main() {
   const config = readConfig();
-  if (!config.databaseUrl) throw new Error('DATABASE_URL is required by the worker');
-  const ledger = await Ledger.open(config.databaseUrl, { poolMax: 4 });
+  if (!config.arkiv.writerAddress) throw new Error('ARKIV_WRITER_ADDRESS is required by the worker');
+  const ledger = await Ledger.open(createArkivJournal(config.arkiv));
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1;
   const server = createServer((req, res) => {
     const path = req.url?.split('?')[0];
@@ -31,13 +32,14 @@ async function main() {
   try {
     while (!stopping) {
       try {
-        if (!(await ledger.health()).ok) throw new Error('database_unhealthy');
+        if (!(await ledger.health()).ok) throw new Error('arkiv_unhealthy');
         const minute = Math.floor(Date.now() / 60000);
         if (config.baseRpc && minute !== lastProbeMinute) {
-          await ledger.enqueueJob('probe-base', {}, { dedupeKey: `probe-base:${minute}` });
+          // Network probes carry no project state and need no onchain write.
+          await runJob({ kind: 'probe-base' } as Job, config.baseRpc);
           lastProbeMinute = minute;
         }
-        const job = await ledger.claimJob(['probe-base'], 60000);
+        const job = config.arkiv.privateKey ? await ledger.claimJob(['probe-base'], 60000) : null;
         if (job) {
           try {
             await runJob(job, config.baseRpc);
@@ -57,5 +59,5 @@ async function main() {
   }
 }
 if (process.argv[1]?.endsWith('/worker.ts')) void main().catch(() => {
-  console.error('Worker startup failed; check database configuration.'); process.exitCode = 1;
+  console.error('Worker startup failed; check Arkiv configuration.'); process.exitCode = 1;
 });
