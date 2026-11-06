@@ -228,11 +228,17 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     },
     async status(wallet: string, orderId: string) {
       await network(); const { result } = await order(orderId, wallet); const fills = await verifyFills(result, wallet);
-      if (options.accounting && fills.length === result.fills.length) {
-        const terminal = ['FILLED','CANCELLED','TERMINATED','REJECTED','EXPIRED'].includes(result.status.replace(/^ORDER_STATUS_/, '').toUpperCase());
-        await options.accounting.reconcile(orderId, terminal, fills.reduce((n,f)=>n+(f.side==='buy'?BigInt(f.usdcMicros):0n),0n));
+      let copyAccountingPending = false;
+      const terminal = ['FILLED','CANCELLED','TERMINATED','REJECTED','EXPIRED'].includes(result.status.replace(/^ORDER_STATUS_/, '').toUpperCase());
+      if (options.accounting && terminal && fills.length === result.fills.length) {
+        try { await options.accounting.reconcile(orderId, true, fills.reduce((n,f)=>n+(f.side==='buy'?BigInt(f.usdcMicros):0n),0n)); }
+        catch {
+          // Verified Base settlement remains true while Arkiv catches up. The durable
+          // reservation stays held; the next status read retries reconciliation.
+          copyAccountingPending = true;
+        }
       }
-      return { orderId, status: result.status, fills, unverifiedFills: result.fills.length - fills.length };
+      return { orderId, status: result.status, fills, unverifiedFills: result.fills.length - fills.length, ...(copyAccountingPending ? {copyAccountingPending:true} : {}) };
     },
   };
 }

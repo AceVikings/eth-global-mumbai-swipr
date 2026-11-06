@@ -52,7 +52,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
   useEffect(() => {
     if (!order) return;
     const status = order.status.replace(/^ORDER_STATUS_/, '').toUpperCase();
-    if (order.unverifiedFills === 0 && (['CANCELLED', 'REJECTED', 'TERMINATED'].includes(status) || (status === 'FILLED' && order.fills.length > 0))) return;
+    if (!order.copyAccountingPending && order.unverifiedFills === 0 && (['CANCELLED', 'REJECTED', 'TERMINATED'].includes(status) || (status === 'FILLED' && order.fills.length > 0))) return;
     const signal = controller.current.signal;
     const refresh = () => {
       if (document.visibilityState !== 'visible' || statusPending.current) return;
@@ -61,7 +61,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
     const timer = window.setInterval(refresh, 5000);
     window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh);
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
-  }, [order?.orderId, order?.status, order?.fills.length, order?.unverifiedFills, wallet]);
+  }, [order?.orderId, order?.status, order?.fills.length, order?.unverifiedFills, order?.copyAccountingPending, wallet]);
   const stopIfDeclined = (e: unknown) => {
     const text = e instanceof Error ? e.message : 'The wallet request did not complete.';
     setError(text); if (e instanceof TradeError && e.uncertain) setUncertain(true);

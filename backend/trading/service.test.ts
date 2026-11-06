@@ -187,3 +187,19 @@ it('verifies cancellation ownership and canonical wallet signature before relayi
  .mockResolvedValueOnce(new Response(JSON.stringify({ok:true})));
  expect(await service.cancel(trader.address,'order-1',await trader.signMessage({message:prepared.message}))).toMatchObject({cancellationAccepted:true});
 });
+
+
+it('keeps terminal settlement readable when Arkiv reconciliation is temporarily unavailable',async()=>{
+ const reconcile=vi.fn().mockRejectedValue(Error('index behind'));
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify({order:{funderAddress:trader.address,status:'CANCELLED'},fills:[]})));
+ const service=createTradingService({apiKey:'private-test',ticketSecret:'test-secret',rpcUrl:'https://rpc.example.com',profiles:async()=>[],seats:async()=>({passes:[],availability:[],invitations:[]}),accounting:{reconcile} as any,fetcher:fetcher as typeof fetch});
+ expect(await service.status(trader.address,'order-1')).toMatchObject({status:'CANCELLED',fills:[],copyAccountingPending:true});
+ expect(reconcile).toHaveBeenCalledWith('order-1',true,0n);
+ reconcile.mockResolvedValue(undefined);
+ expect(await service.status(trader.address,'order-1')).not.toHaveProperty('copyAccountingPending');
+});
+it('does not require an Arkiv accounting read for a nonterminal order',async()=>{
+ const reconcile=vi.fn().mockRejectedValue(Error('unavailable'));
+ const service=createTradingService({apiKey:'private-test',ticketSecret:'test-secret',rpcUrl:'https://rpc.example.com',profiles:async()=>[],seats:async()=>({passes:[],availability:[],invitations:[]}),accounting:{reconcile} as any,fetcher:(async()=>new Response(JSON.stringify({order:{funderAddress:trader.address,status:'ACCEPTED'},fills:[]}))) as typeof fetch});
+ expect(await service.status(trader.address,'order-1')).toMatchObject({status:'ACCEPTED'});expect(reconcile).not.toHaveBeenCalled();
+});

@@ -7,7 +7,7 @@ export type TradeQuote = {
   typedData: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, unknown> };
   approval: null | { to: string; data: string; value: string; chainId: number };
 };
-export type TradeStatus = { orderId: string; status: string; unverifiedFills: number;
+export type TradeStatus = { copyAccountingPending?: boolean; orderId: string; status: string; unverifiedFills: number;
   fills: { txHash: string; asset: string; side: string; usdcMicros: string; assetUnits: string; price: string; confirmations: number }[] };
 export type TradeHistory = { orders: TradeStatus[]; hasMore: boolean; scope: 'latest20Orders' };
 export class TradeError extends Error { constructor(message: string, readonly uncertain = false) { super(message); } }
