@@ -9,6 +9,7 @@ COPY *.ts tsconfig.json ./
 COPY bots ./bots
 COPY providers ./providers
 COPY social ./social
+COPY ghosts ./ghosts
 COPY contracts ./contracts
 RUN npm run typecheck
 
