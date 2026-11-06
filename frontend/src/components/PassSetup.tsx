@@ -1,3 +1,5 @@
+import { useSession } from '../auth/Session';
+import { requestWalletPass } from '../lib/wallet-passes';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_TERMS, type Mode, type Terms, type Trader } from '../contracts/types';
 import '../pass-setup.css';
@@ -106,6 +108,9 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
 );
 
 export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props) {
+  const session = useSession();
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
   const [stored] = useState(() => loadDraft(trader.id));
   const [d, setD] = useState<Draft>(() => stored?.draft ?? freshDraft(initialPerTradeUsd));
   const [step, setStep] = useState<Step>('edit');
@@ -158,7 +163,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
   }
 
   const back = step === 'edit' ? onClose : step === 'review' ? editTerms : () => setStep('review');
-  const title = step === 'edit' ? 'Your Copy Pass' : step === 'review' ? 'Review before requesting' : 'Activation unavailable';
+  const title = step === 'edit' ? 'Your Copy Pass' : step === 'review' ? 'Review before requesting' : 'Request your pass';
 
   return (
     <div className="ps">
@@ -267,7 +272,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
                 <li><b>Profit share.</b> {t.profitShareBps / 100}% applies only to realized net profit above what you’ve already settled with {first}. That baseline carries across renewals. It is charged only at settlement, never on unrealized gains, and amounts under $0.05 are waived.</li>
                 <li><b>Actual signer scope.</b> The exit signer’s rules allow selling <em>any</em> WETH or cbBTC in your wallet to USDC, not only units copied from {first}. Swipr’s engine sells only attributed units, bounded by your balance, but that is software, not an onchain limit.{t.mode === 'auto' && ' Auto-copy adds a USDC entry rule capped per trade.'}</li>
                 <li><b>Shared exits aren’t identical.</b> Exits are submitted together with {first}’s. Fills can differ, partially fail or arrive late, and you may need to exit manually.</li>
-                <li><b>No live quote yet.</b> Costs and the downside estimate need a live Flash quote, which isn’t connected. They’ll be shown before any signature.</li>
+                <li><b>No live quote yet.</b> Costs and the downside estimate are shown with each live quote before you approve a trade.</li>
               </ul>
 
               <label className="ps-check">
@@ -284,20 +289,19 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
 
         {step === 'wallet' && (
           <section className="ps-wallet">
-            <div className="ps-note">
-              <b>Copy Pass activation is unavailable.</b> Swipr hasn’t sent a seat request, minted a pass name or asked for any approval. Nothing is pending and no funds have moved.
-            </div>
-            <h2 className="ps-h2">What activation will involve</h2>
-            <ol className="ps-steps">
-              <li><b>Sign in with Privy</b><small>Creates your own embedded wallet on Base.</small></li>
-              <li><b>Seat request with these frozen terms</b><small>{first} accepts or waitlists you. Pending shows as pending.</small></li>
-              <li><b>Match mints your pass name</b><small>Only after acceptance.</small></li>
-              <li><b>Separate permission review</b><small>Live quote, exact allowance, spenders, signer scope and expiry.</small></li>
-              <li><b>You sign, then the pass activates</b><small>Only confirmed onchain state counts as active.</small></li>
-            </ol>
+            <h2 className="ps-h2">{sent ? 'Request sent' : `Request a seat with ${first}`}</h2>
+            <p>{sent ? 'Your trader can now review your terms. Find the response under Matches.' : 'Your terms are saved to your wallet. The trader must accept before you can continue.'}</p>
             <div className="ps-actions">
-              <button type="button" className="ps-primary" onClick={saveDraft}>Save terms as local draft</button>
-              <button type="button" className="ps-secondary" onClick={onClose}>Back to {first}</button>
+              {sent ? <button type="button" className="ps-primary" onClick={onClose}>Done</button>
+                : !session.authenticated ? <button type="button" className="ps-primary" onClick={session.login}>Sign in to continue</button>
+                : <button type="button" className="ps-primary" disabled={busy || !frozen} onClick={async () => {
+                  if (!frozen) return;
+                  setBusy(true); setStatus('Saving your request…');
+                  try { await requestWalletPass(session, trader, frozen.terms); setSent(true); setStatus(''); }
+                  catch (e) { setStatus(e instanceof Error ? e.message : 'Your request could not be saved.'); }
+                  finally { setBusy(false); }
+                }}>{busy ? 'Saving…' : 'Send request'}</button>}
+              {!sent && <button type="button" className="ps-secondary" disabled={busy} onClick={editTerms}>Edit terms</button>}
             </div>
           </section>
         )}

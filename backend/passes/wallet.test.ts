@@ -31,7 +31,7 @@ describe('mutual wallet-owned passes', () => {
   });
   it('binds acceptance to frozen terms, never to a client claim', () => {
     expect(resolve([answer()])[0].status).toBe('accepted');
-    const changed = row(); changed.$attributes.request = encoded({ ...request, terms: { ...DEFAULT_TERMS, perTradeUsd: 50 } });
+    const original = row(); const changed = { ...original, $attributes: { ...original.$attributes, request: encoded({ ...request, terms: { ...DEFAULT_TERMS, perTradeUsd: 50 } }) } };
     expect(resolve([answer()], [changed])[0].status).toBe('pending');
     expect(() => parsePassRequest({ ...request, status: 'active' })).toThrow();
     expect(() => parsePassTerms({ ...DEFAULT_TERMS, profitShareBps: 10000 })).toThrow();
@@ -41,12 +41,12 @@ describe('mutual wallet-owned passes', () => {
     expect(resolve([answer('declined'), answer('accepted', traderOwner, 3n)])[0].status).toBe('declined');
     expect(resolve([answer(), answer('ended', traderOwner, 3n)])[0].status).toBe('ended');
     expect(resolve([answer()], [row()], owner, times.get(2n)! + 7 * 86400000)[0].status).toBe('expired');
-    const cancelled = row(); cancelled.$attributes.status = str('cancelled');
+    const original = row(); const cancelled = { ...original, $attributes: { ...original.$attributes, status: str('cancelled') } };
     expect(resolve([answer()], [cancelled])[0].status).toBe('cancelled');
   });
   it('does not allow self-copy or wrong native profile ownership', () => {
     expect(resolveWalletPasses([row()], [answer()], [{ ...profiles[0], owner: outsider }], times, owner, 0)).toEqual([]);
-    const self = row(); self.$owner = traderOwner;
+    const self = { ...row(), $owner: traderOwner as `0x${string}` };
     expect(resolve([answer()], [self], traderOwner)).toEqual([]);
   });
 });

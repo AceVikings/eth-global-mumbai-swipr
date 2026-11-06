@@ -1,0 +1,10 @@
+.matches-page { max-width: 980px; }
+.match-list { display: grid; gap: 24px; margin-top: 32px; }
+.match-card { padding: 28px; border: 1px solid var(--line, #e8e4ef); border-radius: 18px; background: var(--paper, #fff); }
+.match-card h2 { font-size: 22px; margin: 0 0 8px; }
+.match-card p { color: var(--muted, #77717f); }
+.match-card dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin: 28px 0; }
+.match-card dt { font-size: 13px; color: var(--muted, #77717f); margin-bottom: 8px; }
+.match-card dd { margin: 0; font-size: 21px; font-weight: 600; }
+.match-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+@media (max-width: 600px) { .match-card { padding: 20px; } .match-card dl { grid-template-columns: repeat(2, 1fr); } }

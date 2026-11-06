@@ -1,3 +1,4 @@
+import Matches from './components/Matches';
 import { useEffect, useState } from "react";
 import type { Trader } from "./contracts/types";
 import { SessionPanel, useSession } from './auth/Session';
@@ -229,45 +230,7 @@ export default function App() {
                   }}
                 />
               )}
-              {page === "matches" && (
-                <section className="content-page">
-                  <span className="eyebrow">YOUR PEOPLE. YOUR POSITIONS.</span>
-                  <h1>
-                    Your matches<span>.</span>
-                  </h1>
-                  <p className="page-lead">
-                    A little shared conviction. A clear commitment.
-                  </p>
-                  <div className="empty-illustration">
-                    <Icon name="matches" size={44} />
-                  </div>
-                  <h2>Copy Pass service unavailable.</h2>
-                  <p>
-                    Confirmed passes and positions cannot be loaded yet.
-                    This does not mean your wallet has no holdings.
-                  </p>
-                  <div className="quiet-note">
-                    <Icon name="shield" size={20} />
-                    <p>
-                      Accepting a seat and approving a pass are separate steps.
-                      No position appears here until an actual fill is
-                      confirmed.
-                    </p>
-                  </div>
-                  <button
-                    className="primary-button"
-                    onClick={() => navigate("discover")}
-                  >
-                    Meet a trader <Icon name="arrow" size={18} />
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => navigate("ghosts")}
-                  >
-                    See your ghosts
-                  </button>
-                </section>
-              )}
+              {page === "matches" && <Matches onDiscover={() => navigate("discover")} />}
               {page === "bots" && <BotStudio onChanged={() => setDirectoryVersion(v => v + 1)} />}
               {page === "leaderboards" && <Leaderboards />}
               {page === "you" && (
