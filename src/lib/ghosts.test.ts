@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Ghost, Trader } from '../../shared/types';
 import Ghosts from '../components/Ghosts';
 import {
@@ -43,6 +43,12 @@ describe('startGhost', () => {
 
   it('rejects an empty trader id', () => {
     expect(() => startGhost([], ' ', 10, T0)).toThrow(TypeError);
+  });
+
+  it('rejects a start time that could not be stored', () => {
+    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 8_640_000_000_000_000]) {
+      expect(() => startGhost([], 'a', 10, bad)).toThrow(RangeError);
+    }
   });
 
   it('is idempotent: an existing trader keeps original start, size and expiry', () => {
@@ -99,15 +105,15 @@ describe('persistence', () => {
     expect(GHOSTS_KEY).toBe('swipr.ghosts.v1');
     expect(saveGhosts(list, storage)).toBe(true);
     expect(JSON.parse(storage.getItem('swipr.ghosts.v1')!)).toEqual(list);
-    expect(loadGhosts(storage, T0 + 30 * DAY)).toEqual(list);
+    expect(loadGhosts(storage)).toEqual(list);
   });
 
   it('returns [] for missing, corrupt or wrongly shaped data', () => {
     const storage = new MemoryStorage();
-    expect(loadGhosts(storage, T0)).toEqual([]);
+    expect(loadGhosts(storage)).toEqual([]);
     for (const raw of ['{not json', 'null', '42', '"x"', '{"traderId":"a"}']) {
       storage.setItem(GHOSTS_KEY, raw);
-      expect(loadGhosts(storage, T0)).toEqual([]);
+      expect(loadGhosts(storage)).toEqual([]);
     }
   });
 
@@ -129,10 +135,26 @@ describe('persistence', () => {
       { ...good, expiresAt: T0 + 30 * DAY },
       { ...good, includedSignalId: 3 },
       { ...good, includedSignalId: undefined },
-      { ...good, startedAt: T0 + DAY },
+      { ...good, startedAt: 1.5, expiresAt: 100 },
     ];
     storage.setItem(GHOSTS_KEY, JSON.stringify([...bad, good]));
-    expect(loadGhosts(storage, T0 + 1000)).toEqual([good]);
+    expect(loadGhosts(storage)).toEqual([good]);
+  });
+
+  it('keeps original ghosts after the device clock moves backwards', () => {
+    const storage = new MemoryStorage();
+    const list = startGhost([], 'alice', 10, T0);
+    saveGhosts(list, storage);
+    vi.useFakeTimers({ now: T0 - 30 * DAY });
+    try {
+      const loaded = loadGhosts(storage);
+      expect(loaded).toEqual(list);
+      expect(saveGhosts(startGhost(loaded, 'dan', 10, Date.now()), storage)).toBe(true);
+      expect(loadGhosts(storage)[0]).toEqual(list[0]);
+      expect(startGhost(loaded, 'alice', 20, Date.now())).toBe(loaded);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps only the earliest record when a trader is duplicated', () => {
@@ -140,11 +162,11 @@ describe('persistence', () => {
     const early = startGhost([], 'alice', 10, T0)[0];
     const late = startGhost([], 'alice', 30, T0 + DAY)[0];
     storage.setItem(GHOSTS_KEY, JSON.stringify([late, early]));
-    expect(loadGhosts(storage, T0 + 2 * DAY)).toEqual([early]);
+    expect(loadGhosts(storage)).toEqual([early]);
   });
 
   it('does not crash when storage is blocked or unavailable', () => {
-    expect(loadGhosts(blocked(), T0)).toEqual([]);
+    expect(loadGhosts(blocked())).toEqual([]);
     expect(saveGhosts(startGhost([], 'a', 10, T0), blocked())).toBe(false);
     const full = new MemoryStorage();
     full.setItem = () => { throw new DOMException('full', 'QuotaExceededError'); };
@@ -153,7 +175,7 @@ describe('persistence', () => {
 
   it('falls back safely when no storage argument is given and none exists', () => {
     expect(typeof globalThis.localStorage === 'undefined' || Array.isArray(loadGhosts())).toBe(true);
-    expect(Array.isArray(loadGhosts(undefined, T0))).toBe(true);
+    expect(Array.isArray(loadGhosts(undefined))).toBe(true);
     expect(typeof saveGhosts([])).toBe('boolean');
   });
 });
