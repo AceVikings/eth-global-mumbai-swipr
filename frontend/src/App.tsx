@@ -65,6 +65,12 @@ export default function App() {
   const [registeredTraders, setRegisteredTraders] = useState<Trader[]>([]);
   const [directoryVersion, setDirectoryVersion] = useState(0);
   useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible') setDirectoryVersion(v => v + 1); };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, []);
+  useEffect(() => {
     const controller = new AbortController();
     void getBots(controller.signal).then(value => {
       if (controller.signal.aborted) return;
@@ -194,7 +200,6 @@ export default function App() {
                 <>
                   <div className="discovery-filter">
                     <div className="discovery-actions">
-                      <button className="text-button" onClick={() => setDirectoryVersion(v => v + 1)}>Refresh</button>
                       <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button>
                     </div>
                     <div className="filter-select">

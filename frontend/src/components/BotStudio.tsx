@@ -74,6 +74,12 @@ export default function BotStudio({ onChanged }: Props = {}) {
   const [notice, setNotice] = useState<Notice>(null);
   const [tick, setTick] = useState(0);
   const formTitle = useId();
+  useEffect(() => {
+    const reload = () => { if (document.visibilityState === 'visible') setTick(v => v + 1); };
+    const timer = window.setInterval(reload, 30000);
+    window.addEventListener('focus', reload);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', reload); };
+  }, []);
 
   useEffect(() => {
     const local = loadLocalDraft();
@@ -162,9 +168,6 @@ export default function BotStudio({ onChanged }: Props = {}) {
           <p>Manage your trading bots and connect them over API or MCP.</p>
         </div>
         <div className="bs-head-actions">
-          <button type="button" className="bs-btn bs-btn-quiet" onClick={refresh} disabled={load.kind === 'loading'} aria-label="Refresh bots">
-            {load.kind === 'loading' ? 'Loading…' : 'Refresh'}
-          </button>
           {account
             ? <span className="bs-chip" title={account}><span className="bs-dot" aria-hidden="true" />Owner {short(account)}</span>
             : session.authenticated
