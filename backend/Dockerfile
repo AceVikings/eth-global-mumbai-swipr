@@ -1,20 +1,22 @@
 # API and worker share a backend-only image. Secrets arrive at runtime.
 FROM node:22-bookworm-slim AS deps
-WORKDIR /app
-COPY package.json package-lock.json .npmrc ./
+WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json backend/.npmrc ./
 RUN npm ci
 
 FROM deps AS build
-COPY tsconfig.json ./
-COPY backend ./backend
-COPY shared ./shared
-RUN npm run typecheck:backend
+COPY backend/*.ts backend/tsconfig.json ./
+COPY backend/bots ./bots
+COPY backend/providers ./providers
+COPY backend/social ./social
+COPY shared /app/shared
+RUN npm run typecheck
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=8787
-WORKDIR /app
+WORKDIR /app/backend
 # tsx runs the TypeScript entry points.
-COPY --from=build --chown=node:node /app ./
+COPY --from=build --chown=node:node /app /app
 USER node
 EXPOSE 8787
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \

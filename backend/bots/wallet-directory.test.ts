@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { FullEntity } from '@arkiv-network/sdk';
 import { str } from '@arkiv-network/sdk/schema';
 import { decodeWalletProfile } from './wallet-directory';
-import { WALLET_PROFILE_PROJECT, WALLET_PROFILE_SCHEMA } from '../../shared/arkiv-profile';
+import { WALLET_PROFILE_PROJECT, WALLET_PROFILE_SCHEMA } from '../arkiv-profile';
 const owner = `0x${'12'.repeat(20)}`, creator = `0x${'34'.repeat(20)}`;
 const data = { name: 'Testing trader', bio: 'A manual test profile.', operator: owner,
   style: 'Balanced', strategy: 'manual', assets: ['WETH'] };

@@ -3,7 +3,7 @@ import { rabdi } from '@arkiv-network/sdk/chains';
 import { and, eq, desc } from '@arkiv-network/sdk/query';
 import { str } from '@arkiv-network/sdk/schema';
 import { http } from 'viem';
-import { WALLET_PROFILE_SCHEMA, WALLET_PROFILE_PROJECT } from '../../shared/arkiv-profile';
+import { WALLET_PROFILE_SCHEMA, WALLET_PROFILE_PROJECT } from '../arkiv-profile';
 import type { BotProfile } from '../../shared/bots';
 import { address, profileUpsert } from './validation';
 

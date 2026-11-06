@@ -6,6 +6,7 @@ services:
     name: swipr-web
     branch: main
     autoDeployTrigger: checksPass
+    rootDir: frontend
     buildCommand: npm ci && npm run build && npm run check:bundle
     staticPublishPath: dist
     pullRequestPreviewsEnabled: false

@@ -1,3 +1,4 @@
+import express from 'express';
 import { createServer } from 'node:http';
 import { ApiError } from './auth';
 import { jsonBody } from './http';
@@ -8,7 +9,9 @@ export function createWorkerServer(options: {
   social: Executor | null; projects: Executor | null;
   stopping: () => boolean; lastHealthyAt: () => number; canWrite: () => boolean;
 }) {
-  return createServer(async (req, res) => {
+  const app = express();
+  app.disable('x-powered-by');
+  app.use(async (req, res) => {
     res.setHeader('content-type', 'application/json');
     res.setHeader('cache-control', 'no-store');
     const path = req.url?.split('?')[0];
@@ -37,4 +40,7 @@ export function createWorkerServer(options: {
     return send(ok ? 200 : 503, { ok, service: 'worker', ready,
       lastHealthyAt: lastHealthyAt ? new Date(lastHealthyAt).toISOString() : null });
   });
+  const server = createServer(app);
+  server.requestTimeout = 15000; server.headersTimeout = 10000;
+  return server;
 }

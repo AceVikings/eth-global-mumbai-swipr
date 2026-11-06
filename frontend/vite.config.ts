@@ -29,4 +29,4 @@ function offlineShell(): Plugin {
   };
 }
 const frontendRoot = dirname(fileURLToPath(import.meta.url));
-export default defineConfig({ root: frontendRoot, envDir: resolve(frontendRoot, '..'), build: { outDir: '../dist', emptyOutDir: true }, server: { proxy: { '/api': 'http://127.0.0.1:8787', '/mcp': 'http://127.0.0.1:8787' } }, plugins: [react(), tailwind(), offlineShell()] });
+export default defineConfig({ root: frontendRoot, envDir: resolve(frontendRoot, '..'), server: { proxy: { '/api': 'http://127.0.0.1:8787', '/mcp': 'http://127.0.0.1:8787' } }, plugins: [react(), tailwind(), offlineShell()] });

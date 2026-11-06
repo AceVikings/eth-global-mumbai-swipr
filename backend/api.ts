@@ -1,3 +1,4 @@
+import express from 'express';
 import { verifySocialAction, type SocialStore } from './social/store';
 import { rankClosedPositions, type VerifiedClosedPosition } from './social/rankings';
 import { requestLimiter } from './rate-limit';
@@ -73,7 +74,10 @@ export function createApi({ config, ledger, projects = null, social = null, wall
     async sealFill() { throw new ApiError(503, 'notary_unavailable', 'Fill sealing needs the verified notary and Arkiv product-schema publisher.'); },
     async prepareEnsText() { throw new ApiError(503, 'ens_unavailable', 'The owner-managed ENS resolver and agent charter are not configured.'); },
   });
-  const server = createServer(async (req, res) => {
+  const app = express();
+  app.disable('x-powered-by');
+  // Preserve bounded JSON parsing and MCP-specific errors in the transport.
+  app.use(async (req, res) => {
     const requestId = randomUUID();
     res.setHeader('x-request-id', requestId);
     res.setHeader('cache-control', 'no-store');
@@ -212,6 +216,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       else res.end();
     }
   });
+  const server = createServer(app);
   server.requestTimeout = 15000; server.headersTimeout = 10000;
   return server;
 }
