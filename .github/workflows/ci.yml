@@ -2,8 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,8 +23,8 @@ jobs:
       # Placeholder public address so the doctor can check config shape; not a real writer.
       ARKIV_WRITER_ADDRESS: "0x0000000000000000000000000000000000000001"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -36,10 +36,70 @@ jobs:
       - name: Doctor (backend config, preview mode)
         run: npm run doctor -- --role api,worker
 
-  image:
+  backend:
+    needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      COMMIT_SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Build backend image (not pushed)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build backend image (no credentials in build)
         run: docker build --tag swipr-backend:ci .
+      - id: auth
+        name: Authenticate deployer with GitHub OIDC
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Set up gcloud
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+      - name: Push commit image
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/swipr/backend:${COMMIT_SHA}"
+          docker tag swipr-backend:ci "$IMAGE_URI"
+          docker push "$IMAGE_URI"
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+      - name: Release worker then API
+        id: release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        run: scripts/release-backend.sh
+      - name: Verify public API and private worker boundary
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        env:
+          API_URL: ${{ steps.release.outputs.api_url }}
+          WORKER_URL: ${{ steps.release.outputs.worker_url }}
+        run: |
+          curl --fail --retry 5 --retry-delay 2 "$API_URL/health"
+          curl --fail "$API_URL/api/runtime" > runtime.json
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$WORKER_URL/health")" = 403
+          echo '### Cloud Run infrastructure released' >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: $COMMIT_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "API: $API_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Worker rejects anonymous requests. Product readiness is separate from deployment.' >> "$GITHUB_STEP_SUMMARY"
+          jq '{mode, tradingEnabled, integrations}' runtime.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Authenticate worker health probe
+        id: worker-auth
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.release.outputs.worker_url }}
+          id_token_include_email: true
+      - name: Verify authenticated worker liveness
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        env:
+          WORKER_URL: ${{ steps.release.outputs.worker_url }}
+          WORKER_ID_TOKEN: ${{ steps.worker-auth.outputs.id_token }}
+        run: curl --fail --retry 5 --retry-delay 2 -H "Authorization: Bearer $WORKER_ID_TOKEN" "$WORKER_URL/health"
