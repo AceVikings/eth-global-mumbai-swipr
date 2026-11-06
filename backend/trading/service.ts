@@ -91,15 +91,29 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
         limitNotionalPrice: sharedPrice, maxPriceImpact: '0.01', expireTime: new Date(expiresAt * 1000).toISOString() };
       const quote = await flash.quote(intent);
       const vault = String(quote.typedData.message.vault);
-      const [vaultCode, settlementCode] = await Promise.all([chain.getCode({ address: vault as Address }), chain.getCode({ address: FLASH_DOMAIN.verifyingContract })]);
-      // An undeployed provider vault cannot be authenticated as an execution contract.
-      if (!vaultCode || vaultCode === '0x' || !settlementCode || settlementCode === '0x') fail('Flash’s execution vault is unavailable on Base. No signature was requested.');
+      // Flash supplies and manages the per-chain integrator vault. Its FAQ explicitly
+      // says clients need not set or track it; preserve the returned address in the ticket.
+      // https://flash.definitive.fi/docs/faq#what-is-the-vault-address-in-the-evm-flashorder-eip-712-payload-and-do-i-need-to-set-or-track-it
+      const settlementCode = await chain.getCode({ address: FLASH_DOMAIN.verifyingContract });
+      if (!settlementCode || settlementCode === '0x') fail('Flash’s settlement contract is unavailable on Base. No signature was requested.');
       validateTypedData(quote.typedData, intent, { now: now(), maxDeadline: expiresAt, expectedVault: vault });
       const raw = quote.raw as { evm?: { approveTx?: unknown; permitTypedData?: unknown }; fees?: { estimatedFeeNotional?: string } };
       if (raw.evm?.permitTypedData) fail('This rehearsal requires a direct, bounded token approval.');
       const approval = raw.evm?.approveTx ? validateApproval(raw.evm.approveTx, intent, 5000000n) : null;
       return { ticket: encode({ version: 1, expiresAt, intent, quote: { quoteId: quote.quoteId, typedDataRaw: quote.typedDataRaw }, context: ctx, vault }),
         quoteId: quote.quoteId, intent, typedData: quote.typedData, approval, expiresAt, estimatedFeeNotional: raw.fees?.estimatedFeeNotional ?? null };
+    },
+    async preflight(wallet: string, token: unknown) {
+      const t = decode(token, wallet); await network();
+      await context(wallet, t.context, t.intent.asset, t.intent.qty);
+      const [code, balance, allowance] = await Promise.all([chain.getCode({ address: wallet as Address }),
+        chain.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] }),
+        chain.readContract({ address: TOKENS.USDC.address, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] })]);
+      if (code && code !== '0x') fail('This rehearsal requires a plain EOA wallet.');
+      if (balance < 5000000n) fail('Add at least 5 USDC on Base to your wallet before trading. No signature was requested.');
+      if (allowance !== 5000000n && await chain.getBalance({ address: wallet as Address }) === 0n)
+        fail('Add ETH on Base for the USDC approval gas. No signature was requested.');
+      return { ready: true };
     },
     async approval(wallet: string, token: unknown, hash: unknown) {
       const ticket = decode(token, wallet); await network();

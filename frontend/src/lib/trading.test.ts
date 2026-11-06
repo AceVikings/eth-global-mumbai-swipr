@@ -16,14 +16,15 @@ it('waits for approval verification before signing and submits exactly once', as
  expect(await sendReviewedTrade(session(request), q, progress, new AbortController().signal)).toEqual({ orderId: 'order-1' });
  expect(request.mock.calls.map(c => c[0].method)).toEqual(['eth_sendTransaction', 'eth_signTypedData_v4']);
  expect(JSON.parse(request.mock.calls[1][0].params[1])).toEqual(q.typedData);
- expect(paths.map(p => p.split('/').pop())).toEqual(['approval', 'submit']);
+ expect(paths.map(p => p.split('/').pop())).toEqual(['preflight', 'approval', 'submit']);
 });
 it('does not sign or submit after a declined approval', async () => {
- const request = vi.fn().mockRejectedValueOnce(new Error('Declined')); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+ const request = vi.fn().mockRejectedValueOnce(new Error('Declined')); const fetcher = vi.fn(async () => new Response(JSON.stringify({ ready: true }))); vi.stubGlobal('fetch', fetcher);
  await expect(sendReviewedTrade(session(request), quote(), vi.fn(), new AbortController().signal)).rejects.toThrow('Declined');
- expect(request).toHaveBeenCalledTimes(1); expect(fetcher).not.toHaveBeenCalled();
+ expect(request).toHaveBeenCalledTimes(1); expect(fetcher).toHaveBeenCalledTimes(1);
 });
 it('rejects expired quotes and different wallets before requesting approvals', async () => {
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ready: true }))));
  const request = vi.fn(); const s = session(request);
  await expect(sendReviewedTrade(s, { ...quote(), expiresAt: 1 }, vi.fn(), new AbortController().signal)).rejects.toThrow('expired');
  expect(s.getBaseWallet).not.toHaveBeenCalled();
@@ -31,12 +32,19 @@ it('rejects expired quotes and different wallets before requesting approvals', a
  expect(request).not.toHaveBeenCalled();
 });
 it('does not sign after an account change aborts approval polling', async () => {
- const ctrl = new AbortController(); const request = vi.fn(async () => { ctrl.abort(); return '0x1'; }); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+ const ctrl = new AbortController(); const request = vi.fn(async () => { ctrl.abort(); return '0x1'; }); const fetcher = vi.fn(async () => new Response(JSON.stringify({ ready: true }))); vi.stubGlobal('fetch', fetcher);
  await expect(sendReviewedTrade(session(request), quote(), vi.fn(), ctrl.signal)).rejects.toThrow('stopped');
- expect(request).toHaveBeenCalledTimes(1); expect(fetcher).not.toHaveBeenCalled();
+ expect(request).toHaveBeenCalledTimes(1); expect(fetcher).toHaveBeenCalledTimes(1);
 });
 it('marks network and server submit failures uncertain and never retries', async () => {
  const fetcher = vi.fn(async () => { throw new Error('lost'); }); vi.stubGlobal('fetch', fetcher);
  await expect(tradeRequest(session(vi.fn()), 'submit', {})).rejects.toMatchObject({ uncertain: true });
  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('does not open the wallet when preflight reports missing Base funds', async () => {
+ const request = vi.fn(); const s = session(request);
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'Add at least 5 USDC on Base.' } }), { status: 409 })));
+ await expect(sendReviewedTrade(s, quote(), vi.fn(), new AbortController().signal)).rejects.toThrow('5 USDC on Base');
+ expect(s.getBaseWallet).not.toHaveBeenCalled(); expect(request).not.toHaveBeenCalled();
 });

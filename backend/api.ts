@@ -125,6 +125,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
         const input = req.method === 'POST' ? await body(req) : {};
         const wallet = requireWallet(identity, input.wallet || url.searchParams.get('wallet'));
         if (req.method === 'POST' && path === '/api/trades/quote') return send(200, await trades.quote(wallet, input));
+        if (req.method === 'POST' && path === '/api/trades/preflight') return send(200, await trades.preflight(wallet, input.ticket));
         if (req.method === 'POST' && path === '/api/trades/approval') return send(200, await trades.approval(wallet, input.ticket, input.txHash));
         if (req.method === 'POST' && path === '/api/trades/submit') return send(200, await trades.submit(wallet, input.ticket, input.signature));
         if (req.method === 'GET' && path === '/api/trades/status') return send(200, await trades.status(wallet, url.searchParams.get('orderId') || ''));

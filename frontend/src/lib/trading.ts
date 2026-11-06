@@ -30,6 +30,8 @@ export async function sendReviewedTrade(session: Session, quote: TradeQuote, pro
     if (quote.expiresAt <= Date.now() / 1000) throw new TradeError('Quote expired. Request a new one.');
   };
   valid();
+  await tradeRequest(session, 'preflight', { ticket: quote.ticket }, signal);
+  valid();
   const { address, provider } = await session.getBaseWallet();
   if (address.toLowerCase() !== quote.intent.funder.toLowerCase()) throw new TradeError('This quote belongs to another wallet.');
   if (quote.intent.qty !== '5') throw new TradeError('Rehearsal trades are limited to 5 USDC.');

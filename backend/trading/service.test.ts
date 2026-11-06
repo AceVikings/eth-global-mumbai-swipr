@@ -5,7 +5,7 @@ import { createTradingService } from './service';
 import { FLASH_DOMAIN, FLASH_ORDER_TYPES, FLASH_DOMAIN_TYPES, TOKENS } from '../providers/flash';
 import type { BotProfile } from '../contracts/bots';
 import type { SeatDirectory } from '../contracts/seats';
-const chain = vi.hoisted(() => ({ getChainId: vi.fn(), getCode: vi.fn(), getBlockNumber: vi.fn(), getTransactionReceipt: vi.fn(), getTransaction: vi.fn(), readContract: vi.fn() }));
+const chain = vi.hoisted(() => ({ getChainId: vi.fn(), getBalance: vi.fn(), getCode: vi.fn(), getBlockNumber: vi.fn(), getTransactionReceipt: vi.fn(), getTransaction: vi.fn(), readContract: vi.fn() }));
 vi.mock('viem', async original => ({ ...await original<typeof import('viem')>(), createPublicClient: () => chain }));
 const trader = privateKeyToAccount(`0x${'11'.repeat(32)}`), copier = privateKeyToAccount(`0x${'22'.repeat(32)}`);
 const profile = { id: `0x${'ab'.repeat(32)}`, owner: trader.address, operator: trader.address, status: 'active', assets: ['WETH'], name: 'Trader' } as BotProfile;
@@ -30,6 +30,7 @@ const input = { profileId: profile.id, asset: 'WETH', qty: '5', sharedPrice: '25
 beforeEach(() => {
  vi.resetAllMocks(); posts = []; sent = 0;
  chain.getChainId.mockResolvedValue(8453); chain.getCode.mockImplementation(async ({ address }) => address.toLowerCase() === trader.address.toLowerCase() ? undefined : '0x1234');
+ chain.getBalance.mockResolvedValue(1000000000000000n);
  chain.getBlockNumber.mockResolvedValue(100n); chain.readContract.mockResolvedValue(5000000n);
 });
 it('binds a bounded quote to the owner, exact minimal approval, pair, amount and expiry', async () => {
@@ -49,9 +50,9 @@ it('rejects modified quote tickets, another wallet and another signature before 
  await expect(service.submit(trader.address, quote.ticket, await copier.signTypedData(quote.typedData as never))).rejects.toThrow('another wallet');
  expect(sent).toBe(0);
 });
-it('does not quote an unprovisioned vault or wrong network', async () => {
+it('rejects an unavailable settlement contract or wrong network', async () => {
  const { service } = setup(); chain.getCode.mockResolvedValue(undefined);
- await expect(service.quote(trader.address, input)).rejects.toThrow('vault is unavailable');
+ await expect(service.quote(trader.address, input)).rejects.toThrow('settlement contract is unavailable');
  chain.getChainId.mockResolvedValue(1);
  await expect(service.quote(trader.address, input)).rejects.toThrow('network'); expect(sent).toBe(0);
 });
@@ -101,4 +102,24 @@ it.each([{ mode: 'auto', safetyNetBps: 0 }, { mode: 'tap', safetyNetBps: 500 }])
  const { service, fetcher } = setup({}, directory);
  await expect(service.quote(copier.address, { ...input, seatId: 'seat-1', sourceOrderId: 'trader-order' })).rejects.toThrow('protected or automatic');
  expect(fetcher).not.toHaveBeenCalled(); expect(sent).toBe(0);
+});
+
+it('accepts the Flash-supplied vault without imposing a client deployment prerequisite', async () => {
+ const { service } = setup();
+ chain.getCode.mockImplementation(async ({ address }) => address.toLowerCase() === FLASH_DOMAIN.verifyingContract.toLowerCase() ? '0x1234' : undefined);
+ const q = await service.quote(trader.address, input);
+ expect(q.typedData.message.vault).toBe(vault);
+ expect(chain.getCode).toHaveBeenCalledTimes(1);
+ expect(chain.getCode).toHaveBeenCalledWith({ address: FLASH_DOMAIN.verifyingContract });
+});
+it('checks real spending balance and approval gas before any wallet prompt', async () => {
+ const { service } = setup(); const q = await service.quote(trader.address, input);
+ chain.readContract.mockImplementation(async ({ functionName }) => functionName === 'balanceOf' ? 0n : 5000000n);
+ await expect(service.preflight(trader.address, q.ticket)).rejects.toThrow('5 USDC on Base');
+ chain.readContract.mockImplementation(async ({ functionName }) => functionName === 'balanceOf' ? 5000000n : 0n);
+ chain.getBalance.mockResolvedValue(0n);
+ await expect(service.preflight(trader.address, q.ticket)).rejects.toThrow('ETH on Base');
+ chain.getBalance.mockResolvedValue(1000000000000000n);
+ expect(await service.preflight(trader.address, q.ticket)).toEqual({ ready: true });
+ expect(sent).toBe(0);
 });

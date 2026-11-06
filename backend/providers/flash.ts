@@ -37,7 +37,7 @@ export interface OrderIntent {
   /** ISO-8601 entry expiry. Quotes default to 15 minutes, never good-til-cancelled. */
   expireTime?: string;
 }
-// Unix seconds; expectedVault must come from trusted provider/onchain verification.
+// Unix seconds; expectedVault is pinned from the authenticated Flash quote response.
 export interface SignPolicy { now: number; maxDeadline: number; expectedVault?: string }
 export const FLASH_ORDER_TYPES = FLASH_ORDER_FIELDS.map((name, index) => ({ name, type: index < 5 ? 'address' : 'uint256' }));
 export const FLASH_DOMAIN_TYPES = [
