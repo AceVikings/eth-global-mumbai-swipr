@@ -34,11 +34,11 @@ function offlineShell() {
         .digest("hex")
         .slice(0, 12);
       const source = `const CACHE='swipr-${version}', FILES=${JSON.stringify(files)};
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)))});
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES.map(url=>new Request(url,{cache:'reload'})))))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('swipr-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin||u.pathname.startsWith('/api/'))return;
-if(e.request.mode==='navigate'){e.respondWith(fetch(e.request).catch(()=>caches.match('/index.html')));return}
-if(FILES.includes(u.pathname))e.respondWith(caches.match(e.request).then(hit=>hit||fetch(e.request)));});`;
+if(e.request.mode==='navigate'){e.respondWith(fetch(e.request).catch(()=>caches.open(CACHE).then(c=>c.match('/index.html',{ignoreVary:true}))));return}
+if(FILES.includes(u.pathname))e.respondWith(caches.open(CACHE).then(c=>c.match(e.request,{ignoreVary:true})).then(hit=>hit||fetch(e.request)));});`;
       (this as unknown as { emitFile: (asset: object) => void }).emitFile({
         type: "asset",
         fileName: "sw.js",
