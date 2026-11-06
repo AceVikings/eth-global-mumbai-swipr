@@ -210,8 +210,8 @@ export default function App() {
               <img src="/assets/mark.svg" alt="" />
               swipr<span>.</span>
             </a>
-            <div className="sidebar-account"><AccountButton onAccount={() => navigate("you")} /></div>
             {nav}
+            <div className="sidebar-account"><AccountButton onAccount={() => navigate("you")} /></div>
           </aside>
         )}
         <main id="main" tabIndex={-1}>

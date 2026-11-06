@@ -191,7 +191,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
       <header className="bs-head">
         <div>
           <h1 id="bs-title">Bot studio</h1>
-          <p>Sign in to register trading bots you own, assign an operator key, and wire it up over API or MCP. Signals are proposals — never executable orders or verified fills.</p>
+          <p>Manage your trading bots and connect them over API or MCP.</p>
         </div>
         <div className="bs-head-actions">
           <button type="button" className="bs-btn bs-btn-quiet" onClick={refresh} disabled={load.kind === 'loading'} aria-label="Refresh bots">
@@ -330,7 +330,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
                 </div>
                 {errors.assets && <small id="bs-e-assets" className="bs-error">{errors.assets}</small>}
               </fieldset>
-              <p className="bs-hint">Saving asks your signed-in wallet for an EIP-191 signature over the canonical action (valid 5 minutes) and sends it with your session. Nothing is stored until the service accepts it.</p>
+              <p className="bs-hint">Approve the Arkiv transaction in your wallet to save your profile.</p>
               <div className="bs-row-actions">
                 <button type="submit" className="bs-btn" disabled={locked || !online || !account}>
                   {busy === 'save' ? 'Signing…' : account ? 'Sign & save' : 'Sign in to save'}
@@ -373,7 +373,10 @@ export default function BotStudio({ onChanged }: Props = {}) {
           {integrationError
             ? <p className="bs-banner bs-banner-warn" role="status">Integration details unavailable: {integrationError} Snippets below use placeholder URLs.</p>
             : integration && (
-              <p className="bs-hint">Audience <code>{integration.audience}</code> · tools: {integration.tools.map(toolName).join(', ') || 'none listed'}</p>
+              <div className="bs-integration-info bs-hint">
+                <p>Audience <code>{integration.audience}</code></p>
+                <details><summary>Available tools</summary><p>{integration.tools.map(toolName).join(', ') || 'None available'}</p></details>
+              </div>
             )}
           <div className="bs-copies">
             <CopyBlock title="curl" text={snip.curl} hint="Read profiles and submit a signed action." />

@@ -12,7 +12,7 @@
   outline: 3px solid var(--bs-lilac); outline-offset: 2px;
 }
 
-.bs-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.bs-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
 .bs-head h1 { margin: 10px 0 6px; font-size: 29px; line-height: 33px; font-weight: 800; letter-spacing: -0.8px; }
 .bs-head p { max-width: 560px; color: var(--bs-muted); }
 .bs-head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -45,8 +45,8 @@
 .bs-banner-error { background: var(--bs-coral-soft); color: var(--bs-coral); }
 .bs-banner-warn { background: #EFECE6; color: #58544F; }
 
-.bs-grid { display: grid; gap: 16px; }
-.bs-panel { min-width: 0; padding: 20px; border-radius: 20px; background: var(--bs-surface); border: 1px solid var(--bs-line); }
+.bs-grid { display: grid; gap: 24px; }
+.bs-panel { min-width: 0; padding: 24px; border-radius: 20px; background: var(--bs-surface); border: 1px solid var(--bs-line); }
 .bs-panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
 .bs-panel-head h2 { font-size: 18px; line-height: 24px; font-weight: 700; letter-spacing: -0.4px; }
 .bs-empty { display: grid; gap: 10px; justify-items: start; padding: 20px 0; color: var(--bs-muted); }
@@ -97,10 +97,13 @@
 .bs-side-buy { background: var(--bs-gain-soft); color: var(--bs-gain); }
 .bs-side-sell { background: var(--bs-coral-soft); color: var(--bs-coral); }
 
-.bs-copies { display: grid; gap: 12px; margin-top: 12px; }
-.bs-copy { display: grid; gap: 8px; min-width: 0; }
+.bs-copies { display: grid; gap: 32px; margin-top: 28px; }
+.bs-copy { display: grid; align-content: start; gap: 12px; min-width: 0; }
 .bs-copy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.bs-copy-head h3 { font-size: 14px; font-weight: 700; }
+.bs-copy-head h3 { font-size: 16px; font-weight: 700; }
+.bs-integration-info { display: grid; gap: 16px; }
+.bs-integration-info summary { cursor: pointer; width: fit-content; }
+.bs-integration-info details p { margin-top: 12px; }
 .bs-copy pre {
   margin: 0; padding: 14px; max-height: 280px; overflow: auto; border-radius: 14px;
   background: var(--bs-code); color: #E6E1F5; font-size: 12px; line-height: 18px;
@@ -112,7 +115,6 @@
   .bs { padding-top: 32px; }
   .bs-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
   .bs-panel-wide { grid-column: 1 / -1; }
-  .bs-copies { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 420px) {
   .bs-row-2 { grid-template-columns: 1fr; }

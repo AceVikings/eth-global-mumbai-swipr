@@ -129,7 +129,7 @@ h1 > span {
   position: sticky;
   top: 35px;
   align-self: start;
-  height: calc(100dvh - 125px);
+  min-height: calc(100dvh - 84px);
   display: flex;
   flex-direction: column;
 }
@@ -492,9 +492,8 @@ main {
 .service-list small { grid-column: 1 / -1; color: var(--muted); }
 @media (max-width: 440px) { .service-list li { grid-template-columns: 1fr; } }
 
-.sidebar-account { margin-top: 20px; }
+.sidebar-account { margin-top: auto; padding-top: 28px; }
 .account-button { min-height: 40px; padding: 10px 12px; border-radius: 8px; background: var(--ink); color: white; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .account-button:disabled { opacity: .6; }
 .sidebar-account .account-button { width: 100%; }
-.sidebar-account + nav { margin-top: 28px; }
 .account-error { color: var(--coral-dark); margin: 12px 0; }
