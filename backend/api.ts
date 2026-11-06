@@ -75,6 +75,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   const writeSocial = executeSocial ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher, path: '/internal/social' });
   const writeBot = executeBot ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher });
   const sponsorEns = createWorkerBridge({ url:config.workerUrl,production:process.env.NODE_ENV==='production',fetcher,path:'/internal/ens' });
+  const submitTrade = createWorkerBridge({url:config.workerUrl,production:process.env.NODE_ENV==='production',fetcher,path:'/internal/trading'});
   const fundWrite = fundGas ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher, path: '/internal/gas' });
   const forwardBot = async (input: unknown, authorization?: string) => {
     try {
@@ -180,11 +181,11 @@ export function createApi({ config, ledger, projects = null, social = null, wall
         if (req.method === 'POST' && path === '/api/trades/quote') return send(200, await trades.quote(wallet, input));
         if (req.method === 'POST' && path === '/api/trades/preflight') return send(200, await trades.preflight(wallet, input.ticket));
         if (req.method === 'POST' && path === '/api/trades/approval') return send(200, await trades.approval(wallet, input.ticket, input.txHash));
-        if (req.method === 'POST' && path === '/api/trades/submit') return send(200, await trades.submit(wallet, input.ticket, input.signature));
+        if (req.method === 'POST' && path === '/api/trades/submit') return send(200, await (trading ? trades.submit(wallet, input.ticket, input.signature) : submitTrade({wallet,ticket:input.ticket,signature:input.signature})));
         if (req.method === 'POST' && path === '/api/trades/cancel-prepare') return send(200, await trades.prepareCancel(wallet, String(input.orderId || '')));
         if (req.method === 'POST' && path === '/api/trades/cancel') return send(200, await trades.cancel(wallet, String(input.orderId || ''), input.signature));
         if (req.method === 'GET' && path === '/api/trades/history') return send(200, await trades.history(wallet));
-        if (req.method === 'GET' && path === '/api/trades/status') return send(200, await trades.status(wallet, url.searchParams.get('orderId') || ''));
+        if (req.method === 'GET' && path === '/api/trades/status') return send(200, await (trading ? trades.status(wallet, url.searchParams.get('orderId') || '') : submitTrade({action:'status',wallet,orderId:url.searchParams.get('orderId') || ''})));
         throw new ApiError(404, 'not_found', 'Route not found.');
       }
       if (path === '/api/wallet' && req.method === 'GET') {

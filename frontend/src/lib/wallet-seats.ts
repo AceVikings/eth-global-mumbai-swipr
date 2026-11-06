@@ -11,7 +11,7 @@ export async function readSeats(session: Session): Promise<SeatDirectory> {
   const value = await accountRequest(session, `/api/seats?wallet=${session.address}`) as SeatDirectory;
   if (!Array.isArray(value.passes) || !Array.isArray(value.availability) || !Array.isArray(value.invitations)) throw new Error('Seats could not be loaded.');
   for (const pass of value.passes) {
-    parseSeatJoin({ traderId: pass.traderId, traderOwner: pass.traderOwner, terms: pass.terms, seatType: pass.seatType });
+    parseSeatJoin({ traderId: pass.traderId, traderOwner: pass.traderOwner, terms: pass.terms, seatType: pass.seatType, budgetVersion: pass.budgetVersion });
     if (!ENTITY_KEY.test(pass.id) || ![pass.owner.toLowerCase(), pass.traderOwner.toLowerCase()].includes(session.address.toLowerCase())) throw new Error('Invalid seat ownership.');
   }
   return value;
@@ -32,7 +32,7 @@ export async function joinSeat(session: Session, traderId: string, terms: Terms,
   if (directory.passes.some(p => p.owner === session.address!.toLowerCase() && p.traderId === traderId && p.status === 'joined')) throw new Error('You already have a seat with this trader.');
   if (seatType === 'private' && !pool.invited) throw new Error('Private seats require an invitation from this trader.');
   if (seatType === 'public' ? pool.publicUsed >= pool.publicSeats : pool.privateUsed >= pool.privateSeats) throw new Error('These seats are full.');
-  const join = parseSeatJoin({ traderId, traderOwner: pool.traderOwner, terms, seatType });
+  const join = parseSeatJoin({ traderId, traderOwner: pool.traderOwner, terms, seatType, budgetVersion: 1 });
   const { client, address } = await arkivConnection(session);
   if (address.toLowerCase() !== session.address.toLowerCase()) throw new Error('Your account changed.');
   await fundArkivWrite(session, address);

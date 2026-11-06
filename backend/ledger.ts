@@ -1,3 +1,4 @@
+import { isCopyCommand, validateCopyCommand } from './trading/accounting';
 import { isSocialCommand, replaySocial, validateSocialCommand } from './social/store';
 import { isProjectCommand, replayProject, validateProjectCommand } from './bots/store';
 import { randomUUID } from 'node:crypto';
@@ -134,6 +135,9 @@ function replay(snapshot: JournalSnapshot): State {
       throw new Error(`ledger_journal_invalid at revision ${index + 1}`);
     }
     ids.add(event.id);
+    if (isCopyCommand(event.command)) {
+      validateCopyCommand(event.command); state.revision = event.revision; state.at = event.at; return;
+    }
     if (isSocialCommand(event.command)) {
       validateSocialCommand(event.command);
       state.revision = event.revision; state.at = event.at;

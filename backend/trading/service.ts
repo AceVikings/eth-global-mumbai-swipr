@@ -1,3 +1,4 @@
+import type { CopyAccounting } from './accounting';
 import type { VerifiedFill } from './performance';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createPublicClient, http, erc20Abi, recoverTypedDataAddress, recoverMessageAddress, type Address, type Hex } from 'viem';
@@ -16,7 +17,7 @@ type Context = { profileId: string; seatId?: string; sourceOrderId?: string };
 type Ticket = { version: 1; expiresAt: number; intent: OrderIntent; quote: Pick<FlashQuote, 'quoteId' | 'typedDataRaw' | 'integratorFeeBps'>; context: Context; vault: string };
 export type TradingService = ReturnType<typeof createTradingService>;
 export function createTradingService(options: { apiKey: string; ticketSecret: string; rpcUrl: string;
-  profiles: () => Promise<BotProfile[]>; seats: (wallet: string, profiles: BotProfile[]) => Promise<SeatDirectory>; fetcher?: typeof fetch }) {
+  accounting?: CopyAccounting; profiles: () => Promise<BotProfile[]>; seats: (wallet: string, profiles: BotProfile[]) => Promise<SeatDirectory>; fetcher?: typeof fetch }) {
   const flash = createFlashClient({ apiKey: options.apiKey, fetch: options.fetcher ?? fetch });
   const chain = createPublicClient({ chain: base, transport: http(options.rpcUrl, { timeout: 8000, retryCount: 0 }) });
   // Tickets bind every reviewed field; neither intent nor vault can be replaced on submission.
@@ -86,7 +87,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     if (!fills.some(f => f.asset === asset && f.side === 'buy')) fail('The trader order has no confirmed matching fill yet.');
     const expiry = Date.parse(String(source.row.expiresAt));
     if (!Number.isFinite(expiry) || expiry <= Date.now()) fail('This trader’s copy window has ended.');
-    return { profile: profile!, sharedPrice: source.row.limitNotionalPrice as string, expiresAt: Math.floor(expiry / 1000) };
+    return { seat: seat!, profile: profile!, sharedPrice: source.row.limitNotionalPrice as string, expiresAt: Math.floor(expiry / 1000) };
   };
   // A request that may have reached Flash is never relayed again by this instance.
   // Flash's signed salt remains the chain-level replay boundary across service restarts.
@@ -139,7 +140,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     },
     async submit(wallet: string, token: unknown, signature: unknown) {
       const t = decode(token, wallet); await network();
-      await context(wallet, t.context, t.intent.asset, t.intent.qty, t.intent.side);
+      const checked = await context(wallet, t.context, t.intent.asset, t.intent.qty, t.intent.side);
       if (typeof signature !== 'string' || !/^0x[0-9a-f]{130}$/i.test(signature)) fail('A wallet order signature is required.');
       const td = JSON.parse(t.quote.typedDataRaw);
       const signer = await recoverTypedDataAddress({ ...td, signature: signature as Hex });
@@ -155,12 +156,21 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       if (previous?.orderId) return { orderId: previous.orderId };
       if (previous) throw new ApiError(409, 'submission_uncertain', 'This order may already have reached Flash. Check order history before trying anything else.');
       if (submitted.size >= 10000) fail('Trade submissions are temporarily busy.');
+      if (checked.seat) {
+        if (!options.accounting) fail('Durable copy accounting is unavailable. No order was submitted.');
+        const reservation = await options.accounting.reserve(checked.seat, t.context.sourceOrderId!, t.quote.quoteId, spending.amount);
+        if (!reservation.created) {
+          if (reservation.orderId) return { orderId: reservation.orderId };
+          throw new ApiError(409, 'submission_uncertain', 'This source already has a reserved copy. Reconcile its history before continuing.');
+        }
+      }
       const attempt: { expiresAt: number; orderId?: string } = { expiresAt: t.expiresAt };
       submitted.set(t.quote.quoteId, attempt);
       try {
         const result = await flash.submitOrder({ intent: t.intent, quote: { ...t.quote, typedData: td, raw: {} }, userSignature: signature!,
           policy: { now: now(), maxDeadline: t.expiresAt, expectedVault: t.vault } });
         attempt.orderId = result.orderId;
+        if (checked.seat) await options.accounting!.submitted(t.quote.quoteId, result.orderId);
         return result;
       } catch { throw new ApiError(409, 'submission_uncertain', 'Submission could not be confirmed. Check Flash order history; do not submit again.'); }
     },
@@ -214,6 +224,10 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     },
     async status(wallet: string, orderId: string) {
       await network(); const { result } = await order(orderId, wallet); const fills = await verifyFills(result, wallet);
+      if (options.accounting && fills.length === result.fills.length) {
+        const terminal = ['FILLED','CANCELLED','TERMINATED','REJECTED','EXPIRED'].includes(result.status.replace(/^ORDER_STATUS_/, '').toUpperCase());
+        await options.accounting.reconcile(orderId, terminal, fills.reduce((n,f)=>n+(f.side==='buy'?BigInt(f.usdcMicros):0n),0n));
+      }
       return { orderId, status: result.status, fills, unverifiedFills: result.fills.length - fills.length };
     },
   };

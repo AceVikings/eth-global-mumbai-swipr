@@ -1,3 +1,5 @@
+import { CopyAccounting } from './trading/accounting';
+import { createSeatDirectory } from './passes/seats';
 import { createEnsRegistrar } from './ens/registrar';
 import { createEnsService } from './ens/service';
 import { createWalletDirectory } from './bots/wallet-directory';
@@ -35,12 +37,15 @@ async function main() {
   const social = journal ? new SocialStore(journal, config.botAudience) : null;
   const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
   const directory = config.arkiv.accessKey ? createWalletDirectory(config.arkiv) : null;
-  const trades = directory && config.flashKey && config.privySecret ? createTradingService({ apiKey:config.flashKey,ticketSecret:config.privySecret,rpcUrl:config.baseRpc,profiles:directory,seats:async()=>({passes:[],invitations:[],availability:[]}) }) : null;
+  const trades = directory && config.flashKey && config.privySecret ? createTradingService({ apiKey:config.flashKey,ticketSecret:config.privySecret,rpcUrl:config.baseRpc,profiles:directory,seats:createSeatDirectory(config.arkiv),accounting:journal ? new CopyAccounting(journal) : undefined }) : null;
   const names = directory ? createEnsService({rpcUrl:config.sepoliaRpc,rootName:config.ensRootName,profiles:directory,stats:trades&&config.flashKey?createEnsStats(createFlashClient({apiKey:config.flashKey,fetch}),trades):undefined}) : null;
   const ens = directory && names && config.ensRegistrarKey ? createEnsRegistrar({key:config.ensRegistrarKey as `0x${string}`,rootName:config.ensRootName,rpcUrl:config.sepoliaRpc,profiles:directory,snapshot:names.snapshot}) : null;
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
   // Missing credentials keeps liveness available, but readiness and all writes fail closed.
-  const server = createWorkerServer({ social, projects, funding, ens, stopping: () => stopping,
+  const server = createWorkerServer({ social, projects, funding, ens, trading:trades ? {execute:async(raw:unknown)=>{
+      const input=raw as {action?:string;wallet:string;ticket:unknown;signature:unknown;orderId?:string};
+      return input.action==='status' ? trades.status(input.wallet,String(input.orderId||'')) : trades.submit(input.wallet,input.ticket,input.signature);
+    }} : null, stopping: () => stopping,
     lastHealthyAt: () => lastHealthy, canWrite: () => journal?.canWrite === true, canFund: () => !!funding });
   await new Promise<void>(resolve => server.listen(config.port, '0.0.0.0', resolve));
   const shutdown = () => { stopping = true; };

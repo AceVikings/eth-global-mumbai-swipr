@@ -2,7 +2,7 @@ import { keccak256, stringToHex } from 'viem';
 import { ENTITY_KEY, parsePassRequest } from './passes';
 import type { Terms } from './types';
 export type SeatType = 'public' | 'private';
-export type SeatJoin = { traderId: string; traderOwner: string; seatType: SeatType; terms: Terms };
+export type SeatJoin = { traderId: string; traderOwner: string; seatType: SeatType; terms: Terms; budgetVersion?: 1 };
 export type SeatPass = SeatJoin & { id: string; owner: string; traderName: string; joinedAt: number; expiresAt: number;
   status: 'joined' | 'full' | 'not_invited' | 'expired' | 'halted' | 'duplicate'; seatNumber: number | null };
 export type SeatInvite = { entityKey: string; traderId: string; traderOwner: string; traderName: string; wallet: string; status: 'active' | 'revoked' };
@@ -12,8 +12,8 @@ export type SeatDirectory = { passes: SeatPass[]; invitations: SeatInvite[]; ava
 export function parseSeatJoin(value: unknown): SeatJoin {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid seat join.');
   const r = value as Record<string, unknown>;
-  if (Object.keys(r).some(k => !['traderId', 'traderOwner', 'seatType', 'terms'].includes(k)) || !['public', 'private'].includes(String(r.seatType))) throw new Error('Choose a public or private seat.');
-  return { ...parsePassRequest({ traderId: r.traderId, traderOwner: r.traderOwner, terms: r.terms }), seatType: r.seatType as SeatType };
+  if (Object.keys(r).some(k => !['traderId', 'traderOwner', 'seatType', 'terms', 'budgetVersion'].includes(k)) || !['public', 'private'].includes(String(r.seatType)) || (r.budgetVersion !== undefined && r.budgetVersion !== 1)) throw new Error('Choose a public or private seat.');
+  return { ...parsePassRequest({ traderId: r.traderId, traderOwner: r.traderOwner, terms: r.terms }), seatType: r.seatType as SeatType, ...(r.budgetVersion === 1 ? { budgetVersion: 1 as const } : {}) };
 }
 export const seatJoinHash = (join: SeatJoin) => keccak256(stringToHex(JSON.stringify(parseSeatJoin(join))));
 export function parseInviteTarget(traderId: unknown, wallet: unknown) {
