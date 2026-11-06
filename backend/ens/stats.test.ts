@@ -12,3 +12,12 @@ it('rejects incomplete evidence instead of reporting verified empty history',asy
  await expect(createEnsStats(flash,{status:async()=>({fills:[],unverifiedFills:1})} as any)(p)).rejects.toThrow('could not be verified');
  await expect(createEnsStats({listOrders:async()=>({orders:[{orderId:'a',funderAddress:'another-wallet'}],hasMore:false})},{} as any)(p)).rejects.toThrow('Invalid wallet');
 });
+
+it('publishes FIFO realized cash flow only when the available wallet history is complete',async()=>{
+ const buy={...fill,blockNumber:1,transactionIndex:0,timestamp:1800000000000};
+ const sell={...buy,txHash:`0x${'cd'.repeat(32)}`,side:'sell',usdcMicros:'4900000',blockNumber:2,timestamp:1800000002000};
+ const flash={listOrders:async()=>({orders:[{orderId:'buy',funderAddress:owner},{orderId:'sell',funderAddress:owner}],hasMore:false})};
+ const trades={status:async(_:string,id:string)=>({fills:[id==='buy'?buy:sell],unverifiedFills:0})} as any;
+ expect(await createEnsStats(flash,trades)(p)).toMatchObject({realizedPnlUsd:'-0.1'});
+ expect(await createEnsStats({listOrders:async()=>({...await flash.listOrders(),hasMore:true})},trades)(p)).toMatchObject({realizedPnlUsd:null});
+});

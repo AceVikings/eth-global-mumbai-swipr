@@ -50,6 +50,6 @@ export function ensName(value: unknown): string {
  return name;
 }
 export const dnsName = (name: string) => toHex(packetToBytes(ensName(name)));
-export type EnsStats = { state:'verified'|'unavailable'; scope?:'latest20Orders'; attribution?:'wallet'; wallet?:string; hasMore?:boolean; fills?: {orderId:string;txHash:string;side:string;asset:string;usdcMicros:string;assetUnits:string}[]; realizedPnlUsd:null };
+export type EnsStats = { state:'verified'|'unavailable'; scope?:'latest20Orders'; attribution?:'wallet'; wallet?:string; hasMore?:boolean; fills?: {orderId:string;txHash:string;side:string;asset:string;usdcMicros:string;assetUnits:string}[]; realizedPnlUsd:string|null };
 export type EnsProof = {name:string;chainId:number;resolver:string;owner:string;identityVerified:boolean;profileMatches:boolean;statsVerified:boolean;fresh:boolean;records:Record<string,string>};
 export type EnsTransaction = {to:`0x${string}`;data:`0x${string}`;value:'0x0';chainId:number};
