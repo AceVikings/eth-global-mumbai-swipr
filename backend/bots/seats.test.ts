@@ -4,7 +4,6 @@ const profile = { profileId: '00000000-0000-4000-8000-000000000001', operator: `
 it('allows separately bounded public and private seat capacities', () => {
   expect(profileUpsert({ ...profile, publicSeats: 3, privateSeats: 2 })).toMatchObject({ publicSeats: 3, privateSeats: 2 });
   for (const number of [-1, 101, 0.5, '3', null]) {
-    if (number === null) continue;
     expect(() => profileUpsert({ ...profile, publicSeats: number })).toThrow();
     expect(() => profileUpsert({ ...profile, privateSeats: number })).toThrow();
   }

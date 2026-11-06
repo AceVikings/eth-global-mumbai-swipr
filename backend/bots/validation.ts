@@ -80,7 +80,7 @@ export function assets(value: unknown): BotAsset[] {
 export function profileUpsert(raw: unknown): ProfileUpsertData & { profileId: string } {
   check(isRecord(raw), 'data must be an object');
   onlyKeys(raw, ['profileId', 'operator', 'name', 'bio', 'style', 'strategy', 'assets', 'publicSeats', 'privateSeats'], 'profile');
-  const publicSeats = raw.publicSeats ?? 20, privateSeats = raw.privateSeats ?? 0;
+  const publicSeats = raw.publicSeats === undefined ? 20 : raw.publicSeats, privateSeats = raw.privateSeats === undefined ? 0 : raw.privateSeats;
   check(Number.isSafeInteger(publicSeats) && Number(publicSeats) >= 0 && Number(publicSeats) <= 100, 'Public seats must be 0-100');
   check(Number.isSafeInteger(privateSeats) && Number(privateSeats) >= 0 && Number(privateSeats) <= 100, 'Private seats must be 0-100');
   return {

@@ -34,3 +34,12 @@ export const WALLET_PASS_DECISION_SCHEMA = 'swipr.wallet-pass-decision.v1';
 export const WalletPassDecisionSchema = defineSchema(WALLET_PASS_DECISION_SCHEMA, {
   project: str().indexed(), requestId: str().indexed(), decision: bytes(),
 });
+
+export const WALLET_SEAT_SCHEMA = 'swipr.wallet-seat.v1';
+export const WalletSeatSchema = defineSchema(WALLET_SEAT_SCHEMA, {
+  project: str().indexed(), join: bytes(),
+});
+export const WALLET_SEAT_INVITE_SCHEMA = 'swipr.wallet-seat-invite.v1';
+export const WalletSeatInviteSchema = defineSchema(WALLET_SEAT_INVITE_SCHEMA, {
+  project: str().indexed(), profileId: str().indexed(), invitee: str().indexed(), status: str().indexed(),
+});

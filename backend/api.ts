@@ -26,6 +26,7 @@ export type ApiDependencies = {
   fundGas?: (input: unknown) => Promise<unknown>;
   account?: { health?(): Promise<{ ok: boolean }>; list(wallet: string): Promise<{ key: string; schema: string }[]>; remove(identity: import('./auth').Identity, wallet: string, input: Record<string, unknown>): Promise<unknown> };
   arkivRpc?: (input: Record<string, unknown>) => Promise<unknown>;
+  seatDirectory?: (wallet: string, profiles: BotProfile[]) => Promise<import('./contracts/seats').SeatDirectory>;
   walletPasses?: (wallet: string, profiles: BotProfile[]) => Promise<import('./contracts/passes').WalletPass[]>;
   walletGhosts?: (wallet: string) => Promise<import('./contracts/ghosts').WalletGhostRecord[]>;
   walletSocial?: (wallet: string) => Promise<{ entityKey: string | null; following: string[] }>;
@@ -39,7 +40,7 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, walletPasses, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, walletPasses, seatDirectory, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const listBots = async () => {
@@ -222,6 +223,12 @@ export function createApi({ config, ledger, projects = null, social = null, wall
         traders: [], source: 'arkiv', asOfBlock: null, state: 'unavailable',
         detail: 'No verified Arkiv directory is connected.',
       });
+      if (path === '/api/seats' && req.method === 'GET') {
+        const identity = await authenticate(req.headers.authorization);
+        const wallet = requireWallet(identity, url.searchParams.get('wallet'));
+        if (!seatDirectory || !walletProfiles) throw new ApiError(503, 'seats_unavailable', 'Seats could not be loaded.');
+        return send(200, await seatDirectory(wallet, await walletProfiles()));
+      }
       if (!['/api/me', '/api/passes', '/api/quotes', '/api/orders'].includes(path)) throw new ApiError(404, 'not_found', 'Route not found.');
       const identity = await authenticate(req.headers.authorization);
       if (req.method === 'GET' && path === '/api/me') return send(200, identity);
