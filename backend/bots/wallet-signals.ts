@@ -27,11 +27,16 @@ export function createWalletSignals(options: { accessKey?: string; rpcUrl?: stri
     if (!profiles.length) return [];
     if (await client.getChainId() !== 7794095) throw new Error('Wrong Arkiv network.');
     const head = await client.getBlockNumber({ cacheTime: 0 });
-    const result = await client.query(and(eq('arkiv.schema', str(WALLET_SIGNAL_SCHEMA)), eq('project', str(WALLET_PROFILE_PROJECT))),
-      { limit: 200, orderBy: desc('$key') });
+    const entities: FullEntity[] = [];
+    for (let offset = 0; offset < 200; offset += 100) {
+      const result = await client.query(and(eq('arkiv.schema', str(WALLET_SIGNAL_SCHEMA)), eq('project', str(WALLET_PROFILE_PROJECT))),
+        { limit: 100, offset, orderBy: desc('$key') });
+      entities.push(...result.entities);
+      if (result.entities.length < 100) break;
+    }
     const signals: BotSignal[] = [];
     const times = new Map<bigint, number>();
-    for (const entity of result.entities) {
+    for (const entity of entities) {
       if (entity.$expiresAt <= head || entity.$createdAt > head - 1n || entity.$updatedAt > head - 1n) continue;
       if (!times.has(entity.$createdAt)) times.set(entity.$createdAt, Number((await client.getBlock({ blockNumber: entity.$createdAt })).timestamp));
       try { signals.push(decodeWalletSignal(entity, profiles, times.get(entity.$createdAt)!)); }
