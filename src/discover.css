@@ -301,3 +301,11 @@
   .dsc-stats-rail { padding: 12px; }
   .dsc { padding-bottom: 0; }
 }
+
+/* The availability card keeps the deck shape without swipe controls or motion. */
+.dsc.is-empty { padding-bottom: 24px; }
+.dsc.is-empty .dsc-layout { display: block; }
+.dsc.is-empty .dsc-deck { max-width: 420px; margin: 0 auto; }
+.dsc.is-empty .dsc-stack { height: clamp(300px, calc(100dvh - 330px), 480px); }
+.dsc.is-empty .dsc-empty { height: 100%; padding: 32px; align-items: center; text-align: center; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); }
+.dsc.is-empty .dsc-toast-slot { position: static; margin-top: 16px; min-height: 0; }

@@ -226,8 +226,10 @@ main {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  max-width: 780px;
+  gap: 16px;
 }
+.discovery-actions { display: flex; align-items: center; gap: 12px; }
+.discovery-actions .text-button { width: auto; min-height: 40px; padding: 0 4px; white-space: nowrap; }
 .filter-select {
   display: flex;
   align-items: center;
@@ -530,5 +532,3 @@ main {
 .service-list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 12px; }
 .service-list small { grid-column: 1 / -1; color: var(--muted); }
 @media (max-width: 440px) { .service-list li { grid-template-columns: 1fr; } }
-
-.directory-status { margin: 0 0 12px; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
