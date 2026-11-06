@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   cancelMessage, checkRef, createBaseRpc, createBee, createFlashClient, createHttp, decodeTransferLegs, FLASH_DOMAIN,
-  FLASH_ORDER_FIELDS, flashFromEnv, providerReadiness, redact, TOKENS, TRANSFER_TOPIC, validateTypedData,
+  FLASH_ORDER_FIELDS, FLASH_ORDER_TYPES, FLASH_DOMAIN_TYPES, flashFromEnv, providerReadiness, redact, TOKENS, TRANSFER_TOPIC, validateTypedData,
   type OrderIntent, type Receipt,
 } from './providers/index.ts';
 
@@ -10,7 +10,7 @@ const OTHER = '0x2222222222222222222222222222222222222222';
 const SIG = '0x' + 'ab'.repeat(65);
 const KEY = 'secret_flash_key_123';
 const NOW = 1_800_000_000;
-const policy = { now: NOW, maxDeadline: NOW + 3600 };
+const policy = { now: NOW, maxDeadline: NOW + 3600, expectedVault: OTHER };
 const buy: OrderIntent = { side: 'buy', asset: 'WETH', qty: '10', funder: FUNDER, orderType: 'limit', limitNotionalPrice: '3412.5', sharedPrice: '3412.5' };
 const noSleep = async () => {};
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -19,7 +19,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 const typedData = (msg: Record<string, unknown> = {}, domain: Record<string, unknown> = {}) => ({
   domain: { ...FLASH_DOMAIN, chainId: '8453', ...domain },
   primaryType: 'FlashOrder',
-  types: { FlashOrder: FLASH_ORDER_FIELDS.map((name) => ({ name, type: 'address' })) },
+  types: { FlashOrder: [...FLASH_ORDER_TYPES], EIP712Domain: [...FLASH_DOMAIN_TYPES] },
   message: { swapper: FUNDER, vault: OTHER, recipient: FUNDER, fromToken: TOKENS.USDC.address, toToken: TOKENS.WETH.address,
     fromAmount: '10000000', salt: '1', deadline: String(NOW + 900), ...msg },
 });
@@ -31,6 +31,9 @@ describe('flash typed data checks', () => {
     ['wrong chain', typedData({}, { chainId: 1 })],
     ['wrong name', typedData({}, { name: 'Other' })],
     ['other recipient', typedData({ recipient: OTHER })],
+    ['wrong vault', typedData({ vault: FUNDER })],
+    ['numeric amount', typedData({ fromAmount: 10000000 })],
+    ['hex amount', typedData({ fromAmount: '0x989680' })],
     ['oversized amount', typedData({ fromAmount: '50000000' })],
     ['swapped tokens', typedData({ fromToken: TOKENS.WETH.address, toToken: TOKENS.USDC.address })],
     ['expired', typedData({ deadline: String(NOW - 1) })],

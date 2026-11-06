@@ -13,11 +13,12 @@ const needs = (env: Record<string, string | undefined>, keys: string[], what: st
 };
 
 export function providerReadiness(env: Record<string, string | undefined>): Record<Capability, Readiness> {
+  env = { ...env, FLASH_API_KEY: env.FLASH_KEY_EXEC || env.FLASH_API_KEY, BASE_RPC: env.BASE_RPC || env.BASE_RPC_URL };
   return {
     flash: env.FLASH_API_KEY?.startsWith('dpka_513a2bd7')
       ? { state: 'missing_config', detail: 'FLASH_API_KEY is the public dev key; orders refused' }
       : needs(env, ['FLASH_API_KEY'], 'quote/order/status/cancel relay for user-signed orders'),
-    baseRpc: needs(env, ['BASE_RPC_URL'], 'receipt reads and transfer-leg decoding'),
+    baseRpc: needs(env, ['BASE_RPC'], 'receipt reads and transfer-leg decoding'),
     bee: needs(env, ['BEE_URL', 'SWARM_BATCH_ID'], 'pinned byte upload/download; BMT not verified'),
     arkiv: { state: 'unsupported', detail: 'no Arkiv adapter in this build' },
     ens: { state: 'unsupported', detail: 'no ENS adapter in this build' },

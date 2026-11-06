@@ -16,10 +16,10 @@ async function main() {
   const config = readConfig();
   if (!config.databaseUrl) throw new Error('DATABASE_URL is required by the worker');
   const ledger = await Ledger.open(config.databaseUrl, { poolMax: 4 });
-  let stopping = false, lastHealthy = 0;
+  let stopping = false, lastHealthy = 0, lastProbeMinute = -1;
   const server = createServer((req, res) => {
     const path = req.url?.split('?')[0];
-    if (path !== '/healthz' && path !== '/readyz') { res.writeHead(404); res.end(); return; }
+    if (!['/healthz', '/readyz', '/health', '/ready'].includes(path || '')) { res.writeHead(404); res.end(); return; }
     const ok = !stopping && Date.now() - lastHealthy < 60000;
     res.writeHead(ok ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify({ ok, service: 'worker', lastHealthyAt: lastHealthy ? new Date(lastHealthy).toISOString() : null }));
@@ -32,7 +32,11 @@ async function main() {
     while (!stopping) {
       try {
         if (!(await ledger.health()).ok) throw new Error('database_unhealthy');
-        if (config.baseRpc) await ledger.enqueueJob('probe-base', {}, { dedupeKey: `probe-base:${Math.floor(Date.now() / 60000)}` });
+        const minute = Math.floor(Date.now() / 60000);
+        if (config.baseRpc && minute !== lastProbeMinute) {
+          await ledger.enqueueJob('probe-base', {}, { dedupeKey: `probe-base:${minute}` });
+          lastProbeMinute = minute;
+        }
         const job = await ledger.claimJob(['probe-base'], 60000);
         if (job) {
           try {

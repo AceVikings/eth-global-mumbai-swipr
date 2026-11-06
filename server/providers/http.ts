@@ -62,7 +62,12 @@ export function createHttp(o: HttpOptions) {
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
       const res = await o.fetch(url, { ...init, signal: ctl.signal });
-      if (res.ok) return res;
+      if (res.ok) {
+        // Keep the request deadline active while consuming the body too. Returning
+        // immediately after headers would leave res.json()/arrayBuffer() unbounded.
+        const bytes = await res.arrayBuffer();
+        return new Response(bytes, { status: res.status, statusText: res.statusText, headers: res.headers });
+      }
       const body = redact(await res.text().catch(() => ''), o.secrets);
       const ra = Number(res.headers.get('retry-after'));
       throw new ProviderError(o.provider, 'http', `HTTP ${res.status} ${body}`, {

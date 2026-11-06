@@ -34,7 +34,13 @@ export interface OrderIntent {
   maxSlippage?: string;
   maxPriceImpact?: string;
 }
-export interface SignPolicy { now: number; maxDeadline: number }
+// Unix seconds; expectedVault must come from trusted provider/onchain verification.
+export interface SignPolicy { now: number; maxDeadline: number; expectedVault?: string }
+export const FLASH_ORDER_TYPES = FLASH_ORDER_FIELDS.map((name, index) => ({ name, type: index < 5 ? 'address' : 'uint256' }));
+export const FLASH_DOMAIN_TYPES = [
+  { name: 'name', type: 'string' }, { name: 'version', type: 'string' },
+  { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' },
+];
 export interface FlashQuote { quoteId: string; typedDataRaw: string; typedData: TypedData; raw: unknown }
 export interface TypedData {
   domain: Record<string, unknown>;
@@ -100,16 +106,19 @@ export function validateTypedData(td: TypedData, intent: OrderIntent, policy: Si
   if (String(d.chainId) !== String(BASE_CHAIN_ID)) throw invalid('domain is not Base');
   if (!sameAddr(d.verifyingContract, FLASH_DOMAIN.verifyingContract)) throw invalid('unexpected verifyingContract');
   const fields = td.types[td.primaryType]?.map((f) => f.name);
-  if (JSON.stringify(fields) !== JSON.stringify(FLASH_ORDER_FIELDS)) throw invalid('unexpected order type fields');
+  if (td.primaryType !== 'FlashOrder' || JSON.stringify(fields) !== JSON.stringify(FLASH_ORDER_FIELDS)) throw invalid('unexpected order type fields');
+  if (JSON.stringify(td.types.FlashOrder) !== JSON.stringify(FLASH_ORDER_TYPES) || JSON.stringify(td.types.EIP712Domain) !== JSON.stringify(FLASH_DOMAIN_TYPES)) throw invalid('unexpected typed data field types');
   const m = td.message;
   const want = fromTo(intent);
+  if (!policy.expectedVault || !ADDRESS.test(policy.expectedVault) || !sameAddr(m.vault, policy.expectedVault)) throw invalid('verified vault required');
+  for (const name of ['fromAmount', 'salt', 'deadline']) if (typeof m[name] !== 'string' || !/^\d+$/.test(m[name] as string)) throw invalid('amount, salt and deadline must be decimal strings');
   if (!sameAddr(m.swapper, intent.funder) || !sameAddr(m.recipient, intent.funder)) throw invalid('swapper/recipient must be the funder');
   if (!sameAddr(m.fromToken, want.fromToken) || !sameAddr(m.toToken, want.toToken)) throw invalid('token pair does not match intent');
   let amount: bigint;
   let deadline: number;
   try { amount = BigInt(m.fromAmount as string); deadline = Number(m.deadline); } catch { throw invalid('bad amount'); }
   if (amount !== want.fromAmount) throw invalid('fromAmount does not match intent');
-  if (!Number.isFinite(deadline) || deadline <= policy.now || deadline > policy.maxDeadline) throw invalid('deadline outside allowed window');
+  if (!Number.isSafeInteger(deadline) || deadline <= policy.now || deadline > policy.maxDeadline) throw invalid('deadline outside allowed window');
 }
 
 export const cancelMessage = (orderId: string) => `Definitive Flash v1 — Cancel Order\nOrder: ${orderId}`;
@@ -117,6 +126,7 @@ const checkId = (id: string) => { if (!/^[\w-]{1,128}$/.test(id)) throw invalid(
 const checkSig = (s: string) => { if (!/^0x[0-9a-fA-F]{130}$/.test(s)) throw invalid('bad signature'); return s; };
 
 export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeoutMs?: number; baseUrl?: string; sleep?: (ms: number) => Promise<void> }) {
+  if (!o.apiKey.trim() || o.apiKey.startsWith(PUBLIC_DEV_KEY_PREFIX)) throw invalid('private Flash API key required');
   const base = o.baseUrl ?? API;
   const http = createHttp({ provider: 'flash', fetch: o.fetch, timeoutMs: o.timeoutMs ?? 8000, minIntervalMs: 220, secrets: [o.apiKey], sleep: o.sleep });
   const headers = { 'x-definitive-api-key': o.apiKey, 'content-type': 'application/json' };
@@ -164,7 +174,7 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
 export type FlashClient = ReturnType<typeof createFlashClient>;
 
 export function flashFromEnv(env: Record<string, string | undefined>, fetch: FetchLike) {
-  const key = env.FLASH_API_KEY?.trim();
+  const key = (env.FLASH_KEY_EXEC || env.FLASH_API_KEY)?.trim();
   if (!key) return { ok: false as const, reason: 'FLASH_API_KEY missing' };
   if (key.startsWith(PUBLIC_DEV_KEY_PREFIX)) return { ok: false as const, reason: 'public dev key refused for orders' };
   return { ok: true as const, client: createFlashClient({ apiKey: key, fetch }) };
