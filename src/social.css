@@ -8,15 +8,14 @@
 .lb-info summary { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); cursor: pointer; list-style: none; }
 .lb-info summary::-webkit-details-marker { display: none; }
 .lb-info > div { position: absolute; right: 0; z-index: 5; display: grid; gap: 12px; width: min(340px, calc(100vw - 40px)); margin-top: 12px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px #24232212; font-size: 13px; }
-.lb-roles { margin-top: 31px; }
 .lb-tabs { display: flex; align-items: center; gap: 30px; }
-.lb-tabs button { position: relative; min-height: 44px; padding: 0 0 13px; background: transparent; color: var(--muted); font-size: 16px; }
+.lb-tabs button { position: relative; min-height: 44px; padding: 0 0 14px; background: transparent; color: var(--muted); font-size: 16px; }
 .lb-tabs button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
 .lb-tabs button[aria-pressed="true"]::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--coral); }
-.lb-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 27px 0 30px; }
-.lb-toolbar .lb-tabs button { font-size: 14px; }
-.lb-sort { display: flex; align-items: center; color: var(--muted); white-space: nowrap; }
-.lb-sort select { max-width: 126px; min-height: 44px; padding: 0 5px; background: transparent; border: 0; color: var(--muted); font: inherit; cursor: pointer; }
+.lb-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 31px 0 24px; border-bottom: 1px solid var(--line); }
+.lb-filters { display: flex; align-items: center; gap: 20px; padding-bottom: 12px; }
+.lb-filter { display: flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; font-size: 13px; }
+.lb-filter select { max-width: 126px; min-height: 36px; padding: 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font: inherit; cursor: pointer; }
 .lb button:focus-visible, .lb summary:focus-visible, .lb select:focus-visible { outline: 2px solid var(--ghost); outline-offset: 4px; }
 .lb button:disabled { opacity: .45; cursor: not-allowed; }
 .lb-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
@@ -84,12 +83,10 @@
   .app-shell:has(.lb) { display: block; padding: 0 20px 100px; }
   .lb { padding: 12px 0 24px; }
   .lb-head h1 { font-size: 30px; }
-  .lb-roles { margin-top: 24px; }
-  .lb-toolbar { margin: 20px 0 24px; gap: 8px; }
-  .lb-tabs { gap: 24px; }
-  .lb-toolbar .lb-tabs { gap: 20px; }
-  .lb-toolbar .lb-tabs button, .lb-sort { font-size: 13px; }
-  .lb-sort select { max-width: 106px; padding-right: 0; }
+  .lb-toolbar { margin: 24px 0 20px; flex-wrap: wrap; gap: 16px; border-bottom: 0; }
+  .lb-tabs { width: 100%; gap: 24px; border-bottom: 1px solid var(--line); }
+  .lb-filters { width: 100%; justify-content: space-between; gap: 12px; padding-bottom: 0; }
+  .lb-filter select { max-width: 120px; }
   .lb-table colgroup { display: none; }
   .lb-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .lb-table, .lb-table tbody { display: block; }

@@ -176,10 +176,6 @@ export default function App() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <div className="preview-banner">
-        Trader directory
-        <span> · Real registrations only · trading verification pending.</span>
-      </div>
       {ghostStorage === "session-only" && (
         <div className="offline-banner" role="status">
           {SESSION_ONLY_NOTICE}
@@ -262,7 +258,7 @@ export default function App() {
                       </select>
                     </label>
                   </div>
-                  <p className="directory-status" role="status">{directoryState} <button className="text-button" onClick={() => setDirectoryVersion(v => v + 1)}>Refresh</button> <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button></p>
+                  <div className="directory-status"><button className="text-button" onClick={() => setDirectoryVersion(v => v + 1)}>Refresh</button> <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button></div>
                   <Discover
                     key={`${prefs.vibe}:${traders.map(t => t.id).join(',')}`}
                     traders={traders}
@@ -385,6 +381,7 @@ export default function App() {
                   <SessionPanel />
                   <div className="settings-group">
                     <h2>Service connections</h2>
+                    <p>{directoryState}</p>
                     <p role="status">{serviceState}</p>
                     {runtime && <ul className="service-list">{runtime.integrations.map(integration => (
                       <li key={integration.name}>

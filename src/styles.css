@@ -109,20 +109,6 @@ h1 > span {
 .skip-link:focus {
   top: 12px;
 }
-.preview-banner {
-  font-size: 12px;
-  line-height: 20px;
-  padding: 7px 20px;
-  text-align: center;
-  background: #efece6;
-  color: #58544f;
-  font-weight: 600;
-  position: relative;
-  z-index: 40;
-}
-.preview-banner span {
-  font-weight: 400;
-}
 .offline-banner {
   text-align: center;
   padding: 10px;
@@ -135,7 +121,7 @@ h1 > span {
   grid-template-columns: 200px minmax(0, 900px);
   max-width: 1220px;
   margin: auto;
-  min-height: calc(100dvh - 34px);
+  min-height: 100dvh;
   gap: 64px;
   padding: 42px 28px 0;
 }
@@ -495,10 +481,6 @@ main {
     left: 58%;
     background: var(--coral-soft);
     font-size: 10px;
-  }
-  .preview-banner {
-    font-size: 11px;
-    padding: 5px 8px;
   }
   .discovery-filter {
     margin-bottom: 8px;
