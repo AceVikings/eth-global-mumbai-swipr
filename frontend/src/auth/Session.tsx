@@ -62,7 +62,17 @@ const unconfigured: Session = {
 };
 
 export function SessionProvider({ children }: { children: ReactNode }) {
+  // Privy needs its remote configuration before rendering children. A cold offline
+  // launch must still show the cached shell, without inventing an authenticated user.
+  // Once mounted online, retain Privy across connectivity changes and pending writes.
+  const [waitingForNetwork, setWaitingForNetwork] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+  useEffect(() => {
+    const online = () => setWaitingForNetwork(false);
+    window.addEventListener('online', online);
+    return () => window.removeEventListener('online', online);
+  }, []);
   if (!appId) return <SessionContext.Provider value={unconfigured}>{children}</SessionContext.Provider>;
+  if (waitingForNetwork) return <SessionContext.Provider value={{...unconfigured, configured:true, ready:false}}>{children}</SessionContext.Provider>;
   return <PrivyProvider appId={appId} config={config}><PrivySession>{children}</PrivySession></PrivyProvider>;
 }
 
