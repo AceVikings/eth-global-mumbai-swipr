@@ -15,6 +15,13 @@ A row turns ✓ only with its evidence linked from the README proofs. An install
 SDK, a configured variable or a passing unit test is not evidence. Nothing on
 camera is mocked, hard-coded or pre-recorded; ⏩ marks cut waits with real time.
 
+**Overall: NOT DEMO READY.** Preview-only website checks below are historical
+UI evidence, not live acceptance. Runtime sample profiles, rankings and follow
+fixtures have now been removed; unavailable dependencies render unavailable states.
+The [original on-camera sequence](DEMO-PLAN.md) and off-camera requirements remain in scope.
+[DEMO-READINESS.md](DEMO-READINESS.md) records the current blockers and build sequence.
+`npm run demo:check` is a read-only preflight; a passing build is not demo acceptance.
+
 ## 0. Infrastructure gates (before any live row)
 
 | Item | Evidence | Status |
@@ -103,7 +110,7 @@ Cut order: stop-trigger cut-in, teammate ghost, reach-count, notary copy.
 | `pnpm proofs` (npm equivalent) fills README, `swarm.md`, `reach.md` with raw JSON | Committed JSON | PENDING |
 | Arkiv MCP `check_submission`; `check-no-encrypted-refs.mjs` | Output | BLOCKED |
 | Swarm postage batch TTL ≥ 4 weeks; both gateways up ≥ 4 weeks | Batch id, uptime URL | BLOCKED |
-| Docs truthful: preview fixtures labeled, unavailable ≠ zero, no claimed live setup | Review | WEB ✓ for website; re-check at submission |
+| Docs truthful: no runtime fixtures, unavailable ≠ zero, no claimed live setup | Review | Runtime fixtures removed; re-check production artifact and real-data flows at submission |
 
 ## 5. Social app and bot integration additions
 
@@ -112,10 +119,12 @@ Cut order: stop-trigger cut-in, teammate ghost, reach-count, notary copy.
 | Trader and copier leaderboard, Everyone / Following, percentage / dollar sort | Ranking unit tests and HTTP contract tests | LOCAL ✓; live fill reader PENDING |
 | Profit definition: closed net proceeds minus entry cost, fees and profit share; weighted by entry cost | Bigint ranking tests | LOCAL ✓; ghosts and proposals excluded |
 | Social follow/unfollow independent of paid Copy Pass | Signed EIP-191 real-wallet test fixtures, Arkiv journal double | LOCAL ✓; funded Arkiv write BLOCKED |
-| Simpler leaderboard visual direction | LEADERBOARD-DESIGN.md; user selection | PENDING: image-first redesign requested |
+| Simpler leaderboard visual direction | LEADERBOARD-DESIGN.md; user selection | People first selected and implemented; populated live visual acceptance PENDING |
 | Trader-owned bot profile, operator proposals, REST + MCP | Bot domain, gateway and HTTP contract tests | LOCAL ✓; funded registry write BLOCKED |
 | Google login app and EVM wallet configuration | Swipr Privy development app, local origins configured | Configured; real app login PENDING |
-| Clean install, TypeScript, tests, production build | Local logs under .context; 153 tests / 18 files | LOCAL ✓ (6 November 2026) |
+| TypeScript, tests, production build and no-preview artifact gate | Local logs under .context; 159 tests / 19 files; `npm run check:bundle` | LOCAL ✓ (6 November 2026); funded demo remains blocked |
+| No runtime fixture fallback; static design portraits excluded from website | Artifact scan, preview-storage isolation test | LOCAL ✓ |
+| Full live preflight | `npm run demo:check` | BLOCKED: 7 failed gates; no trading readiness |
 | Public-repo secret scan and small commits | Gitleaks current branch history; local commit size audit | LOCAL ✓; all new commits <= 1,000 changed lines |
 
 Dependency audit still reports 28 transitive advisories (12 moderate, 16 high).

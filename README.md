@@ -27,7 +27,10 @@ Arkiv adapter and never touch live Arkiv.
 - Clear unavailable wallet/quote/proof states; no invented activation or fills.
 - Install manifest, local fonts/images, offline shell and offline status.
 
-The permanently labeled design profiles are illustrative, not actual traders.
+The running app has no built-in sample profiles, rankings, or local preview follows.
+It reads registrations and rankings from the API and shows unavailable states when
+real sources are missing. Static design studies remain under `design/` only.
+Legacy preview identities are excluded; real legacy ghosts carry forward to the new namespace.
 Ghost parameters are saved in this browser; performance replay awaits recorded
 trades and quotes. Live trading, funding, login, matching, actual positions,
 settlement and provider proofs are not connected in this milestone.
@@ -48,8 +51,12 @@ The worker currently runs Base network probes. Pass activation and order submiss
 remain gated until the ENS matcher, provider signer and receipt verification exist.
 
 The [demo checklist](docs/DEMO-CHECKLIST.md) tracks all functionality and evidence.
+The [original demo plan](docs/DEMO-PLAN.md) remains the full scope;
+[demo readiness](docs/DEMO-READINESS.md) separates implementation gaps from credentials.
+Run `npm run demo:check` for a read-only preflight that fails on missing live gates.
 The [infrastructure runbook](docs/INFRASTRUCTURE.md) records local checks, deployment
 commands and missing live gates. Target: `ethonline-476311`, `us-central1`; nothing
-has been deployed or pushed, and no SQL instance exists. Read-only Rabdi chain/schema probes and an unsigned Flash quote succeeded; no funds moved.
+has been deployed to those providers, and no SQL instance exists. Source commits
+have been pushed to the feature branch. Read-only Rabdi chain/schema probes and an unsigned Flash quote succeeded; no funds moved.
 See [the Arkiv storage contract](docs/ARKIV-STORAGE.md) for coordination and retention limits.
 Portrait provenance and font licenses are in [docs/ASSETS.md](docs/ASSETS.md).
