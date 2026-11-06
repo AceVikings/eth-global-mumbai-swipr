@@ -8,6 +8,7 @@ FROM deps AS build
 COPY *.ts tsconfig.json ./
 COPY bots ./bots
 COPY providers ./providers
+COPY trading ./trading
 COPY social ./social
 COPY ghosts ./ghosts
 COPY passes ./passes
