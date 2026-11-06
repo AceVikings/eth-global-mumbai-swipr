@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { formatUnits } from 'viem';
 import { useSession, WalletBalance } from '../auth/Session';
 import type { BotProfile } from '../contracts/bots';
 import type { SeatPass } from '../contracts/seats';
@@ -15,6 +16,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
   const [quote, setQuote] = useState<TradeQuote | null>(null), [order, setOrder] = useState<TradeStatus | null>(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState(''), [uncertain, setUncertain] = useState(false);
   const controller = useRef(new AbortController());
+  const statusPending = useRef(false), statusVersion = useRef(0);
   const wallet = session.address?.toLowerCase();
   const selected = profiles.find(p => p.id === profileId);
   const own = selected?.owner.toLowerCase() === wallet;
@@ -34,17 +36,29 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
   }, [wallet, session.authenticated, initialProfileId]);
   useEffect(() => { setQuote(null); setError(''); setSource(''); setPrice(''); if (selected) setAsset(selected.assets[0]); }, [profileId]);
   const checkStatus = async (orderId: string, signal: AbortSignal) => {
-    const result = await tradeRequest<TradeStatus>(session, `status?wallet=${session.address}&orderId=${encodeURIComponent(orderId)}`, undefined, signal);
-    if (!signal.aborted) setOrder(result);
-    return result;
+    const version = ++statusVersion.current;
+    statusPending.current = true;
+    try {
+      const result = await tradeRequest<TradeStatus>(session, `status?wallet=${session.address}&orderId=${encodeURIComponent(orderId)}`, undefined, signal);
+      if (!signal.aborted && version === statusVersion.current) {
+        setOrder(result); setError('');
+        if (result.fills.length || ['FILLED', 'CANCELLED', 'REJECTED', 'TERMINATED'].includes(result.status.replace(/^ORDER_STATUS_/, '').toUpperCase())) setMessage('');
+      }
+      return result;
+    } finally { if (version === statusVersion.current) statusPending.current = false; }
   };
   useEffect(() => {
     if (!order) return;
     const status = order.status.replace(/^ORDER_STATUS_/, '').toUpperCase();
     if (order.unverifiedFills === 0 && (['CANCELLED', 'REJECTED', 'TERMINATED'].includes(status) || (status === 'FILLED' && order.fills.length > 0))) return;
     const signal = controller.current.signal;
-    const timer = window.setInterval(() => { if (document.visibilityState !== 'visible') return; void checkStatus(order.orderId, signal).catch(e => { if (!signal.aborted) setError(e instanceof Error ? e.message : 'Could not refresh the order.'); }); }, 5000);
-    return () => window.clearInterval(timer);
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || statusPending.current) return;
+      void checkStatus(order.orderId, signal).catch(e => { if (!signal.aborted) setError(e instanceof Error ? e.message : 'Could not refresh the order.'); });
+    };
+    const timer = window.setInterval(refresh, 5000);
+    window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
   }, [order?.orderId, order?.status, order?.fills.length, order?.unverifiedFills, wallet]);
   const stopIfDeclined = (e: unknown) => {
     const text = e instanceof Error ? e.message : 'The wallet request did not complete.';
@@ -93,7 +107,7 @@ export default function TradeDesk({ initialProfileId = '' }: { initialProfileId?
     {message && <p role="status">{message}</p>}{error && <p className="trade-error" role="alert">{error}</p>}
     {order && <section className="trade-review"><h2>Your order</h2><p><code>{order.orderId}</code></p><p>{order.status.replace(/^ORDER_STATUS_/, '').toLowerCase().replaceAll('_', ' ')}</p>
       {!order.fills.length && <p>No verified fill yet. Submission does not mean the trade filled.</p>}
-      {order.fills.map(fill => <p key={fill.txHash}>Bought {fill.asset} · {(Number(fill.usdcMicros) / 1e6).toFixed(2)} USDC · <a target="_blank" rel="noreferrer" href={`https://basescan.org/tx/${fill.txHash}`}>Verified on Base</a></p>)}
+      {order.fills.map(fill => <p key={fill.txHash}>Bought {formatUnits(BigInt(fill.assetUnits), fill.asset === 'cbBTC' ? 8 : 18)} {fill.asset} · {(Number(fill.usdcMicros) / 1e6).toFixed(2)} USDC · <a target="_blank" rel="noreferrer" href={`https://basescan.org/tx/${fill.txHash}`}>Verified on Base</a></p>)}
       {order.unverifiedFills > 0 && <p>Some provider fills are still waiting for receipt verification.</p>}
     </section>}
     <form className="trade-lookup" onSubmit={async e => {
