@@ -104,3 +104,23 @@ Cut order: stop-trigger cut-in, teammate ghost, reach-count, notary copy.
 | Arkiv MCP `check_submission`; `check-no-encrypted-refs.mjs` | Output | BLOCKED |
 | Swarm postage batch TTL ≥ 4 weeks; both gateways up ≥ 4 weeks | Batch id, uptime URL | BLOCKED |
 | Docs truthful: preview fixtures labeled, unavailable ≠ zero, no claimed live setup | Review | WEB ✓ for website; re-check at submission |
+
+## 5. Social app and bot integration additions
+
+| Item | Evidence | Status |
+|---|---|---|
+| Trader and copier leaderboard, Everyone / Following, percentage / dollar sort | Ranking unit tests and HTTP contract tests | LOCAL ✓; live fill reader PENDING |
+| Profit definition: closed net proceeds minus entry cost, fees and profit share; weighted by entry cost | Bigint ranking tests | LOCAL ✓; ghosts and proposals excluded |
+| Social follow/unfollow independent of paid Copy Pass | Signed EIP-191 real-wallet test fixtures, Arkiv journal double | LOCAL ✓; funded Arkiv write BLOCKED |
+| Simpler leaderboard visual direction | LEADERBOARD-DESIGN.md; user selection | PENDING: image-first redesign requested |
+| Trader-owned bot profile, operator proposals, REST + MCP | Bot domain, gateway and HTTP contract tests | LOCAL ✓; funded registry write BLOCKED |
+| Google login app and EVM wallet configuration | Swipr Privy development app, local origins configured | Configured; real app login PENDING |
+| Clean install, TypeScript, tests, production build | Local logs under .context; 153 tests / 18 files | LOCAL ✓ (6 November 2026) |
+| Public-repo secret scan and small commits | Gitleaks current branch history; local commit size audit | LOCAL ✓; all new commits <= 1,000 changed lines |
+
+Dependency audit still reports 28 transitive advisories (12 moderate, 16 high).
+The SDK dependency graph needs a compatible remediation pass before production;
+passing builds do not clear those advisories. An independent manual review found
+write-quota fairness and transport-rate-limit hardening still needed before live rollout.
+Code review: skipped (ce-code-review unavailable) — native review dispatch was unavailable;
+a separate Claude CLI context completed a manual integration review instead.
