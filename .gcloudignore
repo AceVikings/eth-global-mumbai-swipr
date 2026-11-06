@@ -1,0 +1,12 @@
+.gcloudignore
+.git
+.github
+#!include:.gitignore
+node_modules/
+dist/
+.context/
+.tokensave/
+.playwright-cli/
+.env
+.env.*
+gha-creds-*.json

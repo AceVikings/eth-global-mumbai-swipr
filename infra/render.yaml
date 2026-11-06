@@ -1,10 +1,12 @@
 # Render Blueprint for the static frontend only (backend: Cloud Run, see docs/INFRASTRUCTURE.md).
-# Blueprint path: infra/render.yaml. Not applied: no Render service exists yet.
+# Equivalent configuration for the swipr-web static site created through the Render API.
 services:
   - type: web
     runtime: static
     name: swipr-web
-    buildCommand: npm ci && npm run build
+    branch: main
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci && npm run build && npm run check:bundle
     staticPublishPath: dist
     pullRequestPreviewsEnabled: false
     envVars:
