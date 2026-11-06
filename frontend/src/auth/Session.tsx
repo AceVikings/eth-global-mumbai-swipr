@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { PrivyProvider, useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
+import { PrivyProvider, useExportWallet, useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
 import type { ConnectedWallet, PrivyClientConfig } from '@privy-io/react-auth';
 import { getAddress, isAddress, recoverMessageAddress, toHex } from 'viem';
 import { base } from 'viem/chains';
@@ -27,6 +27,7 @@ export type Session = {
   /** Fresh Privy access token, kept in memory only. Null when signed out. */
   getAccessToken: () => Promise<string | null>;
   getArkivWallet: () => Promise<{ address: Address; provider: EIP1193Provider }>;
+  exportWallet: () => Promise<void>;
 };
 
 const appId = (import.meta.env.VITE_PRIVY_APP_ID as string | undefined)?.trim() || '';
@@ -49,6 +50,7 @@ const unconfigured: Session = {
   signMessage: async () => { throw new Error(notConfigured); },
   getAccessToken: async () => null,
   getArkivWallet: async () => { throw new Error(notConfigured); },
+  exportWallet: async () => { throw new Error(notConfigured); },
 };
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -79,6 +81,7 @@ function PrivySession({ children }: { children: ReactNode }) {
     onError: code => { if (code !== 'exited_auth_flow') setError('Sign-in did not complete. Try again.'); },
   });
   const { logout: privyLogout } = useLogout();
+  const { exportWallet: openExport } = useExportWallet();
 
   // Only wallets Privy has linked to this user count; the server checks the same list.
   const linked = useMemo(() => new Set((user?.linkedAccounts ?? [])
@@ -131,14 +134,21 @@ function PrivySession({ children }: { children: ReactNode }) {
     return { address: signer, provider: provider as EIP1193Provider };
   }, []);
 
+  const exportWallet = useCallback(async () => {
+    const target = current.current.wallet;
+    if (!target || !isEmbedded(target)) throw new Error('Export this wallet through your wallet app.');
+    // Privy renders the key in its own isolated iframe; Swipr never receives it.
+    await openExport({ address: target.address });
+  }, [openExport]);
+
   const google = user?.google;
   const email = user?.email?.address;
   const value = useMemo<Session>(() => ({
     configured: true, ready, authenticated, error, login, logout, signMessage,
     address: authenticated ? address : null,
     userLabel: authenticated ? google?.name || google?.email || email || null : null,
-    getAccessToken: accessToken, getArkivWallet,
-  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getArkivWallet]);
+    getAccessToken: accessToken, getArkivWallet, exportWallet,
+  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getArkivWallet, exportWallet]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
@@ -205,6 +215,10 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
         ? <button type="button" className="session-btn session-btn-quiet" onClick={signOut} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button>
         : <button type="button" className="session-btn" onClick={session.login} disabled={!ready}>Sign in</button>)}
       {authenticated && address && <div className="session-delete">
+        <button type="button" className="session-btn session-btn-quiet" disabled={busy || deleting} onClick={async () => {
+          try { await session.exportWallet(); }
+          catch (e) { setDeletionStatus(e instanceof Error ? e.message : 'Wallet export could not open.'); }
+        }}>Export wallet</button>
         <button type="button" className="session-btn session-btn-quiet" disabled={busy || deleting} onClick={async () => {
           if (!window.confirm('Delete your Swipr account and wallet-owned Swipr data? Public blockchain history remains. Export your wallet first if it holds funds. This cannot be undone.')) return;
           setDeleting(true);
