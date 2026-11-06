@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { PrivyProvider, useExportWallet, useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
+import { PrivyProvider, useExportWallet, useLogin, useLogout, usePrivy, useSendTransaction, useWallets } from '@privy-io/react-auth';
 import type { ConnectedWallet, PrivyClientConfig } from '@privy-io/react-auth';
 import { getAddress, isAddress, recoverMessageAddress, toHex } from 'viem';
 import { base } from 'viem/chains';
 import type { EIP1193Provider } from 'viem';
 import { arkivChain, deleteWalletAccount } from '../lib/arkiv';
+import { arkivWalletTransaction } from './arkiv-transaction';
 import './session.css';
 
 export type Address = `0x${string}`;
@@ -82,6 +83,7 @@ function PrivySession({ children }: { children: ReactNode }) {
   });
   const { logout: privyLogout } = useLogout();
   const { exportWallet: openExport } = useExportWallet();
+  const { sendTransaction } = useSendTransaction();
 
   // Only wallets Privy has linked to this user count; the server checks the same list.
   const linked = useMemo(() => new Set((user?.linkedAccounts ?? [])
@@ -131,8 +133,18 @@ function PrivySession({ children }: { children: ReactNode }) {
     await target.switchChain(arkivChain.id);
     if (current.current.address !== signer) throw new Error('Your account changed. Try again.');
     const provider = await target.getEthereumProvider();
-    return { address: signer, provider: provider as EIP1193Provider };
-  }, []);
+    const scopedProvider = isEmbedded(target) ? {
+      request: async (input: { method: string; params?: unknown[] }) => {
+        if (input.method !== 'eth_sendTransaction') return provider.request(input as Parameters<typeof provider.request>[0]);
+        if (current.current.address !== signer) throw new Error('Your account changed. Try again.');
+        const params = input.params as unknown[] | undefined;
+        const prepared = arkivWalletTransaction(params?.[0], signer);
+        const result = await sendTransaction(prepared.transaction, { address: signer, uiOptions: { showWalletUIs: prepared.showWalletUIs } });
+        return result.hash;
+      },
+    } : provider;
+    return { address: signer, provider: scopedProvider as EIP1193Provider };
+  }, [sendTransaction]);
 
   const exportWallet = useCallback(async () => {
     const target = current.current.wallet;

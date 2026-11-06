@@ -278,10 +278,9 @@ export default function BotStudio({ onChanged }: Props = {}) {
                 </div>
                 {errors.assets && <small id="bs-e-assets" className="bs-error">{errors.assets}</small>}
               </fieldset>
-              <p className="bs-hint">Approve the Arkiv transaction in your wallet to save your profile.</p>
               <div className="bs-row-actions">
                 <button type="submit" className="bs-btn" disabled={locked || !online || !account}>
-                  {busy === 'save' ? 'Signing…' : account ? 'Sign & save' : 'Sign in to save'}
+                  {busy === 'save' ? 'Saving…' : account ? 'Save profile' : 'Sign in to save'}
                 </button>
                 <button type="button" className="bs-btn bs-btn-quiet" disabled={!!busy}
                   onClick={() => { if (draftSource !== 'edit') saveLocalDraft(null); setDraft(null); setErrors({}); }}>
