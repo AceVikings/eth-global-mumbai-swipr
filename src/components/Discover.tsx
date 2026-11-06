@@ -37,16 +37,19 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
   const drag = useRef<{ id: number; x: number; y: number; t: number; axis: 'x' | 'y' | null } | null>(null);
   const proofsOpener = useRef<HTMLElement | null>(null);
   const busy = useRef(false);
+  const exitTimer = useRef<number | undefined>(undefined);
   const dragged = useRef(false);
 
   const trader = traders[index] as Trader | undefined;
+
+  useEffect(() => () => window.clearTimeout(exitTimer.current), []);
 
   useEffect(() => {
     if (index > traders.length) setIndex(traders.length);
   }, [index, traders.length]);
 
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || busy.current) return;
     const id = window.setTimeout(() => setToast(null), TOAST_MS);
     return () => window.clearTimeout(id);
   }, [toast]);
@@ -58,6 +61,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
     } else {
       setToast({ trader: t, index: i });
     }
+    dragged.current = false;
     setIndex(i + 1);
     setDx(0);
     setExiting(null);
@@ -69,11 +73,11 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
     busy.current = true;
     if (reducedMotion()) return act(dir, trader, index);
     setExiting(dir);
-    window.setTimeout(() => act(dir, trader, index), EXIT_MS);
+    exitTimer.current = window.setTimeout(() => act(dir, trader, index), EXIT_MS);
   }, [act, index, trader]);
 
   const undo = () => {
-    if (!toast) return;
+    if (!toast || busy.current) return;
     setIndex(toast.index);
     setToast(null);
   };
@@ -198,19 +202,19 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
 
           <div className="dsc-controls" role="group" aria-label="Decide on this trader">
             <div className="dsc-ctl">
-              <button type="button" aria-label={trader ? `Pass on ${trader.name}` : 'Pass'} disabled={!trader} onClick={() => decide('left')}>
+              <button type="button" aria-label={trader ? `Pass on ${trader.name}` : 'Pass'} disabled={!trader || !!exiting} onClick={() => decide('left')}>
                 <Icon name="x" />
               </button>
               <span aria-hidden="true">Pass</span>
             </div>
             <div className="dsc-ctl dsc-ctl-ghost">
-              <button type="button" aria-label={trader ? `Ghost-copy ${trader.name} for free` : 'Ghost copy'} disabled={!trader} onClick={() => decide('right')}>
+              <button type="button" aria-label={trader ? `Ghost-copy ${trader.name} for free` : 'Ghost copy'} disabled={!trader || !!exiting} onClick={() => decide('right')}>
                 <Icon name="ghost" size={28} />
               </button>
               <span aria-hidden="true">Ghost copy</span>
             </div>
             <div className="dsc-ctl">
-              <button type="button" aria-label={trader ? `Make it real: set up a Copy Pass with ${trader.name}` : 'Make it real'} disabled={!trader} onClick={() => trader && onReal(trader)}>
+              <button type="button" aria-label={trader ? `Make it real: set up a Copy Pass with ${trader.name}` : 'Make it real'} disabled={!trader || !!exiting} onClick={() => trader && onReal(trader)}>
                 <Icon name="star" />
               </button>
               <span aria-hidden="true">Make it real</span>
@@ -222,7 +226,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
               <div className="dsc-toast dsc-toast-pass">
                 <Icon name="x" size={18} />
                 <span>Passed on {toast.trader.name}</span>
-                <button type="button" onClick={undo}><Icon name="undo" size={16} />Undo</button>
+                <button type="button" disabled={!!exiting} onClick={undo}><Icon name="undo" size={16} />Undo</button>
               </div>
             )}
           </div>
