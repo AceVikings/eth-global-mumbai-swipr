@@ -1,3 +1,4 @@
+import { EnsIdentity } from './EnsProfile';
 import { short as shortWallet } from '../lib/bots';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
@@ -315,7 +316,6 @@ function Profile({ trader, perTradeUsd, onProofs }: { trader: Trader; perTradeUs
 }
 
 const PROOFS: [string, string][] = [
-  ['ENS name', 'Resolution not verified for this profile.'],
   ['Sealed trade history (Arkiv)', 'No sealed entities read. Nothing to query yet.'],
   ['Flash orders and receipts', 'No orders or fills recorded for this profile.'],
   ['Archive (Swarm)', 'No archived receipt available.'],
@@ -350,7 +350,7 @@ function ProofSheet({ trader, onClose }: { trader: Trader; onClose: () => void }
           <h2 id="dsc-proofs-title">{trader.name}’s proofs</h2>
           <button type="button" className="dsc-close" aria-label="Close proofs" onClick={onClose}><Icon name="x" size={20} /></button>
         </div>
-        <p className="dsc-note">The owner registered this bot through a wallet signature. ENS identity, performance and execution proofs are not verified by registration.</p>
+        {trader.profileId && <EnsIdentity profileId={trader.profileId} name={trader.ens || undefined} />}
         {trader.ens && <div className="dsc-ens">
           <code>{trader.ens}</code>
           <button type="button" className="dsc-btn dsc-btn-quiet" onClick={copy}>

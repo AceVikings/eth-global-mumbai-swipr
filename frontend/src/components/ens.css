@@ -1,0 +1,10 @@
+.ens-profile { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line, #e9e5ed); }
+.ens-profile summary, .ens-identity summary { cursor: pointer; font-weight: 600; }
+.ens-profile label { display: grid; gap: 8px; margin: 16px 0; font-size: 13px; }
+.ens-profile input { width: 100%; box-sizing: border-box; border: 1px solid #ded9e5; border-radius: 8px; padding: 12px 14px; font: inherit; background: white; }
+.ens-profile .bs-row-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.ens-identity { display: grid; gap: 8px; margin-top: 14px; font-size: 13px; overflow-wrap: anywhere; }
+.ens-identity > span { color: #62596c; }
+.ens-identity details { margin-top: 8px; }
+.ens-identity pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 12px; background: #f8f6fa; border-radius: 8px; }
+.ens-identity b { display: block; margin-top: 12px; }

@@ -50,7 +50,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   const trades = trading ?? (config.flashKey && config.privySecret && walletProfiles && seatDirectory ? createTradingService({ apiKey: config.flashKey, ticketSecret: config.privySecret, rpcUrl: config.baseRpc, profiles: walletProfiles, seats: seatDirectory, fetcher }) : null);
   const readBalance = walletBalance ?? createWalletBalance(config.baseRpc);
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
-  const names = ens ?? (walletProfiles ? createEnsService({rpcUrl:config.sepoliaRpc,profiles:walletProfiles,
+  const names = ens ?? (walletProfiles ? createEnsService({rpcUrl:config.sepoliaRpc,profiles:walletProfiles,rootName:config.ensRootName,
     stats: flash&&trades?createEnsStats(flash,trades):undefined}) : null);
   const listBots = async () => {
     if (walletProfiles) {
@@ -63,6 +63,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   };
   const writeSocial = executeSocial ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher, path: '/internal/social' });
   const writeBot = executeBot ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher });
+  const sponsorEns = createWorkerBridge({ url:config.workerUrl,production:process.env.NODE_ENV==='production',fetcher,path:'/internal/ens' });
   const fundWrite = fundGas ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher, path: '/internal/gas' });
   const forwardBot = async (input: unknown, authorization?: string) => {
     try {
@@ -134,12 +135,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
           return send(200,await names.text(wallet,{name:input.name,key:input.key,value:input.value}));
         }
         if(req.method==='POST'&&path==='/api/ens/publish')return send(200,await names.publish(wallet,input));
-        if(req.method==='POST'&&path==='/api/ens/register')return send(200,await names.registration(wallet,input));
-        if(req.method==='GET'&&path==='/api/ens/registration-ready'){
-          const hash=url.searchParams.get('commitment')||'';
-          if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new ApiError(400,'invalid_commitment','Invalid commitment.');
-          return send(200,await names.registrationReady(hash as `0x${string}`));
-        }
+        if(req.method==='POST'&&path==='/api/ens/onboard')return send(200,await sponsorEns({wallet,profileId:input.profileId}));
         if(req.method==='GET'&&path==='/api/ens/receipt'){
           const hash=url.searchParams.get('hash')||'';
           if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new ApiError(400,'invalid_hash','Invalid transaction.');

@@ -2,7 +2,7 @@ import { ApiError } from '../auth';
 
 /** Cloud Run IAM protects transport; wallet signatures authorize each command.
  * The public API never receives a journal signing key. */
-export function createWorkerBridge(options: { url?: string; production?: boolean; fetcher?: typeof fetch; path?: '/internal/bots' | '/internal/social' | '/internal/gas' }) {
+export function createWorkerBridge(options: { url?: string; production?: boolean; fetcher?: typeof fetch; path?: '/internal/bots' | '/internal/social' | '/internal/gas' | '/internal/ens' }) {
   const fetcher = options.fetcher ?? fetch;
   let target: URL | null = null;
   if (options.url) {

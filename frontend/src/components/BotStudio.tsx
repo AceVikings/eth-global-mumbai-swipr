@@ -1,3 +1,4 @@
+import EnsProfile, { EnsIdentity } from './EnsProfile';
 import { botPortrait, prepareProfileImage } from '../lib/profile-images';
 import { saveWalletProfile, haltWalletProfile } from '../lib/arkiv';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -214,6 +215,8 @@ export default function BotStudio({ onChanged, onTrade }: Props = {}) {
                     <div><dt>Operator</dt><dd title={p.operator}>{short(p.operator)}</dd></div>
                     <div><dt>Updated</dt><dd>{time(p.updatedAt)}</dd></div>
                   </dl>
+                  {!isOwner(p) && <EnsIdentity profileId={p.id} name={p.ensName} />}
+                  {isOwner(p) && <EnsProfile profile={p} onChanged={refresh} />}
                   {isOwner(p) && p.status === 'active' && (
                     <div className="bs-row-actions">
                       {onTrade && <button type="button" className="bs-btn" disabled={locked} onClick={() => onTrade(p.id)}>Trade</button>}

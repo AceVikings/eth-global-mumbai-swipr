@@ -1,15 +1,15 @@
+import { traderLabel } from './registrar';
 import {createPublicClient,http,encodeFunctionData,decodeFunctionResult,namehash,labelhash,zeroAddress,zeroHash,keccak256,toHex,parseAbi,type Hex,type Address} from 'viem';
 import {sepolia} from 'viem/chains';
 import {ApiError} from '../auth';
-import {ENS,ENS_CHAIN_ID,ENS_KEYS,ensName,dnsName,resolverAbi,universalAbi,profileAbi,registryAbi,factoryAbi,registrarAbi,type EnsStats,type EnsTransaction} from '../contracts/ens';
+import {ENS,ENS_CHAIN_ID,ENS_KEYS,ensName,dnsName,resolverAbi,universalAbi,profileAbi,registryAbi,subregistryAbi,type EnsStats,type EnsTransaction} from '../contracts/ens';
 import type {BotProfile} from '../contracts/bots';
 import {buildRecords,compareRecords} from './records';
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase();
 const fail=(message:string):never=>{throw new ApiError(409,'ens_blocked',message);};
 const tx=(to:Address,data:Hex):EnsTransaction=>({to,data,value:'0x0',chainId:ENS_CHAIN_ID});
-const YEAR=31536000n;
-const checkedName=(v:unknown)=>{try{return ensName(v);}catch{throw new ApiError(400,'invalid_ens_name','Enter a second-level Sepolia .eth name.');}};
-export function createEnsService(o:{rpcUrl:string;profiles:()=>Promise<BotProfile[]>;stats?:(p:BotProfile)=>Promise<EnsStats>;client?:ReturnType<typeof createPublicClient>}){
+const checkedName=(v:unknown)=>{try{return ensName(v);}catch{throw new ApiError(400,'invalid_ens_name','Enter a Sepolia .eth name or subname.');}};
+export function createEnsService(o:{rpcUrl:string;rootName?:string;profiles:()=>Promise<BotProfile[]>;stats?:(p:BotProfile)=>Promise<EnsStats>;client?:ReturnType<typeof createPublicClient>}){
  const c=o.client??createPublicClient({chain:sepolia,transport:http(o.rpcUrl,{timeout:15000,retryCount:0})});
  const profile=async(id:unknown,wallet?:string)=>{
   const p=(await o.profiles()).find(p=>p.id===id);
@@ -25,15 +25,24 @@ export function createEnsService(o:{rpcUrl:string;profiles:()=>Promise<BotProfil
   return decodeFunctionResult({abi:profileAbi,functionName:fn,data:out}) as string;
  };
  const identity=async(name:string,wallet:string)=>{
-  await network();const token=await c.readContract({address:ENS.registry,abi:registryAbi,functionName:'getTokenId',args:[BigInt(labelhash(name.split('.')[0]))]});
-  const [owner,status,expiry,head]=await Promise.all([
-   c.readContract({address:ENS.registry,abi:registryAbi,functionName:'ownerOf',args:[token]}),
-   c.readContract({address:ENS.registry,abi:registryAbi,functionName:'getStatus',args:[token]}),
-   c.readContract({address:ENS.registry,abi:registryAbi,functionName:'getExpiry',args:[token]}),c.getBlock()]);
+  await network();
+  let holding:Address=ENS.registry,active=true,owner:Address=zeroAddress;
+  const head=await c.getBlock();
+  const labels=name.split('.').slice(0,-1).reverse();
+  for(let i=0;i<labels.length;i++){
+   const id=BigInt(labelhash(labels[i]));
+   const token=await c.readContract({address:holding,abi:registryAbi,functionName:'getTokenId',args:[id]});
+   const [current,status,expiry]=await Promise.all([
+    c.readContract({address:holding,abi:registryAbi,functionName:'ownerOf',args:[token]}),
+    c.readContract({address:holding,abi:registryAbi,functionName:'getStatus',args:[id]}),
+    c.readContract({address:holding,abi:registryAbi,functionName:'getExpiry',args:[id]})]);
+   active=active&&Number(status)===2&&expiry>head.timestamp;owner=current;
+   if(i<labels.length-1){holding=await c.readContract({address:holding,abi:subregistryAbi,functionName:'getSubregistry',args:[labels[i]]});if(holding===zeroAddress)fail('The ENS parent has no subregistry.');}
+  }
   const [resolver]=await c.readContract({address:ENS.universal,abi:universalAbi,functionName:'findResolver',args:[dnsName(name)]});
   if(resolver===zeroAddress)fail('This name has no resolver.');
   const address=await read(name);
-  return {owner,resolver,verified:Number(status)===2&&expiry>head.timestamp&&same(owner,wallet)&&same(address,wallet)};
+  return {owner,resolver,verified:active&&same(owner,wallet)&&same(address,wallet)};
  };
  const expected=async(p:BotProfile)=>{
   let stats:EnsStats|null=null;
@@ -52,7 +61,7 @@ export function createEnsService(o:{rpcUrl:string;profiles:()=>Promise<BotProfil
  return {
   async snapshot(profileId:unknown){const p=await profile(profileId);return expected(p);},
   async verify(profileId:unknown,input:unknown){
-   const p=await profile(profileId),name=checkedName(input??p.ensName);const found=await identity(name,p.owner);
+   const p=await profile(profileId),name=checkedName(input??p.ensName??`${traderLabel(p.id)}.${o.rootName||'swipr.eth'}`);const found=await identity(name,p.owner);
    const values=await Promise.all(ENS_KEYS.map(k=>read(name,k)));
    const records=Object.fromEntries(ENS_KEYS.map((k,i)=>[k,values[i]]));
    const timestamp=Date.parse(records['swipr.updatedAt']);
@@ -70,30 +79,6 @@ export function createEnsService(o:{rpcUrl:string;profiles:()=>Promise<BotProfil
    // Stats/profile records are generated by publish(), never caller-supplied claims.
    if(input.key.startsWith('swipr.'))fail('Use the trader publish action for verified Swipr records.');
    return {transaction:await prepare(checkedName(input.name),wallet,{[input.key]:input.value})};
-  },
-  async registration(wallet:Address,input:Record<string,unknown>){
-   await profile(input.profileId,wallet);await network();const name=checkedName(input.name),label=name.split('.')[0];
-   if(label.length<10)fail('Choose at least 10 characters for a test name.');
-   if(typeof input.secret!=='string'||!/^0x[0-9a-f]{64}$/i.test(input.secret))fail('Invalid registration secret.');
-   if(Number(await c.readContract({address:ENS.registry,abi:registryAbi,functionName:'getStatus',args:[BigInt(labelhash(label))]}))!==0)fail('This test name is already registered or reserved.');
-   const calls=[60n,2147492101n].map(coin=>encodeFunctionData({abi:resolverAbi,functionName:'setAddress',args:[dnsName(name),coin,wallet]}));
-   const init=encodeFunctionData({abi:resolverAbi,functionName:'initialize',args:[[{account:wallet,roleBitmap:BigInt('0x'+'1'.repeat(64))}],calls]});
-   const salt=BigInt(keccak256(toHex(`${name}:${wallet.toLowerCase()}`)));
-   const resolver=await c.readContract({address:ENS.factory,abi:factoryAbi,functionName:'predictProxyAddress',args:[wallet,salt]});
-   const deployed=await c.getCode({address:resolver});
-   const args=[label,wallet,input.secret as Hex,zeroAddress,resolver,YEAR,zeroHash] as const;
-   const commitment=await c.readContract({address:ENS.registrar,abi:registrarAbi,functionName:'makeCommitment',args});
-   const tokenAbi=parseAbi(['function mint(address,uint256)','function approve(address,uint256) returns (bool)']);
-   return {name,resolver,commitment,transactions:[
-    tx(ENS.paymentToken,encodeFunctionData({abi:tokenAbi,functionName:'mint',args:[wallet,100000000n]})),
-    tx(ENS.paymentToken,encodeFunctionData({abi:tokenAbi,functionName:'approve',args:[ENS.registrar,100000000n]})),
-    ...(!deployed||deployed==='0x'?[tx(ENS.factory,encodeFunctionData({abi:factoryAbi,functionName:'deployProxy',args:[ENS.resolverImpl,salt,init]}))]:[]),
-    tx(ENS.registrar,encodeFunctionData({abi:registrarAbi,functionName:'commit',args:[commitment]})),
-   ],reveal:tx(ENS.registrar,encodeFunctionData({abi:registrarAbi,functionName:'register',args:[...args.slice(0,6),ENS.paymentToken,zeroHash] as any}))};
-  },
-  async registrationReady(commitment:Hex){
-   await network();const [at,age,head]=await Promise.all([c.readContract({address:ENS.registrar,abi:registrarAbi,functionName:'commitmentAt',args:[commitment]}),c.readContract({address:ENS.registrar,abi:registrarAbi,functionName:'MIN_COMMITMENT_AGE'}),c.getBlock()]);
-   return {ready:at>0n&&head.timestamp>at+age,readyAt:Number(at+age+1n)};
   },
   async receipt(hash:Hex){await network();const r=await c.getTransactionReceipt({hash});return {status:r.status,confirmed:(await c.getBlockNumber({cacheTime:0}))>=r.blockNumber+1n};},
  };

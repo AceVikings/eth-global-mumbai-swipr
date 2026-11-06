@@ -1,3 +1,4 @@
+import { ensName } from '../contracts/ens';
 import { profileImage } from '../contracts/profile-image';
 import { BOT_ASSETS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES, botMessage } from '../contracts/bots';
 import type { BotAction, BotAsset, BotProfile, BotsListResponse, BotStrategy, BotStyle, ProfileUpsertData, SignedBotAction } from '../contracts/bots';
@@ -10,7 +11,7 @@ export type Integration = { audience: string; mcpUrl: string; apiUrl: string; to
 export type ProfileDraft = {
   profileId?: string; operator: string; name: string; bio: string;
   style: BotStyle; strategy: BotStrategy; assets: BotAsset[];
-  publicSeats?: number; privateSeats?: number; image?: string;
+  publicSeats?: number; privateSeats?: number; image?: string; ensName?: string;
 };
 
 export const STYLES = BOT_STYLES;
@@ -98,6 +99,7 @@ export function validateDraft(d: ProfileDraft): Partial<Record<keyof ProfileDraf
   if (d.bio.trim().length > BOT_LIMITS.bioMax) errors.bio = `Bio must be ${BOT_LIMITS.bioMax} characters or fewer.`;
   if (!d.assets.length) errors.assets = 'Choose at least one asset.';
   for (const key of ['publicSeats', 'privateSeats'] as const) if (!Number.isSafeInteger(d[key] ?? (key === 'publicSeats' ? 20 : 0)) || Number(d[key]) < 0 || Number(d[key]) > 100) errors[key] = 'Choose 0–100 seats.';
+  try { if (d.ensName) ensName(d.ensName); } catch { errors.ensName = 'Enter a valid Sepolia .eth name.'; }
   return errors;
 }
 
@@ -106,6 +108,7 @@ export const upsertData = (d: ProfileDraft): ProfileUpsertData => ({
   ...(d.profileId ? { profileId: d.profileId } : {}),
   operator: d.operator.trim().toLowerCase(), name: d.name.trim(), bio: d.bio.trim(),
   style: d.style, strategy: d.strategy, assets: BOT_ASSETS.filter(a => d.assets.includes(a)),
+  ...(d.ensName ? { ensName: ensName(d.ensName) } : {}),
   ...(d.image === undefined ? {} : { image: profileImage(d.image) }),
   ...(d.publicSeats === undefined ? {} : { publicSeats: d.publicSeats }),
   ...(d.privateSeats === undefined ? {} : { privateSeats: d.privateSeats }),
@@ -115,7 +118,7 @@ export const emptyDraft = (operator = ''): ProfileDraft =>
   ({ operator, name: '', bio: '', style: 'Balanced', strategy: 'rule-based', assets: ['WETH'], publicSeats: 20, privateSeats: 0 });
 
 export const draftFrom = (p: BotProfile): ProfileDraft =>
-  ({ profileId: p.id, operator: p.operator, name: p.name, bio: p.bio, image: p.image ?? '', style: p.style, strategy: p.strategy, assets: [...p.assets], publicSeats: p.publicSeats ?? 20, privateSeats: p.privateSeats ?? 0 });
+  ({ profileId: p.id, operator: p.operator, name: p.name, bio: p.bio, image: p.image ?? '', ensName: p.ensName, style: p.style, strategy: p.strategy, assets: [...p.assets], publicSeats: p.publicSeats ?? 20, privateSeats: p.privateSeats ?? 0 });
 
 const DRAFT_KEY = 'swipr.bot-draft.v1';
 export function loadLocalDraft(): ProfileDraft | null {

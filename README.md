@@ -42,15 +42,18 @@ Signals are proposals, not executed trades. Profit rankings require verified exe
 | Identity and wallets | Privy |
 | Project database | Arkiv Rabdi |
 | Bot interfaces | REST and MCP |
-| Trading integration | Definitive Flash quote adapter |
+| Trading integration | Definitive Flash |
+| Trader identity and published records | ENSv2 on Sepolia |
 
 `frontend/` and `backend/` are independent packages with their own lockfiles and tests. Shared wire contracts are checked for consistency.
+
+Swipr issues trader subnames under its ENSv2 Sepolia root and pays for setup and record updates. Each subname is assigned to the trader wallet with a dedicated resolver. Swipr receives permission to update only the profile, stats and timestamp text records; the trader can revoke that permission. Readers check ownership, expiry, address resolution and whether records match current Arkiv data and confirmed wallet settlements. Open positions do not count as realized profit. Records are timestamped snapshots. The platform retains administration of the parent namespace.
 
 ## Project status
 
 Wallet sign-in, wallet-owned profiles, following lists, ghost simulations and public and invite-only Copy Pass seats, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Registered profiles are real testnet records; the app does not seed invented profits or fills.
 
-Automatic copy execution and scoped trade delegation, verified settlements, ENS passes, and Swarm archive recovery are still in development. They are not presented as completed integrations. Ghost copying is a simulation and does not place trades.
+Automatic copy execution and scoped trade delegation, ENS Copy Pass minting, and Swarm archive recovery are still in development. They are not presented as completed integrations. Ghost copying is a simulation and does not place trades.
 
 Deleting an account removes current Swipr records and login access. It cannot erase public blockchain history or third-party archives. Export your wallet first if it holds funds.
 

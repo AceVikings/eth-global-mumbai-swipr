@@ -111,9 +111,10 @@ jobs:
           ARKIV_ACCESS_KEY: ${{ secrets.ARKIV_ACCESS_KEY }}
           ARKIV_RELAYER_PK: ${{ secrets.ARKIV_RELAYER_PK }}
           ARKIV_MAINTAINER_PK: ${{ secrets.ARKIV_MAINTAINER_PK }}
+          ENS_REGISTRAR_PK: ${{ secrets.ENS_REGISTRAR_PK }}
         run: |
           set -euo pipefail
-          for mapping in PRIVY_APP_ID:swipr-privy-app-id PRIVY_APP_SECRET:swipr-privy-app-secret PRIVY_VERIFICATION_KEY:swipr-privy-verification-key FLASH_KEY_EXEC:swipr-flash-key-exec ARKIV_ACCESS_KEY:swipr-arkiv-access-key ARKIV_RELAYER_PK:swipr-arkiv-relayer-pk ARKIV_MAINTAINER_PK:swipr-arkiv-maintainer-pk; do
+          for mapping in PRIVY_APP_ID:swipr-privy-app-id PRIVY_APP_SECRET:swipr-privy-app-secret PRIVY_VERIFICATION_KEY:swipr-privy-verification-key FLASH_KEY_EXEC:swipr-flash-key-exec ARKIV_ACCESS_KEY:swipr-arkiv-access-key ARKIV_RELAYER_PK:swipr-arkiv-relayer-pk ARKIV_MAINTAINER_PK:swipr-arkiv-maintainer-pk ENS_REGISTRAR_PK:swipr-ens-registrar-pk; do
             key="${mapping%%:*}"
             secret="${mapping#*:}"
             test -n "${!key}"
@@ -147,7 +148,7 @@ jobs:
             if [[ "$role" == worker ]]; then
               [[ "$FUNDING_START_NONCE" =~ ^[0-9]+$ ]]
               extra+=(--update-env-vars "ARKIV_FUNDING_ENABLED=true,ARKIV_FUNDING_START_NONCE=${FUNDING_START_NONCE}")
-              extra+=(--update-secrets "ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest")
+              extra+=(--update-secrets "ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest,ENS_REGISTRAR_PK=swipr-ens-registrar-pk:latest")
             fi
             gcloud run services update "$service" --project "$PROJECT_ID" --region "$REGION" \
               --image "$immutable_image" --update-labels "commit-sha=${COMMIT_SHA}" "${extra[@]}" --quiet

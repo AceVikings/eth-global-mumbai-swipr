@@ -31,6 +31,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     privySecret: env.PRIVY_APP_SECRET, privyVerificationKey: env.PRIVY_VERIFICATION_KEY,
     flashKey: env.FLASH_KEY_EXEC || env.FLASH_API_KEY,
     baseRpc: env.BASE_RPC || env.BASE_RPC_URL || 'https://mainnet.base.org',
+    ensRootName: env.ENS_ROOT_NAME || 'swipr.eth', ensRegistrarKey: env.ENS_REGISTRAR_PK,
     sepoliaRpc: env.SEPOLIA_RPC || 'https://ethereum-sepolia-rpc.publicnode.com',
     arkivMaintainerKey: env.ARKIV_MAINTAINER_PK,
     beeUrl: env.BEE_URL, swarmBatchId: env.SWARM_BATCH_ID,

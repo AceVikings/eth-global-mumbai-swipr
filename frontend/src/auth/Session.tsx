@@ -129,11 +129,14 @@ function PrivySession({ children }: { children: ReactNode }) {
     try { return await getAccessToken(); } catch { return null; }
   }, [authenticated, getAccessToken]);
   const login = useCallback(() => { setError(null); openLogin(); }, [openLogin]);
-  const getBaseWallet = useCallback(async () => {
+  const getChainWallet = useCallback(async (chainId: number) => {
     const { address: signer, wallet: target } = current.current;
     if (!signer || !target) throw new Error('Sign in and wait for your wallet.');
-    await target.switchChain(base.id);
+    await target.switchChain(chainId);
     const provider = await target.getEthereumProvider();
+    if (BigInt(await provider.request({ method: 'eth_chainId' })) !== BigInt(chainId)) {
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${chainId.toString(16)}` }] });
+    }
     if (current.current.address !== signer) throw new Error('Your account changed.');
     const scoped = { request: async (input: { method: string; params?: unknown }) => {
       if (current.current.address !== signer) throw new Error('Your account changed.');
@@ -141,6 +144,7 @@ function PrivySession({ children }: { children: ReactNode }) {
     } };
     return { address: signer, provider: scoped as EIP1193Provider };
   }, []);
+  const getBaseWallet = useCallback(() => getChainWallet(base.id), [getChainWallet]);
   const getArkivWallet = useCallback(async () => {
     const { address: signer, wallet: target } = current.current;
     if (!signer || !target) throw new Error('Sign in and wait for your wallet.');

@@ -77,7 +77,7 @@ export default function App() {
     void getBots(controller.signal).then(value => {
       if (controller.signal.aborted) return;
       setRegisteredTraders(value.profiles.filter(p => p.status === "active").map(p => ({
-        id: p.id, profileId: p.id, name: p.name, ens: "",
+        id: p.id, profileId: p.id, name: p.name, ens: p.ensName || "",
         bio: p.bio, style: p.style, avatar: botPortrait(p), kind: "agent" as const, owner: p.owner,
         operator: p.operator, source: "registered" as const,
       })));
