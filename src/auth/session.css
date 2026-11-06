@@ -1,0 +1,32 @@
+/* Session panel: Google sign-in, linked wallet and status. Uses the tokens from styles.css. */
+.session-panel {
+  display: grid; gap: 12px; min-width: 0; padding: 16px; border-radius: 16px;
+  background: var(--surface, #fff); border: 1px solid var(--line, #e4e0d9); color: var(--ink, #242322);
+}
+.session-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.session-head h2 { margin: 0; font: 700 16px/22px Manrope, system-ui, sans-serif; }
+.session-pill {
+  display: inline-flex; align-items: center; min-height: 24px; padding: 2px 10px; border-radius: 999px;
+  background: var(--ghost-soft, #f0edf7); color: var(--ghost, #6a56a4); font-size: 12px; line-height: 18px; font-weight: 600;
+}
+.session-pill.is-on { background: var(--gain-soft, #eaf3ec); color: var(--gain, #23634e); }
+.session-facts { display: grid; gap: 6px; margin: 0; }
+.session-facts div { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
+.session-facts dt { color: var(--muted, #706c67); font-size: 13px; }
+.session-facts dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.session-facts code { font: 600 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.session-error {
+  margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--coral-soft, #fbeae6);
+  color: var(--coral-dark, #ad302c); font-size: 13px; line-height: 19px; font-weight: 600;
+}
+.session-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px;
+  border: 0; border-radius: 12px; background: var(--ink, #242322); color: #fff; font-weight: 600;
+  transition: background-color 140ms, opacity 140ms;
+}
+.session-btn:hover:not(:disabled) { background: #000; }
+.session-btn:disabled { opacity: .45; }
+.session-btn-quiet { background: var(--surface, #fff); color: var(--ink, #242322); box-shadow: inset 0 0 0 1px var(--line, #e4e0d9); }
+.session-btn-quiet:hover:not(:disabled) { background: var(--ghost-soft, #f0edf7); }
+.session-btn:focus-visible { outline: 3px solid var(--ghost, #6a56a4); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .session-btn { transition: none; } }

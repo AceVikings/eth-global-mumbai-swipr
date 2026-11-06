@@ -18,7 +18,8 @@ export const DEFAULT_TERMS: Terms = {
 export type Trader = {
   id: string; name: string; ens: string; bio: string;
   style: 'Steady' | 'Balanced' | 'Spicy'; avatar: string;
-  kind: 'human' | 'agent'; owner?: string;
+  kind: 'human' | 'agent'; owner?: string; source?: 'preview' | 'registered';
+  operator?: string; profileId?: string;
 };
 export type Ghost = {
   traderId: string; startedAt: number; perTradeUsd: number;
