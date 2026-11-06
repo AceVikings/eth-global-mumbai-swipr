@@ -64,6 +64,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     const directory = await options.seats(wallet, profiles);
     const seat = directory.passes.find(p => p.id === input.seatId && p.owner === wallet.toLowerCase() && p.traderId === profile!.id && p.status === 'joined');
     if (!seat || seat.terms.perTradeUsd < 5) fail('Join an available seat before copying this trader.');
+    if (seat!.terms.safetyNetBps > 0 || seat!.terms.mode === 'auto') fail('This pass requires protected or automatic execution. Those permissions are not ready; no order was submitted.');
     if (!input.sourceOrderId) fail('Choose a confirmed trader order to copy.');
     const source = await order(input.sourceOrderId!, profile!.owner);
     const token = source.row.targetAsset as { address?: unknown } | undefined;
@@ -92,7 +93,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       const vault = String(quote.typedData.message.vault);
       const [vaultCode, settlementCode] = await Promise.all([chain.getCode({ address: vault as Address }), chain.getCode({ address: FLASH_DOMAIN.verifyingContract })]);
       // An undeployed provider vault cannot be authenticated as an execution contract.
-      if (!vaultCode || vaultCode === '0x' || !settlementCode || settlementCode === '0x') fail('Flash has not provisioned this integration’s execution vault on Base. No signature was requested.');
+      if (!vaultCode || vaultCode === '0x' || !settlementCode || settlementCode === '0x') fail('Flash’s execution vault is unavailable on Base. No signature was requested.');
       validateTypedData(quote.typedData, intent, { now: now(), maxDeadline: expiresAt, expectedVault: vault });
       const raw = quote.raw as { evm?: { approveTx?: unknown; permitTypedData?: unknown }; fees?: { estimatedFeeNotional?: string } };
       if (raw.evm?.permitTypedData) fail('This rehearsal requires a direct, bounded token approval.');
