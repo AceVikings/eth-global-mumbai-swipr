@@ -1,6 +1,5 @@
 # Render Blueprint for the static frontend only (backend: Cloud Run, see docs/INFRASTRUCTURE.md).
-# Point the Blueprint path at infra/render.yaml, or copy this file to the repo root.
-# Not applied: no Render service exists until the team creates one.
+# Blueprint path: infra/render.yaml. Not applied: no Render service exists yet.
 services:
   - type: web
     runtime: static

@@ -1,5 +1,5 @@
 # One image for both backend processes: API (default) and worker (`npm run worker`).
-# Node 22; PostgreSQL via `pg`. Secrets arrive as runtime env, never at build time.
+# Node 22; Arkiv via its SDK. Secrets arrive as runtime env, never at build time.
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./

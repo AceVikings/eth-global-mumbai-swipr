@@ -1,7 +1,7 @@
-# Local stack only: PostgreSQL 16 + API + worker. Not a cloud deployment.
+# Local stack only: API + worker containers. No database container: Arkiv is the only store.
 # Run from the repo root: docker compose -f infra/docker-compose.yml up --build
-# Requires ../.env (cp .env.example .env); it supplies APP_MODE and server-side provider
-# secrets. Preview mode needs no provider values.
+# Requires ../.env (cp .env.example .env). Preview needs only ARKIV_WRITER_ADDRESS; the worker
+# writes to Arkiv only when ARKIV_RELAYER_PK is set, and the API never receives it here.
 name: swipr
 
 x-backend: &backend
@@ -10,54 +10,27 @@ x-backend: &backend
   init: true
   restart: unless-stopped
   env_file: [../.env]
-  depends_on:
-    postgres: { condition: service_healthy }
+x-probe: &probe { interval: 15s, timeout: 5s, start_period: 20s, retries: 3 }
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: swipr
-      POSTGRES_DB: swipr
-      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:-swipr-local-only}
-    ports: ["127.0.0.1:5432:5432"]
-    volumes: [pgdata:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U swipr -d swipr"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   api:
     <<: *backend
     command: ["npm", "run", "api"]
     environment:
       PORT: "8787"
       NODE_ENV: development  # allows the default http://127.0.0.1:5173 CORS origin
-      DATABASE_URL: postgres://swipr:${LOCAL_POSTGRES_PASSWORD:-swipr-local-only}@postgres:5432/swipr
+      ARKIV_RELAYER_PK: ""   # worker-only secrets; blanked even if .env holds them
+      ARKIV_MAINTAINER_PK: ""
     ports: ["127.0.0.1:8787:8787"]
-    healthcheck:
+    healthcheck: # /readyz and /ready are aliases, as are /healthz and /health
+      <<: *probe
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
-      interval: 15s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
 
   worker:
     <<: *backend
     command: ["npm", "run", "worker"]
-    environment:
-      PORT: "8788"
-      NODE_ENV: development
-      DATABASE_URL: postgres://swipr:${LOCAL_POSTGRES_PASSWORD:-swipr-local-only}@postgres:5432/swipr
+    environment: { PORT: "8788", NODE_ENV: development }
     ports: ["127.0.0.1:8788:8788"]
     healthcheck:
+      <<: *probe
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
-      interval: 15s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
-
-volumes:
-  pgdata:
