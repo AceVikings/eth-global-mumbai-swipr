@@ -5,10 +5,9 @@ import '../ghosts.css';
 type Props = {
   ghosts: Ghost[];
   traders: Trader[];
+  directoryStatus?: string;
   onReal: (t: Trader) => void;
   onRemove: (id: string) => void;
-  // Fixture profiles stay labeled until verified live data is configured.
-  preview?: boolean;
 };
 
 const HOUR = 60 * 60 * 1000;
@@ -33,8 +32,8 @@ function Avatar({ trader }: { trader?: Trader }) {
   return <span className="gh-avatar gh-monogram" aria-hidden="true">{trader ? trader.name.slice(0, 1) : '?'}</span>;
 }
 
-function Row({ ghost, trader, now, preview, onReal, onRemove }: {
-  ghost: Ghost; trader?: Trader; now: number; preview: boolean;
+function Row({ ghost, trader, now, onReal, onRemove }: {
+  ghost: Ghost; trader?: Trader; now: number;
   onReal: Props['onReal']; onRemove: Props['onRemove'];
 }) {
   const expired = isGhostExpired(ghost, now);
@@ -51,7 +50,6 @@ function Row({ ghost, trader, now, preview, onReal, onRemove }: {
           </p>
           <div className="gh-tags">
             <span className="gh-pill">{expired ? 'Expired · history' : 'Ghost · not executed'}</span>
-            {preview && trader && <span className="gh-pill gh-pill-quiet">Preview profile</span>}
           </div>
         </div>
       </div>
@@ -88,7 +86,7 @@ function Row({ ghost, trader, now, preview, onReal, onRemove }: {
   );
 }
 
-export default function Ghosts({ ghosts, traders, onReal, onRemove, preview = true }: Props) {
+export default function Ghosts({ ghosts, traders, directoryStatus, onReal, onRemove }: Props) {
   const now = Date.now();
   const byId = new Map(traders.map((t) => [t.id, t]));
   const sorted = [...ghosts].sort((a, b) =>
@@ -105,6 +103,7 @@ export default function Ghosts({ ghosts, traders, onReal, onRemove, preview = tr
         </p>
       </header>
 
+      {directoryStatus && <p className="gh-note" role="status">{directoryStatus}</p>}
       {sorted.length === 0 ? (
         <div className="gh-empty">
           <h2 className="gh-empty-title">No ghosts yet</h2>
@@ -123,7 +122,7 @@ export default function Ghosts({ ghosts, traders, onReal, onRemove, preview = tr
           <ul className="gh-list">
             {sorted.map((g) => (
               <Row key={g.traderId} ghost={g} trader={byId.get(g.traderId)} now={now}
-                preview={preview} onReal={onReal} onRemove={onRemove} />
+                onReal={onReal} onRemove={onRemove} />
             ))}
           </ul>
           <p className="gh-note">

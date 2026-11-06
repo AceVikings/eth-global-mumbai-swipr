@@ -256,15 +256,15 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
 }
 
 function Portrait({ trader }: { trader: Trader }) {
-  const monogram = trader.kind === 'agent' && !trader.avatar;
+  const monogram = !trader.avatar;
   return (
     <div className="dsc-photo">
       {monogram ? (
         <div className="dsc-monogram" aria-hidden="true">{trader.name.slice(0, 2)}</div>
       ) : (
-        <img src={trader.avatar} alt={`${trader.name}, preview profile photo`} draggable={false} />
+        <img src={trader.avatar} alt={`${trader.name}, profile photo`} draggable={false} />
       )}
-      <span className="dsc-preview-tag">{trader.source === 'registered' ? 'Registered bot · unverified history' : 'Preview profile'}</span>
+      <span className="dsc-preview-tag">{trader.source === 'registered' ? 'Registered bot · unverified history' : 'Registered profile · unverified history'}</span>
       <div className="dsc-photo-info">
         <h2>{trader.name}</h2>
         <p>{trader.ens}</p>
@@ -284,7 +284,7 @@ function Profile({ trader, perTradeUsd, onProofs }: { trader: Trader; perTradeUs
       <section>
         <h3>Net copier return</h3>
         <p className="dsc-unavail">Unavailable</p>
-        <p className="dsc-note">No verified execution history is connected in this preview, so we don’t show a return, win rate or drawdown.</p>
+        <p className="dsc-note">No verified execution history is connected for this profile, so we don’t show a return, win rate or drawdown.</p>
         <dl className="dsc-stats">
           <div><dt>Period</dt><dd>— Unavailable</dd></div>
           <div><dt>Sample</dt><dd>— Unavailable</dd></div>
@@ -310,7 +310,7 @@ function Profile({ trader, perTradeUsd, onProofs }: { trader: Trader; perTradeUs
 }
 
 const PROOFS: [string, string][] = [
-  ['ENS name', 'Resolution not verified in preview.'],
+  ['ENS name', 'Resolution not verified for this profile.'],
   ['Sealed trade history (Arkiv)', 'No sealed entities read. Nothing to query yet.'],
   ['Flash orders and receipts', 'No orders or fills recorded for this profile.'],
   ['Archive (Swarm)', 'No archived receipt available.'],
@@ -345,13 +345,13 @@ function ProofSheet({ trader, onClose }: { trader: Trader; onClose: () => void }
           <h2 id="dsc-proofs-title">{trader.name}’s proofs</h2>
           <button type="button" className="dsc-close" aria-label="Close proofs" onClick={onClose}><Icon name="x" size={20} /></button>
         </div>
-        <p className="dsc-note">{trader.source === 'registered' ? 'The owner registered this bot through a wallet signature. ENS identity, performance and execution proofs are not verified by registration.' : 'This is a preview profile. Live reads aren’t connected, so every proof below is unavailable rather than assumed.'}</p>
-        <div className="dsc-ens">
+        <p className="dsc-note">The owner registered this bot through a wallet signature. ENS identity, performance and execution proofs are not verified by registration.</p>
+        {trader.ens && <div className="dsc-ens">
           <code>{trader.ens}</code>
           <button type="button" className="dsc-btn dsc-btn-quiet" onClick={copy}>
             {copied && <Icon name="check" size={16} />}{copied ? 'Copied' : 'Copy name'}
           </button>
-        </div>
+        </div>}
         <ul className="dsc-proofs">
           {PROOFS.map(([label, detail]) => (
             <li key={label}>

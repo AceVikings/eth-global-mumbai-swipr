@@ -158,7 +158,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
   }
 
   const back = step === 'edit' ? onClose : step === 'review' ? editTerms : () => setStep('review');
-  const title = step === 'edit' ? 'Your Copy Pass' : step === 'review' ? 'Review before requesting' : 'Wallet not connected';
+  const title = step === 'edit' ? 'Your Copy Pass' : step === 'review' ? 'Review before requesting' : 'Activation unavailable';
 
   return (
     <div className="ps">
@@ -176,14 +176,14 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
       </header>
 
       <div className="ps-person">
-        {trader.kind === 'agent'
+        {!trader.avatar
           ? <span className="ps-avatar ps-monogram" aria-hidden="true">{trader.name.slice(0, 2).toLowerCase()}</span>
-          : <img className="ps-avatar" src={trader.avatar} alt={`${trader.name}, preview profile photo`} />}
+          : <img className="ps-avatar" src={trader.avatar} alt={`${trader.name}, profile photo`} />}
         <div>
           <b>{trader.name}</b>
-          <small>{trader.ens} · {trader.kind === 'agent' ? `${trader.owner ?? 'Owner'}’s agent` : `${trader.style} style`}</small>
+          <small>{trader.ens && `${trader.ens} · `}{trader.kind === 'agent' ? `${trader.owner ?? 'Owner'}’s agent` : `${trader.style} style`}</small>
         </div>
-        <span className="ps-pill ps-pill-preview">Preview profile</span>
+        <span className="ps-pill ps-pill-preview">Registered profile · history unverified</span>
       </div>
 
       <div className="ps-main">
@@ -285,11 +285,11 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
         {step === 'wallet' && (
           <section className="ps-wallet">
             <div className="ps-note">
-              <b>No wallet is connected in this preview.</b> Swipr hasn’t sent a seat request, minted a pass name or asked for any approval. Nothing is pending and no funds have moved.
+              <b>Copy Pass activation is unavailable.</b> Swipr hasn’t sent a seat request, minted a pass name or asked for any approval. Nothing is pending and no funds have moved.
             </div>
-            <h2 className="ps-h2">What happens in the live app</h2>
+            <h2 className="ps-h2">What activation will involve</h2>
             <ol className="ps-steps">
-              <li><b>Log in with email</b><small>Creates your own embedded wallet on Base.</small></li>
+              <li><b>Log in with Google</b><small>Creates your own embedded wallet on Base.</small></li>
               <li><b>Seat request with these frozen terms</b><small>{first} accepts or waitlists you. Pending shows as pending.</small></li>
               <li><b>Match mints your pass name</b><small>Only after acceptance.</small></li>
               <li><b>Separate permission review</b><small>Live quote, exact allowance, spenders, signer scope and expiry.</small></li>

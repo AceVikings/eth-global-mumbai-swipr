@@ -82,12 +82,6 @@ export function buildSocialAction(audience: string, action: SocialAction['action
   };
 }
 
-/** Client-side ranking is display-only (rank under the other metric); the server owns every figure. */
-export function rankBy(rows: LeaderboardRow[], sort: Sort): LeaderboardRow[] {
-  const key = (r: LeaderboardRow) => (sort === 'absolute' ? Number(r.netProfitUsd) : r.returnPct === null ? -Infinity : Number(r.returnPct));
-  return [...rows].sort((a, b) => key(b) - key(a) || a.address.localeCompare(b.address));
-}
-
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 export const formatUsd = (v: string) => { const n = Number(v); return `${n > 0 ? '+' : ''}${usd.format(n)}`; };
 export const formatPct = (v: string | null) => {
@@ -97,35 +91,3 @@ export const formatPct = (v: string | null) => {
 };
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 export const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-
-/** Illustrative only. Orderings differ between metrics and one return is negative, so the sort is visible. */
-const fx = (address: string, name: string, kind: Role, netProfitUsd: string, returnPct: string | null, closedPositions: number) =>
-  ({ address, name, kind, netProfitUsd, returnPct, closedPositions }) as LeaderboardRow;
-export const PREVIEW_ROWS: LeaderboardRow[] = [
-  fx('0x1111111111111111111111111111111111111111', 'Alice', 'trader', '1240.00', '24.80', 42),
-  fx('0x2222222222222222222222222222222222222222', 'Priya', 'trader', '860.50', '18.60', 18),
-  fx('0x3333333333333333333333333333333333333333', 'Dan', 'trader', '2680.00', '12.40', 31),
-  fx('0x4444444444444444444444444444444444444444', 'Sam', 'trader', '420.00', '9.20', 15),
-  fx('0x9999999999999999999999999999999999999999', 'Charlie', 'trader', '-105.00', '-2.10', 6),
-  fx('0x5555555555555555555555555555555555555555', 'Ade', 'copier', '612.30', '24.90', 11),
-  fx('0x6666666666666666666666666666666666666666', 'Rui', 'copier', '2890.00', '9.60', 37),
-  fx('0x7777777777777777777777777777777777777777', 'Noor', 'copier', '-128.40', '-12.30', 6),
-  fx('0x8888888888888888888888888888888888888888', 'Iko', 'copier', '75.00', '31.00', 3),
-];
-// Existing fictional preview portraits only; never assign these to live wallets.
-export const PREVIEW_AVATARS: Record<string, string> = {
-  [PREVIEW_ROWS[0].address]: '/assets/alice.jpg',
-  [PREVIEW_ROWS[1].address]: '/assets/priya.jpg',
-  [PREVIEW_ROWS[2].address]: '/assets/dan.jpg',
-};
-
-const PREVIEW_FOLLOWS_KEY = 'swipr.preview-follows.v1';
-export function loadPreviewFollows(): string[] {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(PREVIEW_FOLLOWS_KEY) || '[]');
-    return Array.isArray(value) ? value.filter((a): a is string => typeof a === 'string' && ADDRESS.test(a)) : [];
-  } catch { return []; }
-}
-export function savePreviewFollows(list: string[]) {
-  try { localStorage.setItem(PREVIEW_FOLLOWS_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
-}

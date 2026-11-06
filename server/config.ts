@@ -1,6 +1,6 @@
 export type Config = ReturnType<typeof readConfig>;
 export function readConfig(env: NodeJS.ProcessEnv = process.env) {
-  const mode = env.APP_MODE || 'preview';
+  const mode = env.APP_MODE || 'live';
   if (mode !== 'preview' && mode !== 'live') throw new Error('Invalid APP_MODE');
   const port = Number(env.PORT || 8787);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
@@ -26,7 +26,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     privyAppId: env.PRIVY_APP_ID || env.VITE_PRIVY_APP_ID,
     privySecret: env.PRIVY_APP_SECRET, privyVerificationKey: env.PRIVY_VERIFICATION_KEY,
     flashKey: env.FLASH_KEY_EXEC || env.FLASH_API_KEY,
-    baseRpc: env.BASE_RPC, sepoliaRpc: env.SEPOLIA_RPC,
+    baseRpc: env.BASE_RPC || env.BASE_RPC_URL, sepoliaRpc: env.SEPOLIA_RPC,
     arkivMaintainerKey: env.ARKIV_MAINTAINER_PK,
     beeUrl: env.BEE_URL, swarmBatchId: env.SWARM_BATCH_ID,
   };

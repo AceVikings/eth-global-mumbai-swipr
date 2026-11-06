@@ -99,12 +99,31 @@ describe('removeGhost', () => {
 });
 
 describe('persistence', () => {
-  it('round-trips under swipr.ghosts.v1, including expired history', () => {
+  it('keeps legacy preview ghosts out of the live app without deleting them', () => {
+    const storage = new MemoryStorage();
+    const old = JSON.stringify(startGhost([], 'alice', 10, T0));
+    storage.setItem('swipr.ghosts.v1', old);
+    expect(loadGhosts(storage)).toEqual([]);
+    expect(storage.getItem('swipr.ghosts.v1')).toBe(old);
+  });
+
+  it('preserves real legacy ghosts and never resurrects one removed from v2', () => {
+    const storage = new MemoryStorage();
+    const real = startGhost([], 'registered-profile-id', 15, T0);
+    const legacy = JSON.stringify([...real, ...startGhost([], 'alice', 10, T0)]);
+    storage.setItem('swipr.ghosts.v1', legacy);
+    expect(loadGhosts(storage)).toEqual(real);
+    expect(saveGhosts([], storage)).toBe(true);
+    expect(loadGhosts(storage)).toEqual([]);
+    expect(storage.getItem('swipr.ghosts.v1')).toBe(legacy);
+  });
+
+  it('round-trips under swipr.ghosts.v2, including expired history', () => {
     const storage = new MemoryStorage();
     const list = startGhost(startGhost([], 'alice', 10, T0), 'dan', 50, T0 + 1000);
-    expect(GHOSTS_KEY).toBe('swipr.ghosts.v1');
+    expect(GHOSTS_KEY).toBe('swipr.ghosts.v2');
     expect(saveGhosts(list, storage)).toBe(true);
-    expect(JSON.parse(storage.getItem('swipr.ghosts.v1')!)).toEqual(list);
+    expect(JSON.parse(storage.getItem('swipr.ghosts.v2')!)).toEqual(list);
     expect(loadGhosts(storage)).toEqual(list);
   });
 
@@ -201,7 +220,7 @@ describe('Ghosts component', () => {
     expect(html).toContain('$10 / trade');
     expect(html).toMatch(/Started/);
     expect(html).toMatch(/Expire/);
-    expect(html).toMatch(/Preview profile/);
+    expect(html).not.toMatch(/Preview profile/);
     expect(html).toMatch(/Simulation/);
     expect(html).not.toMatch(/\$0(\.00)?(?!\d)/);
     expect(html).not.toMatch(/[+−-]\$\d/);
