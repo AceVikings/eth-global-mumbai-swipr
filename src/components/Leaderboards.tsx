@@ -8,6 +8,7 @@ import {
 } from '../lib/social';
 import type { LeaderboardRow, Role, Scope, SignedSocialAction, Sort } from '../lib/social';
 import '../social.css';
+import Dropdown from './Dropdown';
 
 type Board = { status: 'loading' } | { status: 'error'; message: string } | { status: 'unavailable'; detail: string }
   | { status: 'ready'; rows: LeaderboardRow[]; asOf: string | null };
@@ -182,16 +183,10 @@ export default function Leaderboards() {
       <div className="lb-toolbar">
         <Tabs label="Leaderboard" value={role} options={ROLES} onChange={setRole} />
         <div className="lb-filters">
-          <label className="lb-filter"><span className="lb-sr">Audience</span>
-            <select aria-label="Leaderboard audience" value={scope} onChange={e => setScope(e.target.value as Scope)}>
-              {SCOPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          <label className="lb-filter">Sort:
-            <select aria-label="Sort leaderboard" value={sort} onChange={e => setSort(e.target.value as Sort)}>
-              {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
+          <Dropdown label="Leaderboard audience" value={scope} options={SCOPES} onChange={setScope} />
+          <div className="lb-filter"><span>Sort:</span>
+            <Dropdown label="Sort leaderboard" value={sort} options={SORTS} onChange={setSort} />
+          </div>
         </div>
       </div>
 
@@ -206,7 +201,7 @@ export default function Leaderboards() {
         {view.status === 'error' && <div className="lb-empty lb-error" role="alert"><p>Rankings could not be loaded: {view.message}</p><button className="lb-btn" onClick={() => setReload(n => n + 1)}>Try again</button></div>}
         {view.status === 'unavailable' && <p className="lb-empty" role="status"><strong>Rankings unavailable.</strong> {view.detail}</p>}
         {view.status === 'ready' && (scope === 'following' && needsAuth
-          ? <div className="lb-empty"><p>Sign in with Google to see people you follow.</p><button type="button" className="lb-btn" onClick={session.login}>Continue with Google</button></div>
+          ? <div className="lb-empty"><p>Sign in to see people you follow.</p><button type="button" className="lb-btn" onClick={session.login}>Sign in</button></div>
           : view.rows.length === 0
             ? <div className="lb-empty" role="status"><p>{scope === 'following' ? 'Nobody you follow has closed positions on this board yet.' : 'No ranked accounts yet.'}</p>{scope === 'following' && <button className="text-button" onClick={() => setScope('everyone')}>Explore everyone</button>}</div>
             : <table className="lb-table">
@@ -240,7 +235,7 @@ export default function Leaderboards() {
             <div><input id="lb-address" value={draft} onChange={e => setDraft(e.target.value)} placeholder="0x…" spellCheck={false} autoComplete="off" />
               <button type="submit" className="lb-btn" disabled={locked || (!!wallet && following.status !== 'ready')}>{needsAuth ? 'Sign in' : 'Follow'}</button></div>
           </form>
-          {needsAuth && <p className="lb-muted">Sign in with Google to follow people.</p>}
+          {needsAuth && <p className="lb-muted">Sign in to follow people.</p>}
           {following.status === 'loading' && <p className="lb-muted" role="status">Loading who you follow…</p>}
           {(following.status === 'error' || following.status === 'unavailable') && <p className="lb-error" role="alert">Following unavailable: {following.message}</p>}
           {(following.status === 'ready') && (followList.length === 0 ? <p className="lb-muted">You are not following anyone yet.</p>

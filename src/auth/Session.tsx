@@ -15,7 +15,7 @@ export type Session = {
   authenticated: boolean;
   /** Linked EVM wallet used for signing, or null until one is ready. */
   address: Address | null;
-  /** Display label (Google name or email). Shown in UI only; never log it. */
+  /** Display label (Account name or email). Shown in UI only; never log it. */
   userLabel: string | null;
   /** Last login/logout/sign error, safe to show to the user. */
   error: string | null;
@@ -32,9 +32,9 @@ const notConfigured = 'Sign-in is not configured for this deployment.';
 const SessionContext = createContext<Session | null>(null);
 
 const config: PrivyClientConfig = {
-  loginMethods: ['google'],
+  loginMethods: ['email', 'wallet', 'google'],
   appearance: { theme: 'light', accentColor: '#6A56A4', walletChainType: 'ethereum-only' },
-  embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' } },
+  embeddedWallets: { ethereum: { createOnLogin: 'all-users' } },
   defaultChain: base,
   supportedChains: [base],
 };
@@ -72,7 +72,7 @@ function PrivySession({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const { login: openLogin } = useLogin({
     onComplete: () => setError(null),
-    onError: code => { if (code !== 'exited_auth_flow') setError('Google sign-in did not complete. Try again.'); },
+    onError: code => { if (code !== 'exited_auth_flow') setError('Sign-in did not complete. Try again.'); },
   });
   const { logout: privyLogout } = useLogout();
 
@@ -120,12 +120,13 @@ function PrivySession({ children }: { children: ReactNode }) {
   const login = useCallback(() => { setError(null); openLogin(); }, [openLogin]);
 
   const google = user?.google;
+  const email = user?.email?.address;
   const value = useMemo<Session>(() => ({
     configured: true, ready, authenticated, error, login, logout, signMessage,
     address: authenticated ? address : null,
-    userLabel: authenticated ? google?.name || google?.email || null : null,
+    userLabel: authenticated ? google?.name || google?.email || email || null : null,
     getAccessToken: accessToken,
-  }), [ready, authenticated, address, google, error, login, logout, signMessage, accessToken]);
+  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
@@ -179,8 +180,8 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
       </div>
       {authenticated && (
         <dl className="session-facts">
-          {userLabel && <div><dt>Google</dt><dd>{userLabel}</dd></div>}
-          <div><dt>Wallet</dt><dd>{address ? <code title={address}>{short(address)}</code> : '—'}</dd></div>
+          {userLabel && <div><dt>Account</dt><dd>{userLabel}</dd></div>}
+          <div><dt>Wallet</dt><dd>{address ? <code title={address}>{address}</code> : '—'}</dd></div>
           {showBalance && address && <div><dt>Base balance</dt><dd>{
             balance.state === 'done' ? balance.display : balance.state === 'loading' ? 'Loading…' : 'Unavailable'}</dd></div>}
         </dl>
@@ -188,7 +189,7 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
       {error && <p className="session-error" role="alert">{error}</p>}
       {configured && (authenticated
         ? <button type="button" className="session-btn session-btn-quiet" onClick={signOut} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button>
-        : <button type="button" className="session-btn" onClick={session.login} disabled={!ready}>Continue with Google</button>)}
+        : <button type="button" className="session-btn" onClick={session.login} disabled={!ready}>Sign in</button>)}
     </section>
   );
 }
