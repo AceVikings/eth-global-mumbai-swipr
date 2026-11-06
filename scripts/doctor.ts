@@ -1,6 +1,7 @@
 // Offline readiness check. Prints only "configured"/"missing"/"invalid", never values.
 // Usage: tsx scripts/doctor.ts [--role web|api|worker|stack] (comma-separated allowed)
 import { existsSync, readFileSync } from 'node:fs';
+import { privateKeyToAccount } from 'viem/accounts';
 
 type Role = 'web' | 'api' | 'worker';
 type Level = 'ok' | 'warn' | 'fail';
@@ -24,9 +25,9 @@ for (const role of roles) {
 }
 
 // Provider secrets: required on the server only when APP_MODE=live.
-const LIVE_SHARED = ['BASE_RPC', 'SEPOLIA_RPC', 'FLASH_KEY_EXEC', 'PRIVY_APP_ID', 'PRIVY_APP_SECRET', 'PRIVY_VERIFICATION_KEY',
-  'ARKIV_ACCESS_KEY'];
-const LIVE_WORKER = ['PRIVY_KEY_QUORUM_ID', 'PRIVY_AUTHORIZATION_PRIVATE_KEY', 'ARKIV_RELAYER_PK',
+// Arkiv variables are checked separately below.
+const LIVE_SHARED = ['BASE_RPC', 'SEPOLIA_RPC', 'FLASH_KEY_EXEC', 'PRIVY_APP_ID', 'PRIVY_APP_SECRET', 'PRIVY_VERIFICATION_KEY'];
+const LIVE_WORKER = ['PRIVY_KEY_QUORUM_ID', 'PRIVY_AUTHORIZATION_PRIVATE_KEY',
   'BEE_URL', 'SWARM_BATCH_ID', 'BEE_GATEWAY_URL', 'BEE_GATEWAY_2_URL'];
 
 const major = Number(process.versions.node.split('.')[0]);
@@ -42,13 +43,38 @@ const serverRole = roles.has('api') || roles.has('worker');
 if (serverRole) {
   report(['preview', 'live'].includes(mode) ? 'ok' : 'fail', 'APP_MODE', ['preview', 'live'].includes(mode) ? mode : 'invalid (preview|live)');
 
-  if (!has('DATABASE_URL')) report('fail', 'DATABASE_URL', 'missing');
-  else {
-    let protocol = '';
-    try { protocol = new URL(env('DATABASE_URL')).protocol; } catch { /* reported below */ }
-    report(['postgres:', 'postgresql:'].includes(protocol) ? 'ok' : 'fail', 'DATABASE_URL',
-      protocol ? `configured (${protocol.replace(':', '')})` : 'invalid URL');
-  }
+  // Arkiv is the only store. The API reads the canonical writer's entities; only the worker writes.
+  if (has('DATABASE_URL')) report('warn', 'DATABASE_URL', 'set but unused (no SQL store)');
+  const rpcOk = ['https:'].includes(URL.parse(env('ARKIV_RPC_URL'))?.protocol ?? '');
+  report(!has('ARKIV_RPC_URL') || rpcOk ? 'ok' : 'fail', 'ARKIV_RPC_URL',
+    !has('ARKIV_RPC_URL') ? 'SDK default (Rabdi)' : rpcOk ? 'configured' : 'invalid (https URL)');
+  report(has('ARKIV_ACCESS_KEY') ? 'ok' : 'warn', 'ARKIV_ACCESS_KEY', has('ARKIV_ACCESS_KEY') ? 'configured' : 'missing (public RPC is rate limited)');
+  const writer = env('ARKIV_WRITER_ADDRESS');
+  const validWriter = /^0x[0-9a-fA-F]{40}$/.test(writer);
+  report(validWriter ? 'ok' : roles.has('api') || mode === 'live' ? 'fail' : 'warn', 'ARKIV_WRITER_ADDRESS',
+    validWriter ? 'configured' : writer ? 'invalid (0x address)' : roles.has('api') ? 'missing (API reads this writer)' : 'missing (worker probes only)');
+  report(env('ARKIV_ENGINE_STREAM') && !/^[a-z0-9-]+$/.test(env('ARKIV_ENGINE_STREAM')) ? 'fail' : 'ok', 'ARKIV_ENGINE_STREAM',
+    env('ARKIV_ENGINE_STREAM') || 'swipr-engine-v1 (default)');
+  const confirmations = env('ARKIV_CONFIRMATIONS') || '2';
+  const validConfirmations = /^\d+$/.test(confirmations) && Number(confirmations) >= 1 && Number(confirmations) <= 20;
+  report(validConfirmations ? 'ok' : 'fail', 'ARKIV_CONFIRMATIONS', validConfirmations ? confirmations : 'invalid (integer 1-20)');
+  if (roles.has('worker')) {
+    if (!has('ARKIV_RELAYER_PK')) report(mode === 'live' ? 'fail' : 'warn', 'ARKIV_RELAYER_PK', 'missing (worker cannot write; reads still work)');
+    else {
+      let derived = '';
+      try { derived = privateKeyToAccount(env('ARKIV_RELAYER_PK') as `0x${string}`).address; } catch { /* reported below */ }
+      const matches = derived !== '' && derived.toLowerCase() === writer.toLowerCase();
+      report(matches ? 'ok' : 'fail', 'ARKIV_RELAYER_PK', !derived ? 'invalid key' : matches ? 'configured, matches writer' : 'does not match ARKIV_WRITER_ADDRESS');
+    }
+  } else if (has('ARKIV_RELAYER_PK')) report('warn', 'ARKIV_RELAYER_PK', 'set for the API role; worker-only secret');
+
+  if (roles.has('worker') && has('ARKIV_MAINTAINER_PK')) {
+    let maintainer = '';
+    try { maintainer = privateKeyToAccount(env('ARKIV_MAINTAINER_PK') as `0x${string}`).address; } catch { /* reported below */ }
+    const separate = maintainer !== '' && maintainer.toLowerCase() !== writer.toLowerCase();
+    report(separate ? 'ok' : 'fail', 'ARKIV_MAINTAINER_PK', !maintainer ? 'invalid key' : separate ? 'configured, separate account' : 'must differ from engine writer');
+  } else if (has('ARKIV_MAINTAINER_PK')) report('warn', 'ARKIV_MAINTAINER_PK', 'set for API role; worker-only secret');
+  else if (roles.has('worker')) report('warn', 'ARKIV_MAINTAINER_PK', 'missing (automatic journal renewal disabled)');
 
   const port = env('PORT') || '8787';
   const validPort = /^\d+$/.test(port) && Number(port) >= 1 && Number(port) <= 65535;

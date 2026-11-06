@@ -16,22 +16,12 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: swipr
-          POSTGRES_PASSWORD: swipr-ci-only
-          POSTGRES_DB: swipr
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U swipr -d swipr"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+    # No database service and no network writes: unit and contract tests use the in-memory
+    # Arkiv test adapter. No secrets are configured, so nothing can reach live Arkiv.
     env:
       APP_MODE: preview
-      # Throwaway CI database for integration tests; not a secret.
-      DATABASE_URL: postgres://swipr:swipr-ci-only@localhost:5432/swipr
-      LEDGER_TEST_DATABASE_URL: postgres://swipr:swipr-ci-only@localhost:5432/swipr
+      # Placeholder public address so the doctor can check config shape; not a real writer.
+      ARKIV_WRITER_ADDRESS: "0x0000000000000000000000000000000000000001"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
