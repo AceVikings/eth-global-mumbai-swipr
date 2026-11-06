@@ -1,3 +1,5 @@
+import { createEnsService, type EnsService } from './ens/service';
+import { createEnsStats } from './ens/stats';
 import { createTradingService, type TradingService } from './trading/service';
 import { createWalletBalance } from './wallet-balance';
 import express from 'express';
@@ -20,7 +22,7 @@ import type { Ledger } from './ledger';
 import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;
-  trading?: TradingService;
+  trading?: TradingService; ens?: EnsService;
   walletBalance?: (address: string) => Promise<{ address: string; chainId: number; display: string; gasDisplay: string }>;
   walletProfiles?: () => Promise<BotProfile[]>;
   walletSignals?: (profiles: BotProfile[]) => Promise<BotSignal[]>;
@@ -43,11 +45,13 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, walletBalance, trading, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, walletBalance, trading, ens, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
   const trades = trading ?? (config.flashKey && config.privySecret && walletProfiles && seatDirectory ? createTradingService({ apiKey: config.flashKey, ticketSecret: config.privySecret, rpcUrl: config.baseRpc, profiles: walletProfiles, seats: seatDirectory, fetcher }) : null);
   const readBalance = walletBalance ?? createWalletBalance(config.baseRpc);
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
+  const names = ens ?? (walletProfiles ? createEnsService({rpcUrl:config.sepoliaRpc,profiles:walletProfiles,
+    stats: flash&&trades?createEnsStats(flash,trades):undefined}) : null);
   const listBots = async () => {
     if (walletProfiles) {
       const profiles = await walletProfiles();
@@ -92,7 +96,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
     },
     async submitOrder() { throw new ApiError(503, 'execution_unavailable', 'Order submission awaits verified pass, signer and receipt gates.'); },
     async sealFill() { throw new ApiError(503, 'notary_unavailable', 'Fill sealing needs the verified notary and Arkiv product-schema publisher.'); },
-    async prepareEnsText() { throw new ApiError(503, 'ens_unavailable', 'The owner-managed ENS resolver and agent charter are not configured.'); },
+    async prepareEnsText(input) { if (!names) throw new ApiError(503, 'ens_unavailable', 'ENS is unavailable.'); const identity=await authenticate(authorization); if (identity.wallets.length!==1) throw new ApiError(400, 'choose_wallet', 'Use the ENS REST endpoint to select your wallet.'); return names.text(requireWallet(identity,identity.wallets[0]) as `0x${string}`,input); },
   });
   const app = express();
   app.disable('x-powered-by');
@@ -117,8 +121,32 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       }
       const url = new URL(req.url || '/', 'http://localhost');
       const path = url.pathname;
-      if (req.method === 'POST' && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
+      if ((req.method === 'POST' || path.startsWith('/api/ens/')) && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
       const gateway = makeGateway(req.headers.authorization);
+      if (path.startsWith('/api/ens/')) {
+        if (!names) throw new ApiError(503,'ens_unavailable','ENS is unavailable.');
+        if(req.method==='GET'&&path==='/api/ens/verify') return send(200,await names.verify(url.searchParams.get('profileId'),url.searchParams.get('name')||undefined));
+        const identity=await authenticate(req.headers.authorization);
+        const input=req.method==='POST'?await body(req):{};
+        const wallet=requireWallet(identity,input.wallet||url.searchParams.get('wallet')) as `0x${string}`;
+        if(req.method==='POST'&&path==='/api/ens/text'){
+          if(typeof input.name!=='string'||typeof input.key!=='string'||typeof input.value!=='string')throw new ApiError(400,'invalid_record','Provide name, key and value.');
+          return send(200,await names.text(wallet,{name:input.name,key:input.key,value:input.value}));
+        }
+        if(req.method==='POST'&&path==='/api/ens/publish')return send(200,await names.publish(wallet,input));
+        if(req.method==='POST'&&path==='/api/ens/register')return send(200,await names.registration(wallet,input));
+        if(req.method==='GET'&&path==='/api/ens/registration-ready'){
+          const hash=url.searchParams.get('commitment')||'';
+          if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new ApiError(400,'invalid_commitment','Invalid commitment.');
+          return send(200,await names.registrationReady(hash as `0x${string}`));
+        }
+        if(req.method==='GET'&&path==='/api/ens/receipt'){
+          const hash=url.searchParams.get('hash')||'';
+          if(!/^0x[0-9a-f]{64}$/i.test(hash))throw new ApiError(400,'invalid_hash','Invalid transaction.');
+          return send(200,await names.receipt(hash as `0x${string}`));
+        }
+        throw new ApiError(404,'not_found','Route not found.');
+      }
       if (path.startsWith('/api/trades/')) {
         const identity = await authenticate(req.headers.authorization);
         if (!trades) throw new ApiError(503, 'trading_unavailable', 'Trading is not configured.');
@@ -200,6 +228,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
           ['baseRpc', !!config.baseRpc, 'Receipt adapter; funded acceptance tests pending'],
           ['ens', false, 'Sepolia RPC connected by default; registry deployment and mint verification pending'],
           ['arkiv', !!walletProfiles || !!ledger, 'Rabdi native wallet ownership; execution receipts remain separate'],
+          ['ens', !!names, 'Sepolia ENSv2 identity and text records; verified against live source data'],
           ['swarm', !!(config.beeUrl && config.swarmBatchId), 'Archive transport; BMT and gateway acceptance pending'],
         ].map(([name, configured, detail]) => ({ name, configured, verified: false, detail })),
       });

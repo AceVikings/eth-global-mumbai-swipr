@@ -193,7 +193,7 @@ describe('readiness', () => {
     const r = providerReadiness({ FLASH_API_KEY: KEY, BEE_URL: 'http://bee' });
     expect(r.flash.state).toBe('configured_unverified');
     expect(r.bee).toEqual({ state: 'missing_config', detail: 'missing SWARM_BATCH_ID' });
-    expect([r.arkiv.state, r.ens.state, r.privy.state]).toEqual(['unsupported', 'unsupported', 'unsupported']);
+    expect([r.arkiv.state, r.privy.state]).toEqual(['unsupported', 'unsupported']);
     expect(JSON.stringify(r)).not.toContain(KEY);
   });
 });

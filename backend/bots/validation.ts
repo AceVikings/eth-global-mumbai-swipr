@@ -1,3 +1,4 @@
+import { ensName } from '../contracts/ens';
 import { profileImage } from '../contracts/profile-image';
 import {
   BOT_ACTIONS, BOT_ASSETS, BOT_CHAIN_ID, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES,
@@ -80,14 +81,17 @@ export function assets(value: unknown): BotAsset[] {
 /** Normalized profile data. `profileId` is required here (store resolves creates first). */
 export function profileUpsert(raw: unknown): ProfileUpsertData & { profileId: string } {
   check(isRecord(raw), 'data must be an object');
-  onlyKeys(raw, ['profileId', 'operator', 'name', 'bio', 'style', 'strategy', 'assets', 'publicSeats', 'privateSeats', 'image'], 'profile');
+  onlyKeys(raw, ['profileId', 'operator', 'name', 'bio', 'style', 'strategy', 'assets', 'publicSeats', 'privateSeats', 'image', 'ensName'], 'profile');
   const publicSeats = raw.publicSeats === undefined ? 20 : raw.publicSeats, privateSeats = raw.privateSeats === undefined ? 0 : raw.privateSeats;
   check(Number.isSafeInteger(publicSeats) && Number(publicSeats) >= 0 && Number(publicSeats) <= 100, 'Public seats must be 0-100');
   check(Number.isSafeInteger(privateSeats) && Number(privateSeats) >= 0 && Number(privateSeats) <= 100, 'Private seats must be 0-100');
   let image: string | undefined;
   try { image = raw.image === undefined ? undefined : profileImage(raw.image); }
   catch (error) { throw new BotError('invalid', (error as Error).message); }
+  let name: string | undefined;
+  try { name = raw.ensName ? ensName(raw.ensName) : undefined; } catch { throw new BotError('invalid', 'Invalid Sepolia ENS name.'); }
   return {
+    ...(name ? { ensName: name } : {}),
     ...(image === undefined ? {} : { image }),
     ...(raw.publicSeats === undefined ? {} : { publicSeats: Number(publicSeats) }),
     ...(raw.privateSeats === undefined ? {} : { privateSeats: Number(privateSeats) }),

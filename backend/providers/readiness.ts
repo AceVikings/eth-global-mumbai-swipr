@@ -21,7 +21,7 @@ export function providerReadiness(env: Record<string, string | undefined>): Reco
     baseRpc: needs(env, ['BASE_RPC'], 'receipt reads and transfer-leg decoding'),
     bee: needs(env, ['BEE_URL', 'SWARM_BATCH_ID'], 'pinned byte upload/download; BMT not verified'),
     arkiv: { state: 'unsupported', detail: 'no Arkiv adapter in this build' },
-    ens: { state: 'unsupported', detail: 'no ENS adapter in this build' },
+    ens: { state: 'configured_unverified', detail: 'ENSv2 Sepolia resolution and wallet-signed text publication; live write acceptance is separate' },
     privy: { state: 'unsupported', detail: 'no Privy signer adapter; no autonomous signing' },
   };
 }
