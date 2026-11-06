@@ -289,7 +289,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
             </div>
             <h2 className="ps-h2">What activation will involve</h2>
             <ol className="ps-steps">
-              <li><b>Log in with Google</b><small>Creates your own embedded wallet on Base.</small></li>
+              <li><b>Sign in with Privy</b><small>Creates your own embedded wallet on Base.</small></li>
               <li><b>Seat request with these frozen terms</b><small>{first} accepts or waitlists you. Pending shows as pending.</small></li>
               <li><b>Match mints your pass name</b><small>Only after acceptance.</small></li>
               <li><b>Separate permission review</b><small>Live quote, exact allowance, spenders, signer scope and expiry.</small></li>

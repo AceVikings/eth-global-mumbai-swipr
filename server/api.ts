@@ -6,6 +6,7 @@ import { createBotGateway, PARSE_ERROR_BODY } from './bots/gateway';
 import { createWorkerBridge } from './bots/bridge';
 import { verifyBotAction } from './bots/auth';
 import { BotError } from './bots/validation';
+import type { BotProfile } from '../shared/bots';
 import type { ProjectStore } from './bots/store';
 import { randomUUID } from 'node:crypto';
 import { ApiError, createAuthenticator, requireWallet } from './auth';
@@ -15,6 +16,7 @@ import type { Terms } from '../shared/types';
 import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;
+  walletProfiles?: () => Promise<BotProfile[]>;
   executeSocial?: (input: unknown) => Promise<unknown>;
   verifiedPositions?: () => Promise<{ positions: VerifiedClosedPosition[]; asOf: string }>;
   executeBot?: (input: unknown) => Promise<unknown>;
@@ -28,10 +30,11 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, executeBot, executeSocial, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, executeBot, executeSocial, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const listBots = async () => {
+    if (walletProfiles) return { profiles: await walletProfiles(), signals: [], state: 'ready', detail: 'Wallet-owned Arkiv profiles. Performance requires verified fills.' };
     if (!projects) return { profiles: [], signals: [], state: 'unavailable', detail: 'Arkiv writer is not configured. Bot profiles have not been published.' };
     const result = await projects.list();
     return { ...result, state: 'ready', detail: 'Owner-signed registrations stored in Arkiv. Execution history is unverified.' };

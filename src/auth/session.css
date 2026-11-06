@@ -13,7 +13,7 @@
 .session-facts { display: grid; gap: 6px; margin: 0; }
 .session-facts div { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
 .session-facts dt { color: var(--muted, #706c67); font-size: 13px; }
-.session-facts dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.session-facts dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: normal; overflow-wrap: anywhere; font-weight: 600; font-variant-numeric: tabular-nums; }
 .session-facts code { font: 600 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .session-error {
   margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--coral-soft, #fbeae6);

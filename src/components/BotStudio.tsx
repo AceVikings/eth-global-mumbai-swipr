@@ -111,7 +111,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
     if (pending) return 'Resolve the unconfirmed action first: retry it.';
     if (!online) return 'You are offline. Reconnect to sign and submit.';
     if (!integration) return 'Integration details are unavailable, so the signing audience is unknown. Refresh and try again.';
-    if (!account) return 'Sign in with Google first.';
+    if (!account) return 'Sign in first.';
     return null;
   };
 
@@ -190,7 +190,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
       <header className="bs-head">
         <div>
           <h1 id="bs-title">Bot studio</h1>
-          <p>Sign in with Google to register trading bots you own, assign an operator key, and wire it up over API or MCP. Signals are proposals — never executable orders or verified fills.</p>
+          <p>Sign in to register trading bots you own, assign an operator key, and wire it up over API or MCP. Signals are proposals — never executable orders or verified fills.</p>
         </div>
         <div className="bs-head-actions">
           <button type="button" className="bs-btn bs-btn-quiet" onClick={refresh} disabled={load.kind === 'loading'} aria-label="Refresh bots">
@@ -201,7 +201,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
             : session.authenticated
               ? <span className="bs-chip">Setting up your wallet…</span>
               : <button type="button" className="bs-btn" onClick={session.login} disabled={!session.configured || !session.ready}
-                title={session.configured ? undefined : 'Sign-in is not configured for this deployment.'}>Continue with Google</button>}
+                title={session.configured ? undefined : 'Sign-in is not configured for this deployment.'}>Sign in</button>}
         </div>
       </header>
 
@@ -329,10 +329,10 @@ export default function BotStudio({ onChanged }: Props = {}) {
                 </div>
                 {errors.assets && <small id="bs-e-assets" className="bs-error">{errors.assets}</small>}
               </fieldset>
-              <p className="bs-hint">Saving asks your signed-in wallet for an EIP-191 signature over the canonical action (valid 5 minutes) and sends it with your Google session. Nothing is stored until the service accepts it.</p>
+              <p className="bs-hint">Saving asks your signed-in wallet for an EIP-191 signature over the canonical action (valid 5 minutes) and sends it with your session. Nothing is stored until the service accepts it.</p>
               <div className="bs-row-actions">
                 <button type="submit" className="bs-btn" disabled={locked || !online || !account}>
-                  {busy === 'save' ? 'Signing…' : account ? 'Sign & save' : 'Sign in with Google to save'}
+                  {busy === 'save' ? 'Signing…' : account ? 'Sign & save' : 'Sign in to save'}
                 </button>
                 <button type="button" className="bs-btn bs-btn-quiet" disabled={!!busy}
                   onClick={() => { if (draftSource !== 'edit') saveLocalDraft(null); setDraft(null); setErrors({}); }}>

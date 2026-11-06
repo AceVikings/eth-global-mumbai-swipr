@@ -1,12 +1,9 @@
 # Swipr infrastructure and runbook
 
-Status, 6 November 2026: **nothing here is deployed.** Arkiv is the only database: no
-PostgreSQL, Cloud SQL, Redis or local side store, and no SQL instance was ever created.
-The website is verified locally ([WEBSITE-VERIFICATION.md](WEBSITE-VERIFICATION.md)).
-The Arkiv journal, replay ledger and separate-account renewal are implemented and
-covered by local tests. Public Rabdi reads succeeded; no project writer address,
-key or funding has been verified, and no funded journal write has occurred.
-Execution stays blocked (no signing, no matcher).
+Status, 6 November 2026: deployment setup is tracked in [DEPLOYMENT.md](DEPLOYMENT.md).
+Arkiv remains the only database; there is no SQL instance or local state fallback.
+Cloud deployment and process liveness do not pass funded Arkiv or trading readiness.
+The full remaining product acceptance gates remain in [DEMO-READINESS.md](DEMO-READINESS.md).
 
 ## Topology
 
@@ -71,12 +68,13 @@ Compose runs only the API and worker on 127.0.0.1 and blanks both Arkiv private 
 
 Node 22: typecheck, unit/contract tests via the in-memory Arkiv test adapter (never
 live), build, preview doctor with a placeholder writer, and an unpushed image build.
-No database service; CI deploys nothing.
+No database service. Main releases use GitHub OIDC to update the Cloud Run worker and API
+after verification; pull requests build without deploying. See DEPLOYMENT.md.
 
 ## Cloud deploy
 
 `PROJECT_ID=ethonline-476311 scripts/provision-gcp.sh` prints the plan. With `--execute`
-and `CONFIRM_PROJECT_ID` it enables Run, Cloud Build, Artifact Registry, Secret Manager and
+and `CONFIRM_PROJECT_ID` it enables Run, Artifact Registry, Secret Manager and
 IAM; creates the `swipr` Docker repository and the `swipr-api` and `swipr-worker` service
 accounts; and grants each account `secretAccessor` on its own existing secrets only. It
 creates no secrets, so no empty `swipr-arkiv-relayer-pk` exists before the key does.
@@ -90,7 +88,8 @@ ARKIV_WRITER_ADDRESS=0x… scripts/deploy-cloud-run.sh                  # dry ru
 CONFIRM_PROJECT_ID=ethonline-476311 … scripts/deploy-cloud-run.sh --execute
 ```
 
-The API is public (auth per route). The worker is `--ingress internal`,
+Images are built and pushed by GitHub Actions, not Cloud Build; the script deploys the pushed
+image for `TAG` (default: HEAD) and fails if it is missing. The API is public (auth per route). The worker has HTTPS ingress protected by Cloud Run IAM (anonymous requests denied),
 `--no-cpu-throttling`, min = max = 1. In `preview` absent secrets are skipped; in `live`
 all are required except `ARKIV_ACCESS_KEY` and `ARKIV_MAINTAINER_PK`.
 The maintenance key is optional for a short demo; ongoing operation needs renewal. Then create the Render site from

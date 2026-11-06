@@ -23,6 +23,7 @@ export type BotProfile = {
   id: string; owner: string; operator: string; name: string; bio: string;
   style: BotStyle; strategy: BotStrategy; assets: BotAsset[];
   status: 'active' | 'halted'; createdAt: string; updatedAt: string;
+  storage?: 'wallet';
 };
 
 /** A published proposal. Never an executable order, a fill, or performance evidence. */

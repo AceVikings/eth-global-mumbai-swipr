@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Builds one image and deploys the Swipr API (read-only Arkiv) and worker (sole Arkiv writer).
+# Deploys the Swipr API (read-only Arkiv) and worker (sole Arkiv writer).
 # Dry run by default: prints the gcloud commands. Nothing is deployed unless
 # --execute is passed AND CONFIRM_PROJECT_ID equals PROJECT_ID.
-# Secret values are never read or printed; Cloud Run resolves them from Secret Manager.
+# The image is built and pushed by GitHub Actions (.github/workflows/ci.yml); this script never builds.
+# Set TAG to a commit SHA CI has pushed (default: current HEAD). Secret values are never read or printed; Cloud Run resolves them from Secret Manager.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source infra/secrets.sh
@@ -64,7 +65,10 @@ worker_secrets="$(secret_flags "${WORKER_SECRETS[@]}")"
 secrets_flag() { if [[ -n "$1" ]]; then printf -- '--set-secrets=%s' "$1"; else printf -- '--clear-secrets'; fi; }
 COMMON=(--project "$PROJECT_ID" --region "$REGION" --image "$IMAGE")
 
-run gcloud builds submit --project "$PROJECT_ID" --region "$REGION" --tag "$IMAGE" .
+if $EXECUTE; then
+  gcloud artifacts docker images describe "$IMAGE" --project "$PROJECT_ID" >/dev/null 2>&1 \
+    || { echo "Image $IMAGE not found. Let the CI backend job push it from main, or set TAG to a pushed commit SHA." >&2; exit 4; }
+fi
 
 # API: public ingress, auth per route; reads Arkiv only and never receives ARKIV_RELAYER_PK.
 run gcloud run deploy swipr-api "${COMMON[@]}" --service-account "$API_SERVICE_ACCOUNT" \

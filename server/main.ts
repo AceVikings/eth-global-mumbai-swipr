@@ -1,3 +1,4 @@
+import { createWalletDirectory } from './bots/wallet-directory';
 import { SocialStore } from './social/store';
 import { ProjectStore } from './bots/store';
 import { createApi } from './api';
@@ -11,7 +12,8 @@ const journal = config.arkiv.writerAddress ? createArkivJournal({ ...config.arki
 const ledger = journal ? await Ledger.open(journal) : null;
 const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
 const social = journal ? new SocialStore(journal, config.botAudience) : null;
-const server = createApi({ config, ledger, projects, social });
+const server = createApi({ config, ledger, projects, social,
+  walletProfiles: config.arkiv.accessKey ? createWalletDirectory(config.arkiv) : undefined });
 server.listen(config.port, '0.0.0.0', () => console.log(JSON.stringify({ service: 'api', port: config.port })));
 let closing = false;
 const shutdown = () => {

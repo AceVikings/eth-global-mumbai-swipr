@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstraps what scripts/deploy-cloud-run.sh expects: the Run, Cloud Build, Artifact Registry,
+# Bootstraps what scripts/deploy-cloud-run.sh expects: the Run, Artifact Registry,
 # Secret Manager and IAM APIs, the "swipr" Docker repo, and separate swipr-api / swipr-worker
 # service accounts. No database: Arkiv is the only store. Creates no secrets and reads no values;
 # grants each account access to the swipr-* secrets in infra/secrets.sh that already exist.
@@ -36,7 +36,7 @@ retry() {
 }
 
 note "Enable APIs"
-run gcloud services enable "${P[@]}" run.googleapis.com cloudbuild.googleapis.com \
+run gcloud services enable "${P[@]}" run.googleapis.com \
   artifactregistry.googleapis.com secretmanager.googleapis.com iam.googleapis.com
 
 note "Artifact Registry ${REGION}/${REPOSITORY}"

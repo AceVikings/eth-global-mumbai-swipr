@@ -55,8 +55,8 @@ The [original demo plan](docs/DEMO-PLAN.md) remains the full scope;
 [demo readiness](docs/DEMO-READINESS.md) separates implementation gaps from credentials.
 Run `npm run demo:check` for a read-only preflight that fails on missing live gates.
 The [infrastructure runbook](docs/INFRASTRUCTURE.md) records local checks, deployment
-commands and missing live gates. Target: `ethonline-476311`, `us-central1`; nothing
-has been deployed to those providers, and no SQL instance exists. Source commits
-have been pushed to the feature branch. Read-only Rabdi chain/schema probes and an unsigned Flash quote succeeded; no funds moved.
+commands and missing live gates. Target: `ethonline-476311`, `us-central1`; deployment configuration and live evidence are in
+[DEPLOYMENT.md](docs/DEPLOYMENT.md). Implementation commits are fast-forwarded into
+`main`, each below 1,000 changed lines. No SQL instance exists. Read-only Rabdi chain/schema probes and an unsigned Flash quote succeeded; no funds moved.
 See [the Arkiv storage contract](docs/ARKIV-STORAGE.md) for coordination and retention limits.
 Portrait provenance and font licenses are in [docs/ASSETS.md](docs/ASSETS.md).
