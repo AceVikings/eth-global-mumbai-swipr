@@ -1,3 +1,4 @@
+import WalletSend from '../components/WalletSend';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { PrivyProvider, useExportWallet, useLogin, useLogout, usePrivy, useSendTransaction, useSigners, useUpdateWallet, useWallets } from '@privy-io/react-auth';
@@ -283,6 +284,7 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
       {configured && (authenticated
         ? <button type="button" className="session-btn session-btn-quiet" onClick={signOut} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button>
         : <button type="button" className="session-btn" onClick={session.login} disabled={!ready}>Sign in</button>)}
+      {authenticated && address && showBalance && <WalletSend />}
       {authenticated && address && <div className="session-delete">
         <button type="button" className="session-btn session-btn-quiet" disabled={busy || deleting} onClick={async () => {
           try { await session.exportWallet(); }

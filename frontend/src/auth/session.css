@@ -33,3 +33,9 @@
 
 .session-delete { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 .session-delete > p { flex-basis: 100%; margin: 0; }
+
+.wallet-send form { display: grid; gap: 12px; padding-top: 12px; }
+.wallet-send label { display: grid; gap: 6px; }
+.wallet-send input { min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.wallet-send p { margin: 0; overflow-wrap: anywhere; }
+.wallet-send summary { cursor: pointer; }
