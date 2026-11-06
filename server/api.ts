@@ -1,10 +1,10 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { ApiError, createAuthenticator, requireWallet } from './auth';
 import type { Config } from './config';
 import type { Ledger } from './ledger';
 import type { Terms } from '../shared/types';
-import { createFlashClient, type OrderIntent } from './providers/flash';
+import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null;
   authenticate?: ReturnType<typeof createAuthenticator>;
@@ -47,13 +47,13 @@ export function createApi({ config, ledger, authenticate = createAuthenticator(c
       }
       const url = new URL(req.url || '/', 'http://localhost');
       const path = url.pathname;
-      if (req.method === 'GET' && path === '/healthz') return send(200, { ok: true, service: 'api' });
-      if (req.method === 'GET' && path === '/readyz') {
+      if (req.method === 'GET' && ['/healthz', '/health'].includes(path)) return send(200, { ok: true, service: 'api' });
+      if (req.method === 'GET' && ['/readyz', '/ready'].includes(path)) {
         const database = ledger ? await ledger.health() : { ok: false };
         return send(database.ok ? 200 : 503, { ok: database.ok, database });
       }
       if (req.method === 'GET' && path === '/api/runtime') return send(200, {
-        mode: 'live', tradingEnabled: false,
+        mode: config.mode, tradingEnabled: false,
         integrations: [
           ['database', !!ledger, 'Durable PostgreSQL ledger'], ['flash', !!flash, 'Quote adapter; execution gates pending'],
           ['privy', !!(config.privyAppId && config.privySecret && config.privyVerificationKey), 'JWT and linked-wallet verification'],
@@ -91,7 +91,15 @@ export function createApi({ config, ledger, authenticate = createAuthenticator(c
       const intent: OrderIntent = { side: 'buy', asset: input.asset, qty: input.qty, funder: wallet,
         orderType: 'limit', sharedPrice: input.sharedPrice, limitNotionalPrice: input.sharedPrice };
       const quote = await flash.quote(intent);
-      return send(200, { quote, executable: false, detail: 'Indicative live quote. No order submitted or pass activated.' });
+      let signingCheck = 'blocked';
+      try {
+        validateTypedData(quote.typedData, intent, { now: Math.floor(Date.now() / 1000), maxDeadline: Math.floor(Date.now() / 1000) + 900 });
+        signingCheck = 'validated';
+      } catch { /* A verified vault and bounded deadline are required before signing. */ }
+      const raw = quote.raw as { estimatedFeeNotional?: unknown };
+      return send(200, { quote: { quoteId: quote.quoteId, asset: intent.asset, qty: intent.qty,
+        sharedPrice: intent.sharedPrice, estimatedFeeNotional: typeof raw.estimatedFeeNotional === 'string' ? raw.estimatedFeeNotional : null },
+        signingCheck, executable: false, detail: 'Indicative live quote. Signing needs a verified vault and bounded deadline. No order submitted.' });
     } catch (error) {
       if (error instanceof ApiError) return send(error.status, { error: { code: error.code, message: error.message }, requestId });
       // Never echo provider payloads, authorization headers, SQL or credentials.

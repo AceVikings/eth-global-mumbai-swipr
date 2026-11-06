@@ -98,6 +98,7 @@ export async function openDatabase(connectionString: string, poolMax = 10): Prom
       const existing = await tx.query(`SELECT to_regclass('ledger_meta') AS t`);
       if (existing.rows[0].t) {
         const version = await tx.query('SELECT schema_version FROM ledger_meta WHERE id = 1');
+        if (version.rows[0]?.schema_version === SCHEMA_VERSION) return;
         if ((version.rows[0]?.schema_version ?? 0) > SCHEMA_VERSION) {
           throw new Error('database schema is newer than this build');
         }

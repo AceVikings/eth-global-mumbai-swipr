@@ -158,6 +158,8 @@ describe.skipIf(!available)('ledger on PostgreSQL', () => {
     const other = await ledger.enqueueJob(kind, {}, { maxAttempts: 3 });
     const stale = (await ledger.claimJob([kind], 1))!;
     await new Promise(resolve => setTimeout(resolve, 20));
+    expect(await code(ledger.completeJob(stale.id, stale.leaseToken!))).toBe('lease_lost');
+    expect(await code(ledger.failJob(stale.id, stale.leaseToken!, 'late'))).toBe('lease_lost');
     const reclaimed = (await ledger.claimJob([kind], 60_000))!;
     expect(reclaimed.id).toBe(other.id);
     expect(await code(ledger.completeJob(stale.id, stale.leaseToken!))).toBe('lease_lost');
