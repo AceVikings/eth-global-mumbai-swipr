@@ -222,3 +222,13 @@ describe('Definitive integrator fee agreement', () => {
     expect(JSON.parse(fetcher.mock.calls[0][1].body).flashIntegratorFeeBps).toBe('25');
   });
 });
+
+it('omits expireTime on market sells because Flash rejects that field',async()=>{
+ const intent:OrderIntent={side:'sell',asset:'WETH',qty:'0.002',funder:FUNDER,orderType:'market',maxPriceImpact:'0.01'};
+ const td=typedData({fromToken:TOKENS.WETH.address,toToken:TOKENS.USDC.address,fromAmount:'2000000000000000'});
+ const fetcher=vi.fn(async(url:string)=>json(url.endsWith('/quote')?{quoteId:'q-market',evm:{orderTypedData:JSON.stringify(td)}}:{orderId:'market-order'}));
+ const client=createFlashClient({apiKey:KEY,fetch:fetcher,sleep:noSleep});const q=await client.quote(intent);
+ expect(JSON.parse((fetcher.mock.calls[0] as any)[1].body)).not.toHaveProperty('expireTime');
+ await client.submitOrder({intent,quote:q,userSignature:SIG,policy});
+ expect(JSON.parse((fetcher.mock.calls[1] as any)[1].body)).not.toHaveProperty('expireTime');
+});

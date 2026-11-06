@@ -173,8 +173,8 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
   return {
     async quote(intent: OrderIntent): Promise<FlashQuote> {
       validateIntent(intent);
-      const expiry = intent.expireTime ?? new Date(Date.now() + 900000).toISOString();
-      const duration = Date.parse(expiry) - Date.now();
+      const expiry = intent.orderType === 'market' ? undefined : intent.expireTime ?? new Date(Date.now() + 900000).toISOString();
+      const duration = expiry ? Date.parse(expiry) - Date.now() : 1;
       if (duration <= 0 || duration > 900000) throw invalid('entry expiry must be within 15 minutes');
       const j = ok(await http.json(`${base}/quote`, { method: 'POST', headers, body: JSON.stringify(body(intent, expiry)) }, { retry: true }), 'quote');
       const raw = j.evm?.orderTypedData;
@@ -191,7 +191,7 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
       validateIntent({ ...a.intent, integratorFeeBps: fee });
       if (a.intent.attachedBracket) throw invalid('attached brackets require a separate protective-order signature');
       const j = ok(await http.json(`${base}/order`, { method: 'POST', headers, body: JSON.stringify({
-        ...body(a.intent, new Date(Number(signedData.message.deadline) * 1000).toISOString(), fee), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
+        ...body(a.intent, a.intent.orderType === 'market' ? undefined : new Date(Number(signedData.message.deadline) * 1000).toISOString(), fee), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
       }) }), 'order');
       if (typeof j.orderId !== 'string') throw new ProviderError('flash', 'bad_response', 'order id missing', { ambiguous: true });
       return { orderId: j.orderId as string };
