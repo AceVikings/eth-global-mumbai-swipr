@@ -1,4 +1,4 @@
-import type { Ghost, Trader } from '../../shared/types';
+import type { Ghost, Trader } from '../../../shared/types';
 import { isGhostExpired } from '../lib/ghosts';
 import '../ghosts.css';
 

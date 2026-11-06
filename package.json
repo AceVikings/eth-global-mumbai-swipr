@@ -4,16 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "dev": "vite --config frontend/vite.config.ts --host 127.0.0.1",
+    "build": "npm run typecheck:frontend && vite build --config frontend/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "api": "node --env-file-if-exists=.env --import tsx server/main.ts",
-    "worker": "node --env-file-if-exists=.env --import tsx server/worker.ts",
+    "api": "node --env-file-if-exists=.env --import tsx backend/main.ts",
+    "worker": "node --env-file-if-exists=.env --import tsx backend/worker.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
     "dev:stack": "node scripts/dev-stack.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",
-    "demo:check": "node scripts/demo-check.mjs"
+    "demo:check": "node scripts/demo-check.mjs",
+    "typecheck:frontend": "tsc --noEmit -p frontend/tsconfig.json",
+    "typecheck:backend": "tsc --noEmit -p backend/tsconfig.json"
   },
   "dependencies": {
     "@arkiv-network/sdk": "1.0.1",

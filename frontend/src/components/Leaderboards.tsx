@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { socialMessage } from '../../shared/social';
+import { socialMessage } from '../../../shared/social';
 import { useSession } from '../auth/Session';
 import {
   ADDRESS, SocialError, buildSocialAction, formatPct, formatUsd, getLeaderboard, getSocial,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Ghost } from '../../shared/types';
+import type { Ghost } from '../../../shared/types';
 import { GHOSTS_KEY, createGhostStore, startGhost, type GhostLocks } from './ghosts';
 
 class MemoryStorage implements Storage {

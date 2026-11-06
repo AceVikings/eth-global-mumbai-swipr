@@ -1,5 +1,5 @@
-import { BOT_ASSETS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES, botMessage } from '../../shared/bots';
-import type { BotAction, BotAsset, BotProfile, BotsListResponse, BotStrategy, BotStyle, ProfileUpsertData, SignedBotAction } from '../../shared/bots';
+import { BOT_ASSETS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES, botMessage } from '../../../shared/bots';
+import type { BotAction, BotAsset, BotProfile, BotsListResponse, BotStrategy, BotStyle, ProfileUpsertData, SignedBotAction } from '../../../shared/bots';
 
 export type { BotProfile, BotsListResponse as BotsResponse };
 export type BotTool = string | { name: string; description?: string };

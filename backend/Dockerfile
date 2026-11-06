@@ -1,18 +1,19 @@
-# One image for both backend processes: API (default) and worker (`npm run worker`).
-# Node 22; Arkiv via its SDK. Secrets arrive as runtime env, never at build time.
+# API and worker share a backend-only image. Secrets arrive at runtime.
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 FROM deps AS build
-COPY . .
-RUN npm run build
+COPY tsconfig.json ./
+COPY backend ./backend
+COPY shared ./shared
+RUN npm run typecheck:backend
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=8787
 WORKDIR /app
-# Dev dependencies stay: the api/worker scripts may run TypeScript through tsx.
+# tsx runs the TypeScript entry points.
 COPY --from=build --chown=node:node /app ./
 USER node
 EXPOSE 8787

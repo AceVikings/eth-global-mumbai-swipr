@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build backend image (no credentials in build)
-        run: docker build --tag swipr-backend:ci .
+        run: docker build --file backend/Dockerfile --tag swipr-backend:ci .
       - id: auth
         name: Authenticate deployer with GitHub OIDC
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'

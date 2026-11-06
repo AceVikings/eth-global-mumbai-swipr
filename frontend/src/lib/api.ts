@@ -1,4 +1,4 @@
-import type { RuntimeStatus } from '../../shared/types';
+import type { RuntimeStatus } from '../../../shared/types';
 const configured = import.meta.env.VITE_API_URL as string | undefined;
 const base = configured ? configured.replace(/\/$/, '') : '';
 export async function getRuntime(signal: AbortSignal): Promise<RuntimeStatus> {

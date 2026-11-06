@@ -1,2 +1,2 @@
 import { defineConfig } from 'vitest/config';
-export default defineConfig({ test: { include: ['src/**/*.test.{ts,tsx}', 'build/**/*.test.ts', 'server/**/*.test.ts', 'scripts/**/*.test.js'] } });
+export default defineConfig({ test: { include: ['frontend/src/**/*.test.{ts,tsx}', 'frontend/build/**/*.test.ts', 'backend/**/*.test.ts', 'scripts/**/*.test.js'] } });

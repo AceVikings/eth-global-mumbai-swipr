@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
-import type { Trader } from '../../shared/types';
+import type { Trader } from '../../../shared/types';
 import { Icon } from './Icons';
 import '../discover.css';
 

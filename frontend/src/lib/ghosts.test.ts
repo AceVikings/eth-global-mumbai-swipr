@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { Ghost, Trader } from '../../shared/types';
+import type { Ghost, Trader } from '../../../shared/types';
 import Ghosts from '../components/Ghosts';
 import {
   GHOST_DURATION_MS, GHOSTS_KEY, isGhostExpired, loadGhosts, removeGhost, saveGhosts, startGhost,

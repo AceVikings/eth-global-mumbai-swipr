@@ -2,7 +2,8 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwind from '@tailwindcss/vite';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createOfflineWorker } from './build/offline';
 
 function offlineShell(): Plugin {
@@ -27,4 +28,5 @@ function offlineShell(): Plugin {
     },
   };
 }
-export default defineConfig({ server: { proxy: { '/api': 'http://127.0.0.1:8787', '/mcp': 'http://127.0.0.1:8787' } }, plugins: [react(), tailwind(), offlineShell()] });
+const frontendRoot = dirname(fileURLToPath(import.meta.url));
+export default defineConfig({ root: frontendRoot, envDir: resolve(frontendRoot, '..'), build: { outDir: '../dist', emptyOutDir: true }, server: { proxy: { '/api': 'http://127.0.0.1:8787', '/mcp': 'http://127.0.0.1:8787' } }, plugins: [react(), tailwind(), offlineShell()] });
