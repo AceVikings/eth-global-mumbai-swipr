@@ -1,0 +1,29 @@
+# Render Blueprint for the static frontend only (backend: Cloud Run, see docs/INFRASTRUCTURE.md).
+# Point the Blueprint path at infra/render.yaml, or copy this file to the repo root.
+# Not applied: no Render service exists until the team creates one.
+services:
+  - type: web
+    runtime: static
+    name: swipr-web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Set in the dashboard to the Cloud Run API URL once it exists. Public, never a secret.
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_PRIVY_APP_ID
+        sync: false
+    headers:
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

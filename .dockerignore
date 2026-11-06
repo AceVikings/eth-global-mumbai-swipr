@@ -1,0 +1,15 @@
+.git
+.github
+.context
+.tokensave
+.playwright-cli
+node_modules
+dist
+dist-server
+*.tsbuildinfo
+.env
+.env.*
+docs
+infra
+Dockerfile
+.dockerignore
