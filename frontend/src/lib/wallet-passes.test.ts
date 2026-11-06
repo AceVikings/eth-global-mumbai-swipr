@@ -8,7 +8,7 @@ vi.mock('./arkiv', () => ({ accountRequest: vi.fn(), arkivConnection: vi.fn(), f
 const owner = `0x${'12'.repeat(20)}` as const, traderOwner = `0x${'34'.repeat(20)}`;
 const id = `0x${'ab'.repeat(32)}` as const;
 const request = { traderId: `0x${'cd'.repeat(32)}`, traderOwner, terms: DEFAULT_TERMS };
-const pass = { ...request, id, owner, status: 'pending', requestHash: passRequestHash(request), requestedAt: 1, acceptedAt: null, expiresAt: null };
+const pass = { ...request, id, owner, traderName: 'Test trader', status: 'pending', requestHash: passRequestHash(request), requestedAt: 1, acceptedAt: null, expiresAt: null };
 const session = { address: owner } as Session;
 const createEntity = vi.fn(), patchEntity = vi.fn(), receipt = vi.fn(), getEntity = vi.fn();
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(accountRequest).mockResolvedValue({ passes: [pass] });

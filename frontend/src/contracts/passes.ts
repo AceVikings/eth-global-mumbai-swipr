@@ -3,7 +3,7 @@ import type { Terms } from './types';
 export type PassRequest = { traderId: string; traderOwner: string; terms: Terms };
 export type PassDecision = { requestId: string; requestHash: string; decision: 'accepted' | 'declined' | 'ended' };
 export type WalletPass = PassRequest & {
-  id: string; owner: string; requestHash: string; requestedAt: number;
+  id: string; owner: string; traderName: string; requestHash: string; requestedAt: number;
   acceptedAt: number | null; expiresAt: number | null;
   status: 'pending' | 'accepted' | 'declined' | 'cancelled' | 'ended' | 'expired';
 };

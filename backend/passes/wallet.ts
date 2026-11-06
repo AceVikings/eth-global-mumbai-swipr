@@ -48,7 +48,7 @@ export function resolveWalletPasses(requests: FullEntity[], decisions: FullEntit
       if (state === 'accepted' && expiresAt! <= now) state = 'expired';
       if (status === 'cancelled') state = 'cancelled';
       if (profile.status !== 'active' && state === 'accepted') state = 'ended';
-      result.push({ ...request, id: entity.$key, owner, requestHash, requestedAt: times.get(entity.$createdAt)!, acceptedAt, expiresAt, status: state });
+      result.push({ ...request, traderName: profile.name, id: entity.$key, owner, requestHash, requestedAt: times.get(entity.$createdAt)!, acceptedAt, expiresAt, status: state });
     } catch { /* Public schemas can contain invalid records. */ }
   }
   return result.sort((a, b) => b.requestedAt - a.requestedAt);

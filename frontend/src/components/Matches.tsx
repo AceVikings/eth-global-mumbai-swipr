@@ -40,7 +40,7 @@ export default function Matches({ onDiscover }: { onDiscover: () => void }) {
           <div className="match-list">{passes.map(p => {
             const incoming = account === p.traderOwner;
             return <article className="match-card" key={p.id}>
-              <div><h2>{incoming ? `Request from ${short(p.owner)}` : `Copying ${short(p.traderOwner)}`}</h2><p>{p.status === 'pending' ? 'Awaiting trader response' : p.status[0].toUpperCase() + p.status.slice(1)} · {p.terms.mode === 'tap' ? 'Review each trade' : 'Automatic copying requested'}</p></div>
+              <div><h2>{incoming ? `Request from ${short(p.owner)}` : `Pass with ${p.traderName}`}</h2><p>{incoming ? `${p.traderName} · ` : ''}{p.status === 'pending' ? 'Awaiting trader response' : p.status[0].toUpperCase() + p.status.slice(1)} · {p.terms.mode === 'tap' ? 'Review each trade' : 'Automatic copying requested'}</p></div>
               <dl><div><dt>Per trade</dt><dd>${p.terms.perTradeUsd}</dd></div><div><dt>Trades</dt><dd>{p.terms.tradeCount}</dd></div><div><dt>Total budget</dt><dd>${p.terms.perTradeUsd * p.terms.tradeCount}</dd></div><div><dt>Duration</dt><dd>{p.terms.durationDays} days</dd></div></dl>
               {p.expiresAt && <p>Ends {new Date(p.expiresAt).toLocaleString()}</p>}
               <div className="match-actions">
