@@ -1,3 +1,4 @@
+import { swarmReference } from './providers/bee';
 import { describe, expect, it, vi } from 'vitest';
 import {
   cancelMessage, checkRef, createBaseRpc, createBee, createFlashClient, createHttp, decodeTransferLegs, FLASH_DOMAIN,
@@ -170,18 +171,18 @@ describe('notary transfer decoder', () => {
 
 describe('bee archive', () => {
   const BATCH = 'b'.repeat(64);
-  const REF = 'c'.repeat(64);
-  it('uploads pinned with the batch and never claims BMT verification', async () => {
+  const REF = swarmReference(new Uint8Array([1, 2]));
+  it('uploads pinned with the batch and verifies the BMT address', async () => {
     const fetch = vi.fn(async () => json({ reference: REF }, 201));
     const bee = createBee({ url: 'http://bee:1633/', batchId: BATCH, fetch });
-    expect(await bee.upload(new Uint8Array([1, 2]), 'application/json')).toEqual({ ref: REF, size: 2, pinned: true, bmt: 'unverified' });
+    expect(await bee.upload(new Uint8Array([1, 2]), 'application/json')).toEqual({ ref: REF, size: 2, pinned: true, bmt: 'verified' });
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('http://bee:1633/bytes');
     expect(init.headers).toMatchObject({ 'swarm-postage-batch-id': BATCH, 'swarm-pin': 'true' });
   });
   it('downloads by 64-hex ref only', async () => {
     const bee = createBee({ url: 'http://bee', batchId: BATCH, fetch: async () => new Response(new Uint8Array([7])) });
-    expect(await bee.download(REF)).toMatchObject({ bytes: new Uint8Array([7]), bmt: 'unverified' });
+    expect(await bee.download(swarmReference(new Uint8Array([7])))).toMatchObject({ bytes: new Uint8Array([7]), bmt: 'verified' });
     expect(() => checkRef('a'.repeat(128))).toThrow(/encrypted/);
     await expect(bee.download('../etc')).rejects.toThrow(/64 hex/);
     expect(() => createBee({ url: 'http://bee', batchId: 'x', fetch })).toThrow(/batch/);

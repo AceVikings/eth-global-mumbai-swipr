@@ -1,3 +1,6 @@
+import { MAX_PROFILE_IMAGE_BYTES } from './contracts/profile-image';
+import { createMedia, type MediaService } from './media';
+import { createBee } from './providers/bee';
 import { createEnsService, type EnsService } from './ens/service';
 import { createEnsStats } from './ens/stats';
 import { createTradingService, type TradingService } from './trading/service';
@@ -22,7 +25,7 @@ import type { Ledger } from './ledger';
 import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;
-  trading?: TradingService; ens?: EnsService;
+  trading?: TradingService; ens?: EnsService; media?: MediaService;
   walletBalance?: (address: string) => Promise<{ address: string; chainId: number; display: string; gasDisplay: string }>;
   walletProfiles?: () => Promise<BotProfile[]>;
   walletSignals?: (profiles: BotProfile[]) => Promise<BotSignal[]>;
@@ -45,8 +48,11 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, walletBalance, trading, ens, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, walletBalance, trading, ens, media, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
+  const allowUpload = requestLimiter(12);
+  const mediaStore = media ?? (config.beeUrl && config.swarmBatchId
+    ? createMedia(createBee({ url: config.beeUrl, batchId: config.swarmBatchId, fetch: fetcher, maxBytes: MAX_PROFILE_IMAGE_BYTES })) : null);
   const trades = trading ?? (config.flashKey && config.privySecret && walletProfiles && seatDirectory ? createTradingService({ apiKey: config.flashKey, ticketSecret: config.privySecret, rpcUrl: config.baseRpc, profiles: walletProfiles, seats: seatDirectory, fetcher }) : null);
   const readBalance = walletBalance ?? createWalletBalance(config.baseRpc);
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
@@ -124,6 +130,24 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       const path = url.pathname;
       if ((req.method === 'POST' || path.startsWith('/api/ens/')) && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
       const gateway = makeGateway(req.headers.authorization);
+      if (path === '/api/media' && req.method === 'POST') {
+        const identity = await authenticate(req.headers.authorization);
+        const input = await body(req);
+        const wallet = requireWallet(identity, input.wallet);
+        if (!allowUpload(wallet)) throw new ApiError(429, 'rate_limited', 'Too many image uploads. Try again shortly.');
+        if (!mediaStore) throw new ApiError(503, 'media_unavailable', 'Image uploads are temporarily unavailable.');
+        return send(201, await mediaStore.upload(input.image));
+      }
+      if (path.startsWith('/api/media/') && req.method === 'GET') {
+        const ref = path.slice('/api/media/'.length);
+        if (!/^[0-9a-f]{64}$/.test(ref)) throw new ApiError(400, 'invalid_reference', 'Invalid media reference.');
+        if (!mediaStore) throw new ApiError(503, 'media_unavailable', 'Images are temporarily unavailable.');
+        const image = await mediaStore.read(ref);
+        res.writeHead(200, { 'content-type': 'image/webp', 'content-length': image.bytes.length,
+          'cache-control': 'public, max-age=86400, immutable', 'content-security-policy': "default-src 'none'; sandbox",
+          'x-swarm-reference': image.ref, 'x-swarm-integrity': image.bmt });
+        res.end(image.bytes); return;
+      }
       if (path.startsWith('/api/ens/')) {
         if (!names) throw new ApiError(503,'ens_unavailable','ENS is unavailable.');
         if(req.method==='GET'&&path==='/api/ens/verify') return send(200,await names.verify(url.searchParams.get('profileId'),url.searchParams.get('name')||undefined));
@@ -225,7 +249,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
           ['baseRpc', !!config.baseRpc, 'Receipt adapter; funded acceptance tests pending'],
           ['arkiv', !!walletProfiles || !!ledger, 'Rabdi native wallet ownership; execution receipts remain separate'],
           ['ens', !!names, 'Sepolia ENSv2 identity and text records; verified against live source data'],
-          ['swarm', !!(config.beeUrl && config.swarmBatchId), 'Archive transport; BMT and gateway acceptance pending'],
+          ['swarm', !!(config.beeUrl && config.swarmBatchId), 'Profile media transport with BMT integrity verification; live availability depends on Bee'],
         ].map(([name, configured, detail]) => ({ name, configured, verified: false, detail })),
       });
       if (req.method === 'GET' && path === '/api/ghosts') {

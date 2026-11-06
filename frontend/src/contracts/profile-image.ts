@@ -1,7 +1,8 @@
-// Small raster thumbnails stay inside the wallet-owned Arkiv profile.
+// New media lives on Swarm; retain inline thumbnails from existing Arkiv profiles.
 export const MAX_PROFILE_IMAGE_BYTES = 8 * 1024;
 export function profileImage(value: unknown): string {
   if (value === '') return '';
+  if (typeof value === 'string' && /^bzz:\/\/[0-9a-f]{64}$/.test(value)) return value;
   if (typeof value !== 'string' || value.length > 10947 || !/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) {
     throw new Error('Choose a WebP thumbnail up to 8 KB.');
   }

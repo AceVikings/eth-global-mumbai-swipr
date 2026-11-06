@@ -32,6 +32,7 @@ export interface HttpOptions {
   provider: string;
   fetch: FetchLike;
   timeoutMs?: number;
+  maxResponseBytes?: number;
   minIntervalMs?: number;
   retries?: number;
   secrets?: string[];
@@ -65,7 +66,29 @@ export function createHttp(o: HttpOptions) {
       if (res.ok) {
         // Keep the request deadline active while consuming the body too. Returning
         // immediately after headers would leave res.json()/arrayBuffer() unbounded.
-        const bytes = await res.arrayBuffer();
+        let bytes: ArrayBuffer;
+        if (o.maxResponseBytes) {
+          const max = o.maxResponseBytes;
+          if (Number(res.headers.get('content-length')) > max) {
+            await res.body?.cancel();
+            throw new ProviderError(o.provider, 'bad_response', 'response too large');
+          }
+          const chunks: Uint8Array[] = []; let size = 0;
+          const reader = res.body?.getReader();
+          if (reader) {
+            try {
+              while (true) {
+                const chunk = await reader.read(); if (chunk.done) break;
+                size += chunk.value.byteLength;
+                if (size > max) { await reader.cancel(); throw new ProviderError(o.provider, 'bad_response', 'response too large'); }
+                chunks.push(chunk.value);
+              }
+            } finally { reader.releaseLock(); }
+          }
+          const joined = new Uint8Array(size); let offset = 0;
+          for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.length; }
+          bytes = joined.buffer;
+        } else bytes = await res.arrayBuffer();
         return new Response(bytes, { status: res.status, statusText: res.statusText, headers: res.headers });
       }
       const body = redact(await res.text().catch(() => ''), o.secrets);

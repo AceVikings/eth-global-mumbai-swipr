@@ -1,5 +1,5 @@
 import EnsProfile, { EnsIdentity } from './EnsProfile';
-import { botPortrait, prepareProfileImage } from '../lib/profile-images';
+import { botPortrait, uploadProfileImage } from '../lib/profile-images';
 import { saveWalletProfile, haltWalletProfile } from '../lib/arkiv';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -256,14 +256,14 @@ export default function BotStudio({ onChanged, onTrade }: Props = {}) {
                       const file = e.target.files?.[0]; e.target.value = ''; if (!file) return;
                       const version = ++imageEpoch.current; setImageBusy(true); setErrors(v => ({ ...v, image: undefined }));
                       try {
-                        const image = await prepareProfileImage(file);
+                        const image = await uploadProfileImage(session, file);
                         if (version === imageEpoch.current) update({ image });
                       } catch (error) {
                         if (version === imageEpoch.current) setErrors(v => ({ ...v, image: error instanceof Error ? error.message : 'Choose another image.' }));
                       } finally { if (version === imageEpoch.current) setImageBusy(false); }
                     }} />
                   <small id={`${formTitle}-image-help`} className={errors.image ? 'bs-error' : 'bs-hint'} role={errors.image ? 'alert' : undefined}>
-                    {errors.image || (imageBusy ? 'Preparing image…' : 'PNG, JPG or WebP · up to 5 MB')}
+                    {errors.image || (imageBusy ? 'Uploading image…' : 'PNG, JPG or WebP · up to 5 MB · Public image')}
                   </small>
                   {draft.image && <button type="button" className="bs-btn bs-btn-quiet" disabled={locked} onClick={() => update({ image: '' })}>Remove image</button>}
                 </div>

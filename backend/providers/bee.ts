@@ -1,14 +1,17 @@
+import bmt from '@fairdatasociety/bmt-js';
 import { createHttp, ProviderError, type FetchLike } from './http.ts';
 
 const REF = /^[0-9a-f]{64}$/;
 const MAX_BYTES = 10 * 1024 * 1024;
 
-/**
- * Content integrity status. Bee addresses content by its BMT root; this adapter does
- * not yet recompute that root, so every result is 'unverified' until a real BMT
- * implementation is wired in and checked against our node. A SHA-256 is not a BMT.
- */
-export type BmtStatus = 'unverified';
+/** Raw /bytes references are the Swarm BMT file address, never SHA-256. */
+export type BmtStatus = 'verified';
+export function swarmReference(bytes: Uint8Array): string {
+  return Buffer.from(bmt.makeChunkedFile(bytes).address()).toString('hex');
+}
+function verify(bytes: Uint8Array, ref: string) {
+  if (swarmReference(bytes) !== ref) throw new ProviderError('bee', 'bad_response', 'content does not match its Swarm reference');
+}
 
 export function checkRef(ref: string): string {
   const r = ref.toLowerCase().replace(/^0x/, '');
@@ -17,15 +20,17 @@ export function checkRef(ref: string): string {
   return r;
 }
 
-export function createBee(o: { url: string; batchId: string; fetch: FetchLike; timeoutMs?: number }) {
+export function createBee(o: { url: string; batchId: string; fetch: FetchLike; timeoutMs?: number; maxBytes?: number }) {
   if (!REF.test(o.batchId.toLowerCase())) throw new ProviderError('bee', 'not_configured', 'postage batch id must be 64 hex chars');
+  const maxBytes = o.maxBytes ?? MAX_BYTES;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_BYTES) throw new ProviderError('bee', 'invalid', 'invalid media size limit');
   const base = o.url.replace(/\/+$/, '');
-  const http = createHttp({ provider: 'bee', fetch: o.fetch, timeoutMs: o.timeoutMs ?? 20_000 });
+  const http = createHttp({ provider: 'bee', fetch: o.fetch, timeoutMs: o.timeoutMs ?? 20_000, maxResponseBytes: maxBytes });
 
   return {
     /** Pinned upload to our own node. Not retried: a timeout may still have stored the bytes. */
     async upload(bytes: Uint8Array, contentType = 'application/octet-stream') {
-      if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) throw new ProviderError('bee', 'invalid', 'upload size out of range');
+      if (bytes.byteLength === 0 || bytes.byteLength > maxBytes) throw new ProviderError('bee', 'invalid', 'upload size out of range');
       const j = await http.json(`${base}/bytes`, {
         method: 'POST',
         headers: { 'content-type': contentType, 'swarm-postage-batch-id': o.batchId.toLowerCase(), 'swarm-pin': 'true' },
@@ -33,15 +38,17 @@ export function createBee(o: { url: string; batchId: string; fetch: FetchLike; t
       });
       const ref = typeof j?.reference === 'string' ? checkRef(j.reference) : null;
       if (!ref) throw new ProviderError('bee', 'bad_response', 'upload returned no reference', { ambiguous: true });
-      return { ref, size: bytes.byteLength, pinned: true as const, bmt: 'unverified' as BmtStatus };
+      verify(bytes, ref);
+      return { ref, size: bytes.byteLength, pinned: true as const, bmt: 'verified' as BmtStatus };
     },
     async download(ref: string) {
       const res = await http.raw(`${base}/bytes/${checkRef(ref)}`, {}, { retry: true });
       const declared = Number(res.headers.get('content-length'));
-      if (declared > MAX_BYTES) throw new ProviderError('bee', 'bad_response', 'content too large');
+      if (declared > maxBytes) throw new ProviderError('bee', 'bad_response', 'content too large');
       const bytes = new Uint8Array(await res.arrayBuffer());
-      if (bytes.byteLength > MAX_BYTES) throw new ProviderError('bee', 'bad_response', 'content too large');
-      return { ref: checkRef(ref), bytes, bmt: 'unverified' as BmtStatus };
+      if (bytes.byteLength > maxBytes) throw new ProviderError('bee', 'bad_response', 'content too large');
+      verify(bytes, checkRef(ref));
+      return { ref: checkRef(ref), bytes, bmt: 'verified' as BmtStatus };
     },
   };
 }

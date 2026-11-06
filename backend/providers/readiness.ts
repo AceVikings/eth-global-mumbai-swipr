@@ -19,7 +19,7 @@ export function providerReadiness(env: Record<string, string | undefined>): Reco
       ? { state: 'missing_config', detail: 'FLASH_API_KEY is the public dev key; orders refused' }
       : needs(env, ['FLASH_API_KEY'], 'quote/order/status/cancel relay for user-signed orders'),
     baseRpc: needs(env, ['BASE_RPC'], 'receipt reads and transfer-leg decoding'),
-    bee: needs(env, ['BEE_URL', 'SWARM_BATCH_ID'], 'pinned byte upload/download; BMT not verified'),
+    bee: needs(env, ['BEE_URL', 'SWARM_BATCH_ID'], 'pinned media upload/download with BMT integrity verification'),
     arkiv: { state: 'unsupported', detail: 'no Arkiv adapter in this build' },
     ens: { state: 'configured_unverified', detail: 'ENSv2 Sepolia resolution and wallet-signed text publication; live write acceptance is separate' },
     privy: { state: 'unsupported', detail: 'no Privy signer adapter; no autonomous signing' },
