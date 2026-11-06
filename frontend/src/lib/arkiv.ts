@@ -1,3 +1,4 @@
+import { clearWalletRecords } from './account-deletion';
 import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
 import { custom, defineChain, type EIP1193Provider, type Hex } from 'viem';
 import { WalletProfileSchema, WalletSocialSchema, walletJson, WALLET_PROFILE_PROJECT } from '../contracts/wallet-profile';
@@ -76,23 +77,17 @@ export async function writeWalletFollow(session: Session, target: string, follow
 }
 export async function deleteWalletAccount(session: Session, progress: (text: string) => void) {
   const { client, reader, address } = await connection(session);
-  let manifest = await request(session, `/api/account/data?wallet=${address}`) as {
-    entities: { key: Hex }[]; expires: number; deletionMessage: string;
-  };
-  if (manifest.entities.length) {
-    progress('Preparing gas for your data deletion…');
-    await fund(session, address);
-    progress('Approve deletion of your Swipr records in your wallet…');
-    const result = await client.executeBatch({ deletes: manifest.entities.map(e => ({ entityKey: e.key })) });
-    await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
-  }
-  // Wait for the read index, then use a fresh, short-lived deletion challenge.
-  for (let attempt = 0; attempt < 20; attempt++) {
-    manifest = await request(session, `/api/account/data?wallet=${address}`);
-    if (!manifest.entities.length) break;
-    if (attempt === 19) throw new Error('Your data deletion is confirmed; its index is still updating. Retry account deletion shortly.');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
+  type Manifest = { entities: { key: Hex }[]; expires: number; deletionMessage: string };
+  const manifest = await clearWalletRecords(
+    () => request(session, `/api/account/data?wallet=${address}`) as Promise<Manifest>,
+    async keys => {
+      progress('Preparing gas for your data deletion…');
+      await fund(session, address);
+      progress('Approve deletion of your Swipr records in your wallet…');
+      const result = await client.executeBatch({ deletes: keys.map(key => ({ entityKey: key as Hex })) });
+      await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
+    },
+  );
   progress('Confirm account deletion with your wallet signature…');
   const signed = await session.signMessage(manifest.deletionMessage);
   if (signed.address.toLowerCase() !== address.toLowerCase()) throw new Error('Your account changed. Sign in to retry.');

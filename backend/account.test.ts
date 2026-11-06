@@ -28,3 +28,11 @@ it('rejects expired confirmation and a signature for a different account', async
   await expect(service.remove({ ...identity, userId: 'did:privy:another' }, owner.address, signed)).rejects.toMatchObject({ code: 'wrong_wallet' });
   expect(fetcher).not.toHaveBeenCalled();
 });
+it('returns a bounded deletion batch without stranding accounts with more than 100 records', async () => {
+  const fetcher = vi.fn();
+  const service = createAccountService(readConfig({ BOT_AUTH_AUDIENCE: 'https://swipr.example' }), fetcher);
+  reader.query.mockResolvedValue({ entities: Array.from({ length: 101 }, (_, i) => ({ $key: `key-${i}`, $attributes: {} })) });
+  expect(await service.list(owner.address)).toHaveLength(100);
+  await expect(service.remove(identity, owner.address, await confirmation())).rejects.toMatchObject({ code: 'data_remains' });
+  expect(fetcher).not.toHaveBeenCalled();
+});

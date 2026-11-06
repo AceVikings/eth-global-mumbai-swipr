@@ -14,9 +14,8 @@ export function createAccountService(config: Config, fetcher: typeof fetch = fet
   const client = createPublicClient({ chain: rabdi({ accessKey: config.arkiv.accessKey || '' }), transport: http(config.arkiv.rpcUrl) });
   const list = async (wallet: string) => {
     if (await client.getChainId() !== 7794095) throw new ApiError(503, 'wrong_chain', 'Account storage is on the wrong network.');
-    const result = await client.query(and(eq('project', str('swipr-mumbai26')), eq('$owner', addr(wallet))), { limit: 101 });
-    if (result.entities.length > 100) throw new ApiError(409, 'too_many_records', 'Delete some of your Swipr records before deleting your account.');
-    return result.entities.map(e => ({ key: e.$key, schema: String(e.$attributes['arkiv.schema']?.value || 'Swipr data') }));
+    const result = await client.query(and(eq('project', str('swipr-mumbai26')), eq('$owner', addr(wallet))), { limit: 100 });
+    return result.entities.slice(0, 100).map(e => ({ key: e.$key, schema: String(e.$attributes['arkiv.schema']?.value || 'Swipr data') }));
   };
   return {
     list,

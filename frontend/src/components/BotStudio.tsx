@@ -327,7 +327,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
               </div>
             )}
           <div className="bs-copies">
-            <CopyBlock title="curl" text={snip.curl} hint="Read profiles and submit a signed action." />
+            <CopyBlock title="curl" text={snip.curl} hint="Read profiles and prepare a wallet transaction." />
             <CopyBlock title="MCP config" text={snip.mcp} hint="Stateless JSON-RPC over HTTP." />
             <CopyBlock title="Signal example" text={snip.example} hint="Signed by the registered operator key." />
           </div>
