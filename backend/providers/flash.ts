@@ -193,7 +193,7 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
       if (!ADDRESS.test(funder)) throw invalid('funder is not an address');
       const j = ok(await http.json(`${base}/orders/${checkId(orderId)}?funderAddress=${funder}`, { headers }, { retry: true }), 'order status');
       const o = j.order ?? j;
-      return { status: String(o.status ?? 'UNKNOWN'), fills: (o.fills ?? []) as { transactionId?: string; fillPrice?: string }[], raw: j };
+      return { status: String(o.status ?? 'UNKNOWN'), fills: (j.fills ?? o.fills ?? []) as { transactionId?: string; fillPrice?: string }[], raw: j };
     },
     async cancelOrder(orderId: string, userSignature: string) {
       return ok(await http.json(`${base}/orders/${checkId(orderId)}/cancel`, { method: 'POST', headers, body: JSON.stringify({

@@ -1,0 +1,81 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { encodeFunctionData, erc20Abi } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createTradingService } from './service';
+import { FLASH_DOMAIN, FLASH_ORDER_TYPES, FLASH_DOMAIN_TYPES, TOKENS } from '../providers/flash';
+import type { BotProfile } from '../contracts/bots';
+const chain = vi.hoisted(() => ({ getChainId: vi.fn(), getCode: vi.fn(), getBlockNumber: vi.fn(), getTransactionReceipt: vi.fn(), getTransaction: vi.fn(), readContract: vi.fn() }));
+vi.mock('viem', async original => ({ ...await original<typeof import('viem')>(), createPublicClient: () => chain }));
+const trader = privateKeyToAccount(`0x${'11'.repeat(32)}`), copier = privateKeyToAccount(`0x${'22'.repeat(32)}`);
+const profile = { id: `0x${'ab'.repeat(32)}`, owner: trader.address, operator: trader.address, status: 'active', assets: ['WETH'], name: 'Trader' } as BotProfile;
+const vault = `0x${'33'.repeat(20)}`;
+let posts: { path: string; body: any }[], sent: number;
+const setup = (overrides: Record<string, unknown> = {}) => {
+ const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+  const body = init?.body ? JSON.parse(String(init.body)) : null;
+  posts.push({ path: url, body });
+  if (url.endsWith('/quote')) return new Response(JSON.stringify({ quoteId: 'quote-1', evm: {
+   orderTypedData: JSON.stringify({ domain: FLASH_DOMAIN, types: { FlashOrder: FLASH_ORDER_TYPES, EIP712Domain: FLASH_DOMAIN_TYPES }, primaryType: 'FlashOrder',
+    message: { swapper: body.funderAddress, vault, recipient: body.funderAddress, fromToken: TOKENS.USDC.address, toToken: TOKENS.WETH.address,
+    fromAmount: '5000000', salt: '1', deadline: String(Math.floor(Date.parse(body.expireTime) / 1000)), ...overrides } }),
+   approveTx: { to: TOKENS.USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [FLASH_DOMAIN.verifyingContract, 5000000n] }) } }, fees: { estimatedFeeNotional: '0.02' } }));
+  if (url.endsWith('/order')) { sent++; return new Response(JSON.stringify({ orderId: 'order-1' })); }
+  return new Response(JSON.stringify({ order: { orderId: 'order-1', funderAddress: trader.address, recipientAddress: trader.address, status: 'ACCEPTED' }, fills: [] }));
+ });
+ return { fetcher, service: createTradingService({ apiKey: 'private-test', ticketSecret: 'test-secret', rpcUrl: 'https://rpc.example.com', profiles: async () => [profile],
+  seats: async () => ({ passes: [], availability: [], invitations: [] }), fetcher: fetcher as typeof fetch }) };
+};
+const input = { profileId: profile.id, asset: 'WETH', qty: '5', sharedPrice: '2500' };
+beforeEach(() => {
+ vi.resetAllMocks(); posts = []; sent = 0;
+ chain.getChainId.mockResolvedValue(8453); chain.getCode.mockImplementation(async ({ address }) => address.toLowerCase() === trader.address.toLowerCase() ? undefined : '0x1234');
+ chain.getBlockNumber.mockResolvedValue(100n); chain.readContract.mockResolvedValue(5000000n);
+});
+it('binds a bounded quote to the owner, exact minimal approval, pair, amount and expiry', async () => {
+ const { service } = setup(); const quote = await service.quote(trader.address, input);
+ expect(quote.intent.qty).toBe('5'); expect(quote.approval?.amount).toBe('5000000');
+ expect(quote.expiresAt).toBeLessThanOrEqual(Math.floor(Date.now()/1000)+300);
+ const signature = await trader.signTypedData(quote.typedData as never);
+ expect(await service.submit(trader.address, quote.ticket, signature)).toEqual({ orderId: 'order-1' });
+ expect(await service.submit(trader.address, quote.ticket, signature)).toEqual({ orderId: 'order-1' });
+ expect(sent).toBe(1);
+});
+it('rejects modified quote tickets, another wallet and another signature before relay', async () => {
+ const { service } = setup(); const quote = await service.quote(trader.address, input);
+ const signature = await trader.signTypedData(quote.typedData as never);
+ await expect(service.submit(trader.address, 'x' + quote.ticket.slice(1), signature)).rejects.toThrow('changed');
+ await expect(service.submit(copier.address, quote.ticket, signature)).rejects.toThrow('another wallet');
+ await expect(service.submit(trader.address, quote.ticket, await copier.signTypedData(quote.typedData as never))).rejects.toThrow('another wallet');
+ expect(sent).toBe(0);
+});
+it('does not quote an unprovisioned vault or wrong network', async () => {
+ const { service } = setup(); chain.getCode.mockResolvedValue(undefined);
+ await expect(service.quote(trader.address, input)).rejects.toThrow('not provisioned');
+ chain.getChainId.mockResolvedValue(1);
+ await expect(service.quote(trader.address, input)).rejects.toThrow('network'); expect(sent).toBe(0);
+});
+it('rejects larger orders, arbitrary copier joins and unlimited deadlines', async () => {
+ const { service } = setup();
+ await expect(service.quote(trader.address, { ...input, qty: '10' })).rejects.toThrow('5 USDC');
+ await expect(service.quote(copier.address, input)).rejects.toThrow('Join');
+ await expect(setup({ deadline: '281474976710655' }).service.quote(trader.address, input)).rejects.toThrow('deadline');
+ expect(sent).toBe(0);
+});
+it('rejects a broad allowance or insufficient balance before submission', async () => {
+ const { service } = setup(); const quote = await service.quote(trader.address, input); const sig = await trader.signTypedData(quote.typedData as never);
+ chain.readContract.mockResolvedValue(2n ** 256n - 1n);
+ await expect(service.submit(trader.address, quote.ticket, sig)).rejects.toThrow('exact 5');
+ chain.readContract.mockResolvedValue(0n);
+ await expect(service.submit(trader.address, quote.ticket, sig)).rejects.toThrow('5 USDC'); expect(sent).toBe(0);
+});
+it('uses top-level Flash fills and never presents a pending receipt as confirmed', async () => {
+ const { service } = setup();
+ expect(await service.status(trader.address, 'order-1')).toMatchObject({ status: 'ACCEPTED', fills: [], unverifiedFills: 0 });
+ await expect(service.status(copier.address, 'order-1')).rejects.toThrow('does not belong');
+});
+it('does not retry uncertain submissions', async () => {
+ const { service, fetcher } = setup(); const quote = await service.quote(trader.address, input); const sig = await trader.signTypedData(quote.typedData as never);
+ fetcher.mockImplementationOnce(async () => { sent++; throw new Error('network'); });
+ await expect(service.submit(trader.address, quote.ticket, sig)).rejects.toMatchObject({ code: 'submission_uncertain' });
+ await expect(service.submit(trader.address, quote.ticket, sig)).rejects.toMatchObject({ code: 'submission_uncertain' }); expect(sent).toBe(1);
+});

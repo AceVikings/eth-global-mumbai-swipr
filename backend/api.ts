@@ -1,3 +1,4 @@
+import { createTradingService, type TradingService } from './trading/service';
 import { createWalletBalance } from './wallet-balance';
 import express from 'express';
 import { buildWalletAction } from './bots/wallet-actions';
@@ -19,6 +20,7 @@ import type { Ledger } from './ledger';
 import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;
+  trading?: TradingService;
   walletBalance?: (address: string) => Promise<{ address: string; chainId: number; display: string; gasDisplay: string }>;
   walletProfiles?: () => Promise<BotProfile[]>;
   walletSignals?: (profiles: BotProfile[]) => Promise<BotSignal[]>;
@@ -41,8 +43,9 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, walletBalance, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, walletGhosts, seatDirectory, walletBalance, trading, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
+  const trades = trading ?? (config.flashKey && config.privySecret && walletProfiles && seatDirectory ? createTradingService({ apiKey: config.flashKey, ticketSecret: config.privySecret, rpcUrl: config.baseRpc, profiles: walletProfiles, seats: seatDirectory, fetcher }) : null);
   const readBalance = walletBalance ?? createWalletBalance(config.baseRpc);
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const listBots = async () => {
@@ -116,6 +119,17 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       const path = url.pathname;
       if (req.method === 'POST' && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
       const gateway = makeGateway(req.headers.authorization);
+      if (path.startsWith('/api/trades/')) {
+        const identity = await authenticate(req.headers.authorization);
+        if (!trades) throw new ApiError(503, 'trading_unavailable', 'Trading is not configured.');
+        const input = req.method === 'POST' ? await body(req) : {};
+        const wallet = requireWallet(identity, input.wallet || url.searchParams.get('wallet'));
+        if (req.method === 'POST' && path === '/api/trades/quote') return send(200, await trades.quote(wallet, input));
+        if (req.method === 'POST' && path === '/api/trades/approval') return send(200, await trades.approval(wallet, input.ticket, input.txHash));
+        if (req.method === 'POST' && path === '/api/trades/submit') return send(200, await trades.submit(wallet, input.ticket, input.signature));
+        if (req.method === 'GET' && path === '/api/trades/status') return send(200, await trades.status(wallet, url.searchParams.get('orderId') || ''));
+        throw new ApiError(404, 'not_found', 'Route not found.');
+      }
       if (path === '/api/wallet' && req.method === 'GET') {
         const identity = await authenticate(req.headers.authorization);
         const wallet = requireWallet(identity, url.searchParams.get('address'));
