@@ -10,6 +10,11 @@ const KEYS=['swipr.profile','swipr.stats','swipr.updatedAt'];
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase();
 export const traderLabel=(id:string)=>`trader-${keccak256(toHex(id)).slice(2,18)}`;
 const blocked=(message:string):never=>{throw new ApiError(409,'ens_blocked',message);};
+export function sponsoredGasLimit(estimate:bigint,gasPrice:bigint){
+ const gas=(estimate*12n+9n)/10n;
+ if(estimate<=0n||gasPrice<0n||gas>8000000n||gas*gasPrice>parseEther('0.002'))blocked('ENS sponsorship is paused while gas is high.');
+ return gas;
+}
 export function createEnsRegistrar(o:{key:Hex;rootName:string;rpcUrl:string;profiles:()=>Promise<BotProfile[]>;snapshot:(id:string)=>Promise<Record<string,string>>}){
  const rootName=ensName(o.rootName);if(rootName.split('.').length!==2)throw Error('ENS root must be a second-level .eth name.');
  const rootLabel=rootName.split('.')[0],account=privateKeyToAccount(o.key),transport=http(o.rpcUrl,{timeout:10000,retryCount:0});
@@ -22,8 +27,8 @@ export function createEnsRegistrar(o:{key:Hex;rootName:string;rpcUrl:string;prof
   if(await c.getTransactionCount({address:account.address,blockTag:'pending'})!==nonce)blocked('An ENS transaction is pending. Reconcile it before continuing.');
   await c.call({account:account.address,to,data});
   const gas=await c.estimateGas({account:account.address,to,data}),gasPrice=await c.getGasPrice();
-  if(gas>2000000n||gas*gasPrice>parseEther('0.002'))blocked('ENS sponsorship is paused while gas is high.');
-  const hash=await w.sendTransaction({to,data,nonce,gas:gas*12n/10n,gasPrice,type:'legacy',value:0n});
+  const limit=sponsoredGasLimit(gas,gasPrice);
+  const hash=await w.sendTransaction({to,data,nonce,gas:limit,gasPrice,type:'legacy',value:0n});
   // Chain state is the idempotency key for every setup stage; unknown sends are never retried here.
   const receipt=await c.waitForTransactionReceipt({hash,confirmations:2,timeout:18000}).catch(()=>null);
   if(receipt?.status==='reverted')blocked('The ENS transaction reverted. No setup change was applied.');

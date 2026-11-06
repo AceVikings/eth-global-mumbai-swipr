@@ -11,6 +11,7 @@ function setup({expired=false,denied=false,recordOwner=owner}:{expired?:boolean;
  const records={...buildRecords(p,null),'swipr.updatedAt':new Date().toISOString()};
  const client={getChainId:vi.fn(async()=>11155111),getBlock:vi.fn(async()=>({timestamp:1000n})),call:vi.fn(async()=>{if(denied)throw Error('no role');}),getCode:vi.fn(async()=>undefined),readContract:vi.fn(async(a:any)=>{
   if(a.functionName==='getTokenId')return 1n;
+  if(a.functionName==='getSubregistry')return ENS.registry;
   if(a.functionName==='ownerOf')return recordOwner;
   if(a.functionName==='getStatus')return 2;
   if(a.functionName==='getExpiry')return expired?900n:2000n;
@@ -55,4 +56,12 @@ it('exposes actual ENS service through HTTP with authenticated owner-only prepar
   expect(r.status).toBe(200);expect(await r.json()).toMatchObject({transaction:{to:resolver,value:'0x0'}});
   expect((await fetch(`${root}/api/ens/publish`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({wallet:resolver,profileId:'bot-1',name:'swiprtrader.eth'})})).status).toBe(403);
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+it('checks the parent expiry and versioned token identity for subnames',async()=>{
+ const {service,client}=setup({expired:true});
+ const proof=await service.verify(p.id,'trader.swipr.eth');
+ expect(proof.identityVerified).toBe(false);
+ expect(client.readContract.mock.calls.filter(([call])=>(call as any).functionName==='getTokenId')).toHaveLength(2);
+ expect(client.readContract.mock.calls.filter(([call])=>(call as any).functionName==='getSubregistry')).toHaveLength(1);
 });

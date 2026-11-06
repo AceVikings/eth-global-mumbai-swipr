@@ -222,7 +222,6 @@ export function createApi({ config, ledger, projects = null, social = null, wall
           ['database', !!walletProfiles || !!ledger, 'Wallet-owned Arkiv records'], ['flash', !!flash, 'Quote adapter; execution gates pending'],
           ['privy', !!(config.privyAppId && config.privySecret && config.privyVerificationKey), 'JWT and linked-wallet verification'],
           ['baseRpc', !!config.baseRpc, 'Receipt adapter; funded acceptance tests pending'],
-          ['ens', false, 'Sepolia RPC connected by default; registry deployment and mint verification pending'],
           ['arkiv', !!walletProfiles || !!ledger, 'Rabdi native wallet ownership; execution receipts remain separate'],
           ['ens', !!names, 'Sepolia ENSv2 identity and text records; verified against live source data'],
           ['swarm', !!(config.beeUrl && config.swarmBatchId), 'Archive transport; BMT and gateway acceptance pending'],
