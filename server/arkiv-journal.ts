@@ -19,7 +19,7 @@ export interface Journal {
   close(): Promise<void>;
 }
 export class JournalError extends Error {
-  constructor(public code: 'unavailable' | 'pending' | 'conflict' | 'incomplete' | 'read_only' | 'ambiguous' | 'invalid', message: string) { super(message); }
+  constructor(public code: 'unavailable' | 'pending' | 'conflict' | 'incomplete' | 'read_only' | 'ambiguous' | 'invalid' | 'expiring' | 'stale_clock', message: string) { super(message); }
 }
 export type Block = { number: bigint; hash: string; timestamp: bigint };
 export type StoredEvent = { event: JournalEvent; creator: string; owner: string; readonly: boolean; expiresAt: bigint; createdAt: bigint };
@@ -34,7 +34,7 @@ export interface ArkivPort {
 }
 function encodeEvent(event: JournalEvent) {
   const text = JSON.stringify(event, (key, value) => {
-    if (/^(private_?key|api_?key|app_?secret|password|authorization|signature|userSignature|signedTransaction)$/i.test(key)) throw new JournalError('invalid', 'Secrets and signed payloads cannot be stored on Arkiv.');
+    if (/signature|secret|private|password|mnemonic|seed|authorization|bearer|api_?key|access_?key|signedTransaction/i.test(key) || (typeof value === 'string' && (/^0x[0-9a-f]{130}$/i.test(value) || /^-----BEGIN [A-Z ]+KEY-----/.test(value) || /^eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+$/.test(value) || (/^0x(?:0[1-4])?f8[0-9a-f]+$/i.test(value) && value.length > 200)))) throw new JournalError('invalid', 'Secrets and signed payloads cannot be stored on Arkiv.');
     return value;
   });
   if (Buffer.byteLength(text) > 32768) throw new JournalError('invalid', 'Engine event exceeds 32 KiB.');
@@ -46,7 +46,7 @@ function encodeEvent(event: JournalEvent) {
  * for unrelated transactions or another stream. Missing/expired history blocks writes. */
 export class ArkivJournal implements Journal {
   readonly canWrite: boolean;
-  constructor(private port: ArkivPort, private writer: string, private confirmations = 2) {
+  constructor(private port: ArkivPort, private writer: string, private confirmations = 2, private now: () => number = Date.now) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(writer) || !Number.isSafeInteger(confirmations) || confirmations < 1 || confirmations > 20) throw new JournalError('invalid', 'Invalid writer or confirmations.');
     this.canWrite = port.canWrite;
   }
@@ -56,6 +56,7 @@ export class ArkivJournal implements Journal {
     const height = tip.number - BigInt(this.confirmations - 1);
     if (height < 0n) throw new JournalError('pending', 'Waiting for confirmations.');
     const anchor = await this.port.block(height);
+    if (Math.abs(this.now() - Number(anchor.timestamp) * 1000) > 30000) throw new JournalError('stale_clock', 'Confirmed chain clock is stale; new commands are blocked.');
     const nonce = await this.port.nonce(height);
     if (!Number.isSafeInteger(nonce) || nonce < 0) throw new JournalError('invalid', 'Invalid account nonce.');
     if (await this.port.nonce('pending') !== nonce) throw new JournalError('pending', 'Writer has an unconfirmed transaction; reconcile before writing.');
@@ -63,10 +64,12 @@ export class ArkivJournal implements Journal {
     let lastQueryBlock = height;
     for (let offset = 0; ; offset += 100) {
       const page = await this.port.page(offset);
-      if (page.blockNumber < height) throw new JournalError('pending', 'Arkiv query index is behind the anchor.');
+      if (page.blockNumber < lastQueryBlock) throw new JournalError('pending', 'Arkiv query index is behind the anchor.');
       lastQueryBlock = page.blockNumber;
       for (const row of page.rows) {
-        if (row.creator.toLowerCase() !== this.writer.toLowerCase() || row.owner.toLowerCase() !== this.writer.toLowerCase() || !row.readonly || row.expiresAt <= anchor.number || row.createdAt > anchor.number) throw new JournalError('incomplete', 'Untrusted or unconfirmed engine history.');
+        if (row.createdAt > anchor.number) throw new JournalError('conflict', 'Writer advanced while reading; wait for confirmation.');
+        if (row.expiresAt > tip.number && row.expiresAt <= tip.number + 43200n) throw new JournalError('expiring', 'Journal renewal is required before new entries.');
+        if (row.creator.toLowerCase() !== this.writer.toLowerCase() || row.owner.toLowerCase() !== this.writer.toLowerCase() || !row.readonly || row.expiresAt <= tip.number) throw new JournalError('incomplete', 'Untrusted or unconfirmed engine history.');
         const event = row.event;
         if (event.revision !== events.length + 1 || typeof event.id !== 'string' || !event.id || !Number.isSafeInteger(event.at) || event.at < 0 || event.at > Number(anchor.timestamp) * 1000) throw new JournalError('incomplete', 'Engine event sequence is invalid.');
         encodeEvent(event); events.push(event);
@@ -86,7 +89,7 @@ export class ArkivJournal implements Journal {
     encodeEvent(event);
     const before = await this.read();
     if (before.nonce !== expectedNonce || event.revision !== expectedNonce + 1) throw new JournalError('conflict', 'Stale writer revision.');
-    if (!Number.isSafeInteger(event.at) || event.at > before.timestampMs) throw new JournalError('invalid', 'Event timestamp must come from confirmed chain state.');
+    if (!Number.isSafeInteger(event.at) || event.at > before.timestampMs || this.now() - event.at > 30000) throw new JournalError('invalid', 'Event timestamp must come from confirmed chain state.');
     try {
       const hash = await this.port.send(event, expectedNonce);
       await this.port.confirm(hash, this.confirmations);

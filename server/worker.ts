@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { Ledger, type Job } from './ledger';
 import { readConfig } from './config';
 import { createArkivJournal } from './arkiv-journal';
+import { createArkivMaintainer } from './arkiv-maintenance';
 import { createBaseRpc } from './providers/base';
 export async function runJob(job: Job, baseRpc?: string, fetcher: typeof fetch = fetch) {
   if (job.kind === 'probe-base') {
@@ -16,8 +17,10 @@ export async function runJob(job: Job, baseRpc?: string, fetcher: typeof fetch =
 async function main() {
   const config = readConfig();
   if (!config.arkiv.writerAddress) throw new Error('ARKIV_WRITER_ADDRESS is required by the worker');
+  const renew = config.arkivMaintainerKey ? createArkivMaintainer(config.arkiv, config.arkivMaintainerKey) : null;
+  if (renew) await renew();
   const ledger = await Ledger.open(createArkivJournal(config.arkiv));
-  let stopping = false, lastHealthy = 0, lastProbeMinute = -1;
+  let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
   const server = createServer((req, res) => {
     const path = req.url?.split('?')[0];
     if (!['/healthz', '/readyz', '/health', '/ready'].includes(path || '')) { res.writeHead(404); res.end(); return; }
@@ -32,6 +35,7 @@ async function main() {
   try {
     while (!stopping) {
       try {
+        if (renew && Date.now() - lastRenewal > 3600000) { await renew(); lastRenewal = Date.now(); }
         if (!(await ledger.health()).ok) throw new Error('arkiv_unhealthy');
         const minute = Math.floor(Date.now() / 60000);
         if (config.baseRpc && minute !== lastProbeMinute) {
