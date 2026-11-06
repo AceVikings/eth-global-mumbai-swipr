@@ -42,7 +42,7 @@ Arkiv Rabdi and Swarm remain the intended integrations. Secrets stay server-side
 
 ## Implementation and verification
 Build the website first in parallel: discovery, local ghosts and Copy Pass review.
-Provider adapters and financial execution follow this milestone. Keep preview fixtures permanently labeled; live mode starts empty until
+The website milestone is complete. The authorized next milestone adds the API, worker, durable ledger, Render static site configuration and GCP Cloud Run infrastructure; financial execution remains subject to the real acceptance gates below. Keep preview fixtures permanently labeled; live mode starts empty until
 verified data is configured. Never manufacture fills, identity badges or proofs.
 Provider credentials, onchain deployment, real fills, signer policy enforcement,
 Bee setup/BMT and archive recovery are separate live acceptance gates. An installed
