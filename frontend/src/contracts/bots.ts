@@ -24,6 +24,7 @@ export type BotProfile = {
   style: BotStyle; strategy: BotStrategy; assets: BotAsset[];
   status: 'active' | 'halted'; createdAt: string; updatedAt: string;
   storage?: 'wallet';
+  publicSeats?: number; privateSeats?: number;
 };
 
 /** A published proposal. Never an executable order, a fill, or performance evidence. */
@@ -36,6 +37,7 @@ export type BotSignal = {
 export type ProfileUpsertData = {
   profileId?: string; operator: string; name: string; bio: string;
   style: BotStyle; strategy: BotStrategy; assets: BotAsset[];
+  publicSeats?: number; privateSeats?: number;
 };
 export type ProfileHaltData = { profileId: string };
 export type SignalPublishData = {

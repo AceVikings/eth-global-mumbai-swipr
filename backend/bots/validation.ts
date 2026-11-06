@@ -79,8 +79,13 @@ export function assets(value: unknown): BotAsset[] {
 /** Normalized profile data. `profileId` is required here (store resolves creates first). */
 export function profileUpsert(raw: unknown): ProfileUpsertData & { profileId: string } {
   check(isRecord(raw), 'data must be an object');
-  onlyKeys(raw, ['profileId', 'operator', 'name', 'bio', 'style', 'strategy', 'assets'], 'profile');
+  onlyKeys(raw, ['profileId', 'operator', 'name', 'bio', 'style', 'strategy', 'assets', 'publicSeats', 'privateSeats'], 'profile');
+  const publicSeats = raw.publicSeats ?? 20, privateSeats = raw.privateSeats ?? 0;
+  check(Number.isSafeInteger(publicSeats) && Number(publicSeats) >= 0 && Number(publicSeats) <= 100, 'Public seats must be 0-100');
+  check(Number.isSafeInteger(privateSeats) && Number(privateSeats) >= 0 && Number(privateSeats) <= 100, 'Private seats must be 0-100');
   return {
+    ...(raw.publicSeats === undefined ? {} : { publicSeats: Number(publicSeats) }),
+    ...(raw.privateSeats === undefined ? {} : { privateSeats: Number(privateSeats) }),
     profileId: uuid(raw.profileId, 'profileId'), operator: address(raw.operator, 'operator'),
     name: text(raw.name, 'name', BOT_LIMITS.nameMin, BOT_LIMITS.nameMax),
     bio: text(raw.bio ?? '', 'bio', 0, BOT_LIMITS.bioMax, true),

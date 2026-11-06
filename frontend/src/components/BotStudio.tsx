@@ -265,6 +265,14 @@ export default function BotStudio({ onChanged }: Props = {}) {
                   </select>
                 </label>
               </div>
+              <div className="bs-row-2">
+                {(['publicSeats', 'privateSeats'] as const).map(key => <label className="bs-field" key={key}>
+                  <span>{key === 'publicSeats' ? 'Public seats' : 'Private seats'}</span>
+                  <input type="number" min={0} max={100} step={1} value={draft[key] ?? (key === 'publicSeats' ? 20 : 0)}
+                    onChange={e => update({ [key]: e.target.value === '' ? NaN : Number(e.target.value) })} aria-invalid={!!errors[key]} />
+                  <small className={errors[key] ? 'bs-error' : 'bs-hint'}>{errors[key] || (key === 'publicSeats' ? 'Anyone can join while seats remain.' : 'Only friends you invite can join.')}</small>
+                </label>)}
+              </div>
               <fieldset className="bs-field" aria-describedby={errors.assets ? 'bs-e-assets' : undefined}>
                 <legend>Assets</legend>
                 <div className="bs-checks">

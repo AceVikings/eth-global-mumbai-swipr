@@ -9,6 +9,7 @@ export type Integration = { audience: string; mcpUrl: string; apiUrl: string; to
 export type ProfileDraft = {
   profileId?: string; operator: string; name: string; bio: string;
   style: BotStyle; strategy: BotStrategy; assets: BotAsset[];
+  publicSeats?: number; privateSeats?: number;
 };
 
 export const STYLES = BOT_STYLES;
@@ -94,6 +95,7 @@ export function validateDraft(d: ProfileDraft): Partial<Record<keyof ProfileDraf
   if (name < BOT_LIMITS.nameMin || name > BOT_LIMITS.nameMax) errors.name = `Name must be ${BOT_LIMITS.nameMin}–${BOT_LIMITS.nameMax} characters.`;
   if (d.bio.trim().length > BOT_LIMITS.bioMax) errors.bio = `Bio must be ${BOT_LIMITS.bioMax} characters or fewer.`;
   if (!d.assets.length) errors.assets = 'Choose at least one asset.';
+  for (const key of ['publicSeats', 'privateSeats'] as const) if (!Number.isSafeInteger(d[key] ?? (key === 'publicSeats' ? 20 : 0)) || Number(d[key]) < 0 || Number(d[key]) > 100) errors[key] = 'Choose 0–100 seats.';
   return errors;
 }
 
@@ -102,13 +104,15 @@ export const upsertData = (d: ProfileDraft): ProfileUpsertData => ({
   ...(d.profileId ? { profileId: d.profileId } : {}),
   operator: d.operator.trim().toLowerCase(), name: d.name.trim(), bio: d.bio.trim(),
   style: d.style, strategy: d.strategy, assets: BOT_ASSETS.filter(a => d.assets.includes(a)),
+  ...(d.publicSeats === undefined ? {} : { publicSeats: d.publicSeats }),
+  ...(d.privateSeats === undefined ? {} : { privateSeats: d.privateSeats }),
 });
 
 export const emptyDraft = (operator = ''): ProfileDraft =>
-  ({ operator, name: '', bio: '', style: 'Balanced', strategy: 'rule-based', assets: ['WETH'] });
+  ({ operator, name: '', bio: '', style: 'Balanced', strategy: 'rule-based', assets: ['WETH'], publicSeats: 20, privateSeats: 0 });
 
 export const draftFrom = (p: BotProfile): ProfileDraft =>
-  ({ profileId: p.id, operator: p.operator, name: p.name, bio: p.bio, style: p.style, strategy: p.strategy, assets: [...p.assets] });
+  ({ profileId: p.id, operator: p.operator, name: p.name, bio: p.bio, style: p.style, strategy: p.strategy, assets: [...p.assets], publicSeats: p.publicSeats ?? 20, privateSeats: p.privateSeats ?? 0 });
 
 const DRAFT_KEY = 'swipr.bot-draft.v1';
 export function loadLocalDraft(): ProfileDraft | null {
