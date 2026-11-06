@@ -6,13 +6,15 @@ import coral from '../assets/bots/bot-3.svg';
 import { MAX_PROFILE_IMAGE_BYTES, profileImage } from '../contracts/profile-image';
 
 const portraits = [violet, sage, coral];
+// Content addresses of the platform's three portrait illustrations.
+const swarmPortraits = ["fe5d6ab69eeef971fcf4220e03583328079b93b71271ca2f813b6bbe345e733c","e3dfe26d3cab43269378664de3916b1ed4c38025516f776c0bf932ba10de32e3","dba47eb73ceaf08e43a2bcb88900415c0c3660ecf7fdc0440f80d5be9e59b5b7"];
 export function botPortrait(profile: { id?: string; name: string; image?: string }): string {
   if (profile.image) {
     try { const image = profileImage(profile.image); return image.startsWith('bzz://') ? `${apiBase}/api/media/${image.slice(6)}` : image; } catch { /* Invalid public data uses an illustration. */ }
   }
   const testNumber = /^Swipr test trader ([123])$/.exec(profile.name)?.[1];
   const hash = [...(profile.id || profile.name)].reduce((n, char) => (n * 31 + char.charCodeAt(0)) >>> 0, 0);
-  return portraits[testNumber ? Number(testNumber) - 1 : hash % portraits.length];
+  return `${apiBase}/api/media/${swarmPortraits[testNumber ? Number(testNumber) - 1 : hash % portraits.length]}`;
 }
 
 /** Decode and redraw raster inputs: metadata is discarded and only a small square is stored. */
@@ -56,6 +58,6 @@ export async function uploadProfileImage(session: Session, file: File): Promise<
 /** Keep the shell readable if a media gateway is temporarily unavailable. */
 export function portraitFallback(event: { currentTarget: HTMLImageElement }) {
   const image = event.currentTarget;
-  const fallback = new URL(violet, window.location.href).href;
+  const fallback = new URL(portraits[Math.max(0, swarmPortraits.indexOf(image.src.split("/").at(-1) || ""))], window.location.href).href;
   if (image.src !== fallback) image.src = fallback;
 }

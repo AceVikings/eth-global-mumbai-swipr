@@ -12,7 +12,7 @@ export function checkPortrait(bytes: Uint8Array) {
   while (offset < b.length) {
     if (offset + 8 > b.length) invalid();
     const type = b.toString('ascii', offset, offset + 4), length = b.readUInt32LE(offset + 4), start = offset + 8;
-    if (start + length > b.length || !['VP8 ', 'VP8L', 'VP8X', 'ALPH'].includes(type)) invalid();
+    if (start + length > b.length || !['VP8 ', 'VP8L', 'VP8X', 'ALPH', 'ICCP'].includes(type)) invalid();
     let width = 0, height = 0;
     if (type === 'VP8 ') {
       if (length < 10 || b.subarray(start + 3, start + 6).toString('hex') !== '9d012a' || b[start] & 1) invalid();
@@ -21,10 +21,11 @@ export function checkPortrait(bytes: Uint8Array) {
       if (length < 5 || b[start] !== 0x2f || b[start + 4] >> 5) invalid();
       const bits = b.readUInt32LE(start + 1); width = (bits & 0x3fff) + 1; height = ((bits >>> 14) & 0x3fff) + 1; frames++;
     } else if (type === 'VP8X') {
-      if (length !== 10 || b[start] & ~0x10) invalid(); // Alpha only: no metadata or animation.
+      if (length !== 10 || b[start] & ~0x30) invalid(); // Alpha and canvas color profile only; no EXIF, XMP or animation.
       width = b.readUIntLE(start + 4, 3) + 1; height = b.readUIntLE(start + 7, 3) + 1;
     }
-    if (type !== 'ALPH' && (!width || !height || width > 256 || height > 256)) invalid();
+    if (type === 'ICCP' && (length < 128 || length > 4096 || b.readUInt32BE(start) !== length || b.toString('ascii', start + 36, start + 40) !== 'acsp')) invalid();
+    if (!['ALPH', 'ICCP'].includes(type) && (!width || !height || width > 256 || height > 256)) invalid();
     offset = start + length + (length % 2);
   }
   if (offset !== b.length || frames !== 1) invalid();

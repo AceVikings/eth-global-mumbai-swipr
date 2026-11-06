@@ -72,6 +72,8 @@ jobs:
       REGION: ${{ vars.GCP_REGION }}
       COMMIT_SHA: ${{ github.sha }}
       FUNDING_START_NONCE: ${{ vars.ARKIV_FUNDING_START_NONCE }}
+      MEDIA_BEE_URL: ${{ vars.SWARM_BEE_URL }}
+      MEDIA_BATCH_ID: ${{ vars.SWARM_BATCH_ID }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build backend image (no credentials in build)
@@ -149,6 +151,12 @@ jobs:
               [[ "$FUNDING_START_NONCE" =~ ^[0-9]+$ ]]
               extra+=(--update-env-vars "ARKIV_FUNDING_ENABLED=true,ARKIV_FUNDING_START_NONCE=${FUNDING_START_NONCE}")
               extra+=(--update-secrets "ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest,ENS_REGISTRAR_PK=swipr-ens-registrar-pk:latest")
+            fi
+            if [[ "$role" == api && -n "$MEDIA_BEE_URL" ]]; then
+              [[ "$MEDIA_BEE_URL" =~ ^http://10\.[0-9]+\.[0-9]+\.[0-9]+:1633$ ]]
+              [[ "$MEDIA_BATCH_ID" =~ ^[0-9a-f]{64}$ ]]
+              extra+=(--network default --subnet default --vpc-egress private-ranges-only --network-tags swipr-media-client)
+              extra+=(--update-env-vars "BEE_URL=${MEDIA_BEE_URL},SWARM_BATCH_ID=${MEDIA_BATCH_ID}")
             fi
             gcloud run services update "$service" --project "$PROJECT_ID" --region "$REGION" \
               --image "$immutable_image" --update-labels "commit-sha=${COMMIT_SHA}" "${extra[@]}" --quiet

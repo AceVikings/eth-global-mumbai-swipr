@@ -54,3 +54,14 @@ it('requires a linked wallet to upload and serves verified public media with ima
   expect(Buffer.from(await r.arrayBuffer())).toEqual(bytes);
   expect((await fetch(`${base}/api/media/${'a'.repeat(128)}`)).status).toBe(400);
 });
+
+it('accepts the bounded color-profile chunks emitted by browser canvas', () => {
+  const chunk = (type: string, payload: Buffer) => { const length = Buffer.alloc(4); length.writeUInt32LE(payload.length); return Buffer.concat([Buffer.from(type),length,payload,Buffer.alloc(payload.length%2)]); };
+  const extended = Buffer.alloc(10); extended[0] = 0x20;
+  const icc = Buffer.alloc(128); icc.writeUInt32BE(128); icc.write('acsp',36);
+  const data = Buffer.concat([bytes.subarray(0,12),chunk('VP8X',extended),chunk('ICCP',icc),bytes.subarray(12)]);
+  data.writeUInt32LE(data.length-8,4);
+  expect(() => checkPortrait(data)).not.toThrow();
+  data[20] = 0x02; // Animation flag is still rejected.
+  expect(() => checkPortrait(data)).toThrow();
+});

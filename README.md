@@ -41,6 +41,7 @@ Signals are proposals, not executed trades. Profit rankings require verified exe
 | Backend | Express, TypeScript, Node.js 22 |
 | Identity and wallets | Privy |
 | Project database | Arkiv Rabdi |
+| Profile and bot media | Swarm (Bee, Sepolia testnet) |
 | Bot interfaces | REST and MCP |
 | Trading integration | Definitive Flash |
 | Trader identity and published records | ENSv2 on Sepolia |
@@ -49,7 +50,7 @@ Signals are proposals, not executed trades. Profit rankings require verified exe
 
 ## Sponsor integrations and judging highlights
 
-Swipr connects identity, user-owned social data and real execution. ENS publishes a trader's current identity and records; Arkiv stores the application's persistent records; Definitive executes wallet-signed orders. Swarm is the planned independent archive layer. The sections below distinguish the working integration from the research roadmap.
+Swipr connects identity, user-owned social data and real execution. ENS publishes a trader's current identity and records; Arkiv stores the application's persistent records; Definitive executes wallet-signed orders. Swarm stores profile and bot media; independent trading archives remain a separate roadmap item. The sections below distinguish the working integration from the research roadmap.
 
 ### ENSv2 — a trader identity anyone can verify
 
@@ -90,13 +91,18 @@ Saved ghosts currently persist parameters; simulated returns, a complete sealed 
 
 Automatic copying, scoped delegation, cumulative pass accounting, protected exits and shared exit fan-out remain unfinished. The current supported path requires reviewed wallet signatures.
 
-### Swarm — independent recovery of public history
+### Swarm — content-addressed platform media
 
-**Talking point for the intended design:** “Archive the evidence so readers can recover it independently of Swipr.”
+**Talking point:** “The image lives on Swarm; the profile and its owner live on Arkiv.”
 
-The current [Bee adapter](backend/providers/bee.ts) implements pinned byte upload/download with a postage batch and rejects encrypted references in this public archive path. It explicitly reports content integrity as **unverified**.
+- New trader and bot portrait uploads are cropped and re-encoded as small static WebP images, then uploaded through Bee using the platform's postage batch. The wallet-owned Arkiv profile stores a `bzz://` content reference instead of the image bytes.
+- Uploads require an authenticated linked wallet. The API bounds file size and dimensions, checks the Swarm BMT file address and reads the image back before returning its reference. Public image reads verify the address again before serving the bytes.
+- Images are pinned on the platform's Bee node. Postage funds a storage period; availability depends on stamp validity and network operation, not a promise of permanent storage. Removing a profile reference does not erase copies of public media already distributed on Swarm.
+- Existing inline portraits remain readable, and bundled illustrations keep the interface usable if media is temporarily unavailable. ENS profile records can include the same image reference.
 
-A configured live Bee node and postage batch, archive manifests and Arkiv pointers, BMT verification, and a frontend served from Swarm are still required. Swarm is not yet a completed live sponsor demonstration; do not present server-off recovery or permanent archival as working features.
+**Show the judges:** upload a portrait in Bot studio, save the wallet-owned profile, reload, then compare its `bzz://` reference with the image request's `X-Swarm-Reference` and `X-Swarm-Integrity: verified` headers. See the [media service](backend/media.ts), [Bee adapter](backend/providers/bee.ts) and [portrait upload flow](frontend/src/lib/profile-images.ts).
+
+Hash-chained trading archives and a frontend hosted entirely on Swarm remain roadmap items; media storage does not establish those recovery capabilities.
 
 ## Project status
 
@@ -104,7 +110,7 @@ Wallet sign-in, wallet-owned profiles, following lists, stored ghost settings, p
 
 Automatic copying and scoped trade delegation, cumulative pass budget/trade-count enforcement, protected and shared exits, realized-performance leaderboard ingestion, ghost-result computation, ENS Copy Pass minting, and Swarm archive recovery are still in development. Saved ghost settings do not place trades or currently produce simulated returns. Open positions are excluded from realized-profit rankings.
 
-Deleting an account removes current Arkiv records and login access. Public ENS snapshots, blockchain history and third-party archives remain public. Export your wallet first if it holds funds.
+Deleting an account removes current Arkiv records and login access. Public ENS snapshots, blockchain history and distributed media or third-party archives may remain public. Export your wallet first if it holds funds.
 
 ## Run locally
 

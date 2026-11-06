@@ -128,7 +128,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       }
       const url = new URL(req.url || '/', 'http://localhost');
       const path = url.pathname;
-      if ((req.method === 'POST' || path.startsWith('/api/ens/')) && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
+      if ((req.method === 'POST' || path.startsWith('/api/ens/') || path.startsWith('/api/media/')) && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
       const gateway = makeGateway(req.headers.authorization);
       if (path === '/api/media' && req.method === 'POST') {
         const identity = await authenticate(req.headers.authorization);
