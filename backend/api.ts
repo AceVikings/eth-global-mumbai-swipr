@@ -15,7 +15,6 @@ import { randomUUID } from 'node:crypto';
 import { ApiError, createAuthenticator, requireWallet } from './auth';
 import type { Config } from './config';
 import type { Ledger } from './ledger';
-import type { Terms } from './contracts/types';
 import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;
@@ -239,10 +238,8 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       const input = await body(req);
       const wallet = requireWallet(identity, input.wallet);
       if (path === '/api/passes') {
-        // Only a chain-verified directory may authorize seat requests. Never accept
-        // preview profile IDs or client-supplied mint/allowance assertions.
-        void (input.terms as Terms); void wallet;
-        throw new ApiError(503, 'matcher_unavailable', 'Verified trader directory and ENS matcher are not connected.');
+        void wallet;
+        throw new ApiError(409, 'wallet_transaction_required', 'Copy Pass requests and trader responses must be written by their owner wallets.');
       }
       if (path === '/api/orders') throw new ApiError(503, 'execution_unavailable', 'Order submission awaits verified pass, signer and receipt gates.');
       if (!flash) throw new ApiError(503, 'quotes_unavailable', 'Flash quotes are not configured.');
