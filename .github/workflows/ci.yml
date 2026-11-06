@@ -72,6 +72,7 @@ jobs:
       REGION: ${{ vars.GCP_REGION }}
       COMMIT_SHA: ${{ github.sha }}
       FUNDING_START_NONCE: ${{ vars.ARKIV_FUNDING_START_NONCE }}
+      ARKIV_WRITER_ADDRESS: ${{ vars.ARKIV_WRITER_ADDRESS }}
       MEDIA_BEE_URL: ${{ vars.SWARM_BEE_URL }}
       MEDIA_BATCH_ID: ${{ vars.SWARM_BATCH_ID }}
     steps:
@@ -140,6 +141,7 @@ jobs:
           : "${PROJECT_ID:?}" "${REGION:?}" "${IMAGE_URI:?}" "${COMMIT_SHA:?}"
           [[ "$IMAGE_URI" == "${REGION}-docker.pkg.dev/${PROJECT_ID}/swipr/backend:${COMMIT_SHA}" ]] || exit 2
           [[ "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 2
+          [[ "$ARKIV_WRITER_ADDRESS" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo 'Arkiv writer address is missing' >&2; exit 2; }
           digest="$(gcloud artifacts docker images describe "$IMAGE_URI" --project "$PROJECT_ID" --format='value(image_summary.digest)')"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Image digest could not be verified' >&2; exit 2; }
           immutable_image="${IMAGE_URI%:*}@${digest}"
@@ -148,7 +150,7 @@ jobs:
             expected="${service}@${PROJECT_ID}.iam.gserviceaccount.com"
             actual="$(gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.serviceAccountName)')"
             [[ "$actual" == "$expected" ]] || { echo "Unexpected runtime identity on ${service}" >&2; exit 3; }
-            extra=(--update-secrets "PRIVY_AUTOMATION_SIGNER_ID=swipr-privy-automation-signer-id:latest")
+            extra=(--update-env-vars "ARKIV_WRITER_ADDRESS=${ARKIV_WRITER_ADDRESS}" --update-secrets "PRIVY_AUTOMATION_SIGNER_ID=swipr-privy-automation-signer-id:latest")
             if [[ "$role" == worker ]]; then
               [[ "$FUNDING_START_NONCE" =~ ^[0-9]+$ ]]
               extra+=(--update-env-vars "ARKIV_FUNDING_ENABLED=true,ARKIV_FUNDING_START_NONCE=${FUNDING_START_NONCE}")
