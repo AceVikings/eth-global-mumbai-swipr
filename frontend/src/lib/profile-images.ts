@@ -52,3 +52,10 @@ export async function uploadProfileImage(session: Session, file: File): Promise<
   }
   return profileImage(result.image);
 }
+
+/** Keep the shell readable if a media gateway is temporarily unavailable. */
+export function portraitFallback(event: { currentTarget: HTMLImageElement }) {
+  const image = event.currentTarget;
+  const fallback = new URL(violet, window.location.href).href;
+  if (image.src !== fallback) image.src = fallback;
+}

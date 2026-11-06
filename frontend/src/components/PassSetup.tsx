@@ -1,3 +1,4 @@
+import { portraitFallback } from '../lib/profile-images';
 import { short as shortWallet } from '../lib/bots';
 import { useSession } from '../auth/Session';
 import { joinSeat, readSeats } from '../lib/wallet-seats';
@@ -183,7 +184,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
           aria-label={step === 'edit' ? 'Close pass setup' : 'Back'}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={step === 'edit' ? 'M6 6l12 12M18 6 6 18' : 'M15 5l-7 7 7 7'} /></svg>
         </button>
-        <span className="ps-brand"><img src="/assets/mark.svg" alt="" width={20} height={20} />swipr</span>
+        <span className="ps-brand"><img onError={portraitFallback} src="/assets/mark.svg" alt="" width={20} height={20} />swipr</span>
         <ol className="ps-progress" aria-label="Pass setup steps">
           {(['edit', 'review', 'wallet'] as Step[]).map((s, i) => (
             <li key={s} aria-current={s === step ? 'step' : undefined}><span className="ps-sr">Step {i + 1}</span></li>
@@ -194,7 +195,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
       <div className="ps-person">
         {!trader.avatar
           ? <span className="ps-avatar ps-monogram" aria-hidden="true">{trader.name.slice(0, 2).toLowerCase()}</span>
-          : <img className="ps-avatar" src={trader.avatar} alt={`${trader.name}, profile photo`} />}
+          : <img onError={portraitFallback} className="ps-avatar" src={trader.avatar} alt={`${trader.name}, profile photo`} />}
         <div>
           <b>{trader.name}</b>
           <small>{trader.ens && `${trader.ens} · `}{trader.kind === 'agent' ? `${trader.owner ? shortWallet(trader.owner) : 'Owner'}’s agent` : `${trader.style} style`}</small>

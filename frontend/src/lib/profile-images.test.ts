@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { botPortrait, prepareProfileImage, uploadProfileImage } from './profile-images';
+import { botPortrait, prepareProfileImage, uploadProfileImage, portraitFallback } from './profile-images';
 import { draftFrom, upsertData } from './bots';
 import type { BotProfile } from '../contracts/bots';
 const image = 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==';
@@ -50,4 +50,14 @@ it('uploads with the signed-in wallet and accepts only a verified Swarm referenc
   expect(JSON.parse(options.body).wallet).toBe('0x123');
   fetcher.mockResolvedValue(new Response(JSON.stringify({ image: `bzz://${'a'.repeat(64)}`, bmt: 'unverified' })));
   await expect(uploadProfileImage(session, { type: 'image/png', size: 10 } as File)).rejects.toThrow('could not be verified');
+});
+
+it('falls back to a bundled illustration when the media gateway fails', () => {
+  vi.stubGlobal('window', { location: { href: 'https://swipr.example/' } });
+  const target = { src: 'https://swipr.example/api/media/' + 'a'.repeat(64) } as HTMLImageElement;
+  portraitFallback({ currentTarget: target });
+  expect(target.src).not.toContain('/api/media/');
+  const fallback = target.src;
+  portraitFallback({ currentTarget: target });
+  expect(target.src).toBe(fallback);
 });

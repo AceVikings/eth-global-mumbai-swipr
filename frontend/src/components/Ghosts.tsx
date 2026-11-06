@@ -1,3 +1,4 @@
+import { portraitFallback } from '../lib/profile-images';
 import { short as shortWallet } from '../lib/bots';
 import type { Ghost, Trader } from '../contracts/types';
 import { isGhostExpired } from '../lib/ghosts';
@@ -29,7 +30,7 @@ const usd = (n: number) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 
 function Avatar({ trader }: { trader?: Trader }) {
   if (trader?.avatar) {
-    return <img className="gh-avatar" src={trader.avatar} alt={`Portrait of ${trader.name}`} width={56} height={56} />;
+    return <img onError={portraitFallback} className="gh-avatar" src={trader.avatar} alt={`Portrait of ${trader.name}`} width={56} height={56} />;
   }
   return <span className="gh-avatar gh-monogram" aria-hidden="true">{trader ? trader.name.slice(0, 1) : '?'}</span>;
 }

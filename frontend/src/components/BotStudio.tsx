@@ -1,5 +1,5 @@
 import EnsProfile, { EnsIdentity } from './EnsProfile';
-import { botPortrait, uploadProfileImage } from '../lib/profile-images';
+import { botPortrait, portraitFallback, uploadProfileImage } from '../lib/profile-images';
 import { saveWalletProfile, haltWalletProfile } from '../lib/arkiv';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -202,7 +202,7 @@ export default function BotStudio({ onChanged, onTrade }: Props = {}) {
               {profiles.map(p => (
                 <li key={p.id} className={`bs-row${p.status === 'halted' ? ' is-halted' : ''}`}>
                   <div className="bs-row-head">
-                    <img className="bs-bot-avatar" src={botPortrait(p)} width={52} height={52} alt="" /><h3>{p.name}</h3>
+                    <img onError={portraitFallback} className="bs-bot-avatar" src={botPortrait(p)} width={52} height={52} alt="" /><h3>{p.name}</h3>
                     <span className={`bs-status bs-status-${p.status}`}>{p.status === 'halted' ? 'Halted' : 'Active'}</span>
                     {isOwner(p) && <span className="bs-pill">Yours</span>}
                   </div>
@@ -247,7 +247,7 @@ export default function BotStudio({ onChanged, onTrade }: Props = {}) {
             </div>
             <form className="bs-form" onSubmit={submit} noValidate>
               <div className="bs-image-field">
-                <img className="bs-image-preview" src={botPortrait({ id: draft.profileId, name: draft.name, image: draft.image })} width={88} height={88} alt="Bot image preview" />
+                <img onError={portraitFallback} className="bs-image-preview" src={botPortrait({ id: draft.profileId, name: draft.name, image: draft.image })} width={88} height={88} alt="Bot image preview" />
                 <div className="bs-field">
                   <label htmlFor={`${formTitle}-image`}>Bot image</label>
                   <input id={`${formTitle}-image`} type="file" accept="image/png,image/jpeg,image/webp" disabled={locked}

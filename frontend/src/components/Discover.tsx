@@ -1,3 +1,4 @@
+import { portraitFallback } from '../lib/profile-images';
 import { EnsIdentity } from './EnsProfile';
 import { short as shortWallet } from '../lib/bots';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -268,7 +269,7 @@ function Portrait({ trader }: { trader: Trader }) {
       {monogram ? (
         <div className="dsc-monogram" aria-hidden="true">{trader.name.slice(0, 2)}</div>
       ) : (
-        <img src={trader.avatar} alt={`${trader.name}, profile photo`} draggable={false} />
+        <img onError={portraitFallback} src={trader.avatar} alt={`${trader.name}, profile photo`} draggable={false} />
       )}
       <span className="dsc-preview-tag">{trader.source === 'registered' ? 'Registered bot · unverified history' : 'Registered profile · unverified history'}</span>
       <div className="dsc-photo-info">

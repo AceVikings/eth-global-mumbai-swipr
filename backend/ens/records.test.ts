@@ -13,3 +13,10 @@ it('distinguishes identity, profile freshness and independently checked stats', 
  expect(compareRecords(r,r,false).statsVerified).toBe(false);
  expect(compareRecords(buildRecords(p as any,null),buildRecords(p as any,null),true).statsVerified).toBe(false);
 });
+
+it('publishes a Swarm image reference as part of the verifiable profile', () => {
+ const image = `bzz://${'a'.repeat(64)}`;
+ const record = buildRecords({...p,image} as any,null);
+ expect(JSON.parse(record['swipr.profile']).image).toBe(image);
+ expect(compareRecords(record,buildRecords(p as any,null),true).profileMatches).toBe(false);
+});

@@ -33,7 +33,7 @@ export function createBee(o: { url: string; batchId: string; fetch: FetchLike; t
       if (bytes.byteLength === 0 || bytes.byteLength > maxBytes) throw new ProviderError('bee', 'invalid', 'upload size out of range');
       const j = await http.json(`${base}/bytes`, {
         method: 'POST',
-        headers: { 'content-type': contentType, 'swarm-postage-batch-id': o.batchId.toLowerCase(), 'swarm-pin': 'true' },
+        headers: { 'content-type': contentType, 'swarm-postage-batch-id': o.batchId.toLowerCase(), 'swarm-pin': 'true', 'swarm-deferred-upload': 'false' },
         body: bytes as BodyInit,
       });
       const ref = typeof j?.reference === 'string' ? checkRef(j.reference) : null;
