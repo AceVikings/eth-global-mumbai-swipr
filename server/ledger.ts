@@ -1,45 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { Terms } from '../shared/types';
-import { openDatabase, transaction, SCHEMA_VERSION, type Db, type Tx } from './database';
+import type { Journal, JournalSnapshot } from './arkiv-journal';
+import {
+  apply, check, claimPlan, emptyState, entryKeyOf, fail, getPassRow, intIn, jobView, LedgerError, passView, requestKeyOf, reservationView, type ChainProof, type Command, type Job, type LedgerEvent,
+  type Pass, type Reservation, type State,
+} from './ledger-state';
 
-export type Micros = string;
-export type PassStatus = 'requested' | 'accepted' | 'active';
-export type Pass = {
-  id: string; wallet: string; traderId: string; terms: Terms; status: PassStatus;
-  perTradeMicros: Micros; capMicros: Micros; heldMicros: Micros; spentMicros: Micros;
-  availableMicros: Micros; entries: number; tradeCount: number;
-  activatedAt: string | null; expiresAt: string | null; createdAt: string;
-};
-export type Reservation = {
-  id: string; passId: string; signalId: string; amountMicros: Micros;
-  filledMicros: Micros; remainingUnits: string; status: 'pending' | 'settled';
-};
-/** Produced by the host's chain verifier from a fetched receipt; never from a client. */
-export type ChainProof = {
-  chainId: number; txHash: string; blockNumber: number; confirmations: number; verifiedAt: string;
-};
-export type LedgerEvent = { seq: string; passId: string; kind: string; payload: unknown; createdAt: string };
-export type Job = {
-  id: string; kind: string; payload: unknown; status: 'queued' | 'running' | 'done' | 'dead';
-  attempts: number; maxAttempts: number; leaseToken: string | null; lastError: string | null;
-};
-export type LedgerErrorCode = 'invalid' | 'not_found' | 'conflict' | 'state' | 'expired'
-  | 'cap_exceeded' | 'count_exceeded' | 'lease_lost';
+export { LedgerError } from './ledger-state';
+export type { ChainProof, Job, LedgerErrorCode, LedgerEvent, Micros, Pass, PassStatus, Reservation } from './ledger-state';
 
-export class LedgerError extends Error {
-  constructor(readonly code: LedgerErrorCode, message: string) {
-    super(message);
-    this.name = 'LedgerError';
-  }
-}
-
-const MICROS_PER_USD = 1_000_000n;
-const fail = (code: LedgerErrorCode, message: string): never => { throw new LedgerError(code, message); };
-const check = (ok: boolean, message: string) => { if (!ok) fail('invalid', message); };
-const intIn = (value: unknown, min: number, max: number) =>
-  Number.isSafeInteger(value) && (value as number) >= min && (value as number) <= max;
+export const SCHEMA_VERSION = 1;
 
 export function freezeTerms(terms: Terms): Terms {
+  check(!!terms && typeof terms === 'object', 'terms are required');
   check(intIn(terms.perTradeUsd, 5, 50), 'perTradeUsd must be whole dollars 5-50');
   check(intIn(terms.tradeCount, 1, 20), 'tradeCount must be 1-20');
   check([1, 7, 30].includes(terms.durationDays), 'durationDays must be 1, 7 or 30');
@@ -86,89 +59,145 @@ function proof(evidence: ChainProof): ChainProof {
     blockNumber: evidence.blockNumber, confirmations: evidence.confirmations, verifiedAt: evidence.verifiedAt };
 }
 
-type Row = Record<string, any>;
-const iso = (value: Date | null) => value ? value.toISOString() : null;
-
-function passFrom(row: Row): Pass {
-  const available = BigInt(row.cap_micros) - BigInt(row.held_micros) - BigInt(row.spent_micros);
-  return {
-    id: row.id, wallet: row.wallet, traderId: row.trader_id, terms: row.terms, status: row.status,
-    perTradeMicros: row.per_trade_micros, capMicros: row.cap_micros, heldMicros: row.held_micros,
-    spentMicros: row.spent_micros, availableMicros: available.toString(), entries: row.entries,
-    tradeCount: row.trade_count, activatedAt: iso(row.activated_at), expiresAt: iso(row.expires_at),
-    createdAt: row.created_at.toISOString(),
-  };
-}
-
-function reservationFrom(row: Row): Reservation {
-  return {
-    id: row.id, passId: row.pass_id, signalId: row.signal_id, amountMicros: row.amount_micros,
-    filledMicros: row.filled_micros, remainingUnits: row.remaining_units, status: row.status,
-  };
-}
-
-function jobFrom(row: Row): Job {
-  return {
-    id: row.id, kind: row.kind, payload: row.payload, status: row.status, attempts: row.attempts,
-    maxAttempts: row.max_attempts, leaseToken: row.lease_token, lastError: row.last_error,
-  };
-}
-
-async function event(tx: Tx, passId: string, kind: string, payload: unknown) {
-  await tx.query('INSERT INTO ledger_events (pass_id, kind, payload) VALUES ($1, $2, $3)',
-    [passId, kind, JSON.stringify(payload)]);
-}
-
-async function lockPass(tx: Tx, passId: string): Promise<Row> {
-  const { rows } = await tx.query(
-    'SELECT *, expires_at <= now() AS expired FROM passes WHERE id = $1 FOR UPDATE', [passId]);
-  return rows[0] ?? fail('not_found', 'pass not found');
-}
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuid = (value: string, label: string) => { check(UUID.test(String(value)), `${label} invalid`); return value; };
 const jobKey = (value: string) => { check(/^\d{1,18}$/.test(String(value)), 'jobId invalid'); return value; };
+const SECRET_KEY = /signature|secret|private|password|mnemonic|seed|authorization|bearer|api_?key/i;
+const SIGNATURE = /^0x[0-9a-f]{130}$/i;
+
+/** The journal is public chain data: refuse anything that looks like a secret or signature. */
+function publicData<T>(value: T, label: string): T {
+  const text = JSON.stringify(value ?? null);
+  check(text.length <= 8192, `${label} is too large`);
+  JSON.parse(text, (field, inner) => {
+    check(!SECRET_KEY.test(field) && !(typeof inner === 'string' && SIGNATURE.test(inner)),
+      `${label} must not contain secrets or signatures`);
+    return inner;
+  });
+  return JSON.parse(text);
+}
+
+const redact = (error: string) => String(error).slice(0, 500)
+  .replace(/[a-z][a-z0-9+.-]*:\/\/\S+/gi, '[url]').replace(/0x[0-9a-f]{130}/gi, '[signature]');
+
+/** Shape-validates a command exactly as the write path built it; replay uses this too. */
+function validate(raw: unknown): Command {
+  const c = raw as Command & Record<string, any>;
+  check(!!c && typeof c === 'object', 'command invalid');
+  switch (c.type) {
+    case 'pass.request':
+      return { type: c.type, passId: uuid(c.passId, 'passId'), wallet: wallet(c.wallet),
+        traderId: key(c.traderId, 'traderId'), requestKey: key(c.requestKey, 'idempotencyKey'), terms: freezeTerms(c.terms) };
+    case 'pass.accept': case 'pass.activate':
+      return { type: c.type, passId: uuid(c.passId, 'passId'), proof: proof(c.proof) };
+    case 'entry.reserve':
+      return { type: c.type, reservationId: uuid(c.reservationId, 'reservationId'), passId: uuid(c.passId, 'passId'),
+        signalId: key(c.signalId, 'signalId'), key: key(c.key, 'idempotencyKey'),
+        amountMicros: toMicros(c.amountMicros, 'amountMicros').toString() };
+    case 'entry.reconcile':
+      check(typeof c.terminal === 'boolean', 'terminal must be boolean');
+      check(!!c.evidence && typeof c.evidence === 'object' && !Array.isArray(c.evidence)
+        && Object.keys(c.evidence).length > 0, 'evidence is required');
+      return { type: c.type, reservationId: uuid(c.reservationId, 'reservationId'),
+        filledMicros: toMicros(c.filledMicros, 'filledMicros', true).toString(),
+        remainingUnits: toMicros(c.remainingUnits, 'remainingUnits', true).toString(),
+        terminal: c.terminal, evidence: publicData(c.evidence, 'evidence') };
+    case 'job.enqueue':
+      check(intIn(c.delayMs, 0, 31 * 86_400_000) && intIn(c.maxAttempts, 1, 100), 'job options invalid');
+      return { type: c.type, kind: key(c.kind, 'kind'), payload: publicData(c.payload, 'payload'),
+        dedupeKey: c.dedupeKey === null ? null : key(c.dedupeKey, 'dedupeKey'), delayMs: c.delayMs, maxAttempts: c.maxAttempts };
+    case 'job.claim':
+      check(Array.isArray(c.kinds) && c.kinds.length > 0, 'kinds required');
+      check(intIn(c.leaseMs, 1, 3_600_000), 'leaseMs invalid');
+      return { type: c.type, kinds: c.kinds.map((k: string) => key(k, 'kind')), leaseMs: c.leaseMs,
+        leaseToken: uuid(c.leaseToken, 'leaseToken') };
+    case 'job.complete': return { type: c.type, jobId: jobKey(c.jobId), leaseToken: uuid(c.leaseToken, 'leaseToken') };
+    case 'job.fail':
+      check(intIn(c.retryDelayMs, 0, 86_400_000), 'retryDelayMs invalid');
+      return { type: c.type, jobId: jobKey(c.jobId), leaseToken: uuid(c.leaseToken, 'leaseToken'),
+        error: redact(c.error), retryDelayMs: c.retryDelayMs };
+    default: return fail('invalid', 'unknown command');
+  }
+}
+
+/** Full replay. Any gap, duplicate or invalid command fails closed. */
+function replay(snapshot: JournalSnapshot): State {
+  const state = emptyState();
+  const ids = new Set<string>();
+  if (snapshot.events.length !== snapshot.nonce) throw new Error('ledger_journal_incomplete');
+  snapshot.events.forEach((event, index) => {
+    if (event.revision !== index + 1 || ids.has(event.id) || !Number.isSafeInteger(event.at) || event.at < state.at) {
+      throw new Error(`ledger_journal_invalid at revision ${index + 1}`);
+    }
+    ids.add(event.id);
+    try {
+      apply(state, event.revision, event.at, validate(event.command));
+    } catch (error) {
+      throw new Error(`ledger_journal_invalid at revision ${event.revision}`, { cause: error });
+    }
+  });
+  return state;
+}
+
+const cmd = <K extends Command['type']>(type: K, fields: Record<string, unknown>) =>
+  validate({ type, ...fields }) as Extract<Command, { type: K }>;
+
+type Plan<T> = { done: T } | { command: Command; result: (state: State) => T };
 
 export class Ledger {
-  private constructor(private readonly db: Db) {}
+  private gate: Promise<unknown> = Promise.resolve();
 
-  static async open(connectionString: string, options: { poolMax?: number } = {}): Promise<Ledger> {
-    return new Ledger(await openDatabase(connectionString, options.poolMax));
+  private constructor(private readonly journal: Journal) {}
+
+  static async open(journal: Journal): Promise<Ledger> {
+    replay(await journal.read());
+    return new Ledger(journal);
   }
 
-  async close() { await this.db.end(); }
+  get canWrite() { return this.journal.canWrite; }
 
-  async health(): Promise<{ ok: boolean; schemaVersion: number }> {
-    try {
-      const { rows } = await this.db.query('SELECT schema_version FROM ledger_meta WHERE id = 1');
-      return { ok: rows[0]?.schema_version === SCHEMA_VERSION, schemaVersion: rows[0]?.schema_version ?? 0 };
-    } catch {
-      return { ok: false, schemaVersion: 0 };
-    }
+  async close() { await this.journal.close(); }
+
+  async health(): Promise<{ ok: boolean; schemaVersion: 1; storage: 'arkiv'; blockNumber: string; canWrite: boolean }> {
+    const base = { schemaVersion: 1 as const, storage: 'arkiv' as const, canWrite: this.journal.canWrite };
+    const snapshot = await this.journal.read().then(read => { replay(read); return read; }).catch(() => null);
+    return { ok: !!snapshot, ...base, blockNumber: snapshot ? snapshot.blockNumber.toString() : '0' };
+  }
+
+  /** Reads always replay the full journal; there is no cache or memory fallback. */
+  private async state() { return replay(await this.journal.read()); }
+
+  /** In-process serialization only; cross-process safety is the journal's nonce fence. */
+  private write<T>(plan: (state: State, at: number) => Plan<T>): Promise<T> {
+    if (!this.journal.canWrite) fail('read_only', 'ledger is read-only');
+    const run = this.gate.then(async () => {
+      const snapshot = await this.journal.read();
+      const state = replay(snapshot);
+      const at = Math.max(snapshot.timestampMs, state.at);
+      const step = plan(state, at);
+      if ('done' in step) return step.done;
+      const command = validate(step.command);
+      apply(state, snapshot.nonce + 1, at, command); // throws LedgerError before any append
+      try {
+        await this.journal.append({ revision: snapshot.nonce + 1, id: randomUUID(), at, command }, snapshot.nonce);
+      } catch (error) {
+        // No retry or recompute: the write may or may not have landed. Callers retry by idempotency key.
+        throw new LedgerError('stale', 'journal append rejected or unconfirmed', { cause: error });
+      }
+      return step.result(state);
+    });
+    this.gate = run.catch(() => undefined);
+    return run;
   }
 
   async requestPass(walletAddress: string, traderId: string, terms: Terms, idempotencyKey: string): Promise<Pass> {
-    const owner = wallet(walletAddress);
-    key(traderId, 'traderId');
-    key(idempotencyKey, 'idempotencyKey');
-    const frozen = freezeTerms(terms);
-    const perTrade = BigInt(frozen.perTradeUsd) * MICROS_PER_USD;
-    return transaction(this.db, async tx => {
-      const inserted = await tx.query(`INSERT INTO passes (id, wallet, trader_id, request_key, terms,
-        per_trade_micros, cap_micros, trade_count, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'requested')
-        ON CONFLICT (wallet, request_key) DO NOTHING RETURNING *`, [randomUUID(), owner, traderId,
-        idempotencyKey, JSON.stringify(frozen), perTrade.toString(),
-        (perTrade * BigInt(frozen.tradeCount)).toString(), frozen.tradeCount]);
-      if (inserted.rows[0]) {
-        await event(tx, inserted.rows[0].id, 'pass_requested', { traderId, terms: frozen });
-        return passFrom(inserted.rows[0]);
-      }
-      const { rows } = await tx.query('SELECT * FROM passes WHERE wallet = $1 AND request_key = $2',
-        [owner, idempotencyKey]);
-      // jsonb reorders keys, so compare field by field.
-      const same = rows[0].trader_id === traderId
-        && (Object.keys(frozen) as (keyof Terms)[]).every(field => rows[0].terms[field] === frozen[field]);
-      return same ? passFrom(rows[0]) : fail('conflict', 'idempotency key reused with different request');
+    const command = cmd('pass.request', { passId: randomUUID(), wallet: walletAddress, traderId, requestKey: idempotencyKey, terms });
+    return this.write<Pass>(state => {
+      const existing = state.passes.get(state.requestKeys.get(requestKeyOf(command.wallet, command.requestKey)) ?? '');
+      if (!existing) return { command, result: s => passView(getPassRow(s, command.passId)) };
+      const same = existing.traderId === command.traderId
+        && (Object.keys(command.terms) as (keyof Terms)[]).every(f => existing.terms[f] === command.terms[f]);
+      return same ? { done: passView(existing) } : fail('conflict', 'idempotency key reused with different request');
     });
   }
 
@@ -179,168 +208,93 @@ export class Ledger {
   activatePass(passId: string, evidence: ChainProof) { return this.advance(passId, evidence, 'activate'); }
 
   private async advance(passId: string, evidence: ChainProof, kind: 'accept' | 'activate'): Promise<Pass> {
-    uuid(passId, 'passId');
-    const verified = proof(evidence);
-    const [from, to] = kind === 'accept' ? ['requested', 'accepted'] : ['accepted', 'active'];
-    return transaction(this.db, async tx => {
-      const pass = await lockPass(tx, passId);
-      if (pass.status !== from) {
-        const prior = await tx.query('SELECT tx_hash, chain_id FROM chain_proofs WHERE pass_id = $1 AND kind = $2',
-          [passId, kind]);
-        const replay = prior.rows[0]?.tx_hash === verified.txHash && Number(prior.rows[0]?.chain_id) === verified.chainId;
-        return replay ? passFrom(pass) : fail('state', `pass is ${pass.status}, expected ${from}`);
+    const command = cmd(kind === 'accept' ? 'pass.accept' : 'pass.activate', { passId, proof: evidence });
+    const from = kind === 'accept' ? 'requested' : 'accepted';
+    return this.write<Pass>(state => {
+      const pass = getPassRow(state, passId);
+      const prior = pass.proofs[kind];
+      if (pass.status !== from && prior?.txHash === command.proof.txHash && prior.chainId === command.proof.chainId) {
+        return { done: passView(pass) }; // replay of the same verified proof is a no-op
       }
-      const stored = await tx.query(`INSERT INTO chain_proofs (pass_id, kind, chain_id, tx_hash, block_number, proof)
-        VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING pass_id`, [passId, kind,
-        verified.chainId, verified.txHash, verified.blockNumber, JSON.stringify(verified)]);
-      if (!stored.rows[0]) fail('conflict', 'chain proof already used');
-      const { rows } = await tx.query(kind === 'accept'
-        ? `UPDATE passes SET status = 'accepted' WHERE id = $1 RETURNING *`
-        : `UPDATE passes SET status = 'active', activated_at = now(),
-            expires_at = now() + make_interval(days => (terms->>'durationDays')::int)
-          WHERE id = $1 RETURNING *`, [passId]);
-      await event(tx, passId, kind === 'accept' ? 'pass_accepted' : 'pass_activated', { status: to, proof: verified });
-      return passFrom(rows[0]);
+      return { command, result: s => passView(getPassRow(s, passId)) };
     });
   }
 
   async reserveEntry(passId: string, signalId: string, amountMicros: string | bigint,
     idempotencyKey: string): Promise<Reservation> {
-    uuid(passId, 'passId');
-    key(signalId, 'signalId');
-    key(idempotencyKey, 'idempotencyKey');
-    const amount = toMicros(amountMicros, 'amountMicros');
-    return transaction(this.db, async tx => {
-      const pass = await lockPass(tx, passId);
-      const prior = await tx.query(
-        'SELECT * FROM reservations WHERE pass_id = $1 AND (idempotency_key = $2 OR signal_id = $3)',
-        [passId, idempotencyKey, signalId]);
-      const existing = prior.rows.find(row => row.idempotency_key === idempotencyKey);
-      if (existing) {
-        const same = existing.signal_id === signalId && BigInt(existing.amount_micros) === amount;
-        return same ? reservationFrom(existing) : fail('conflict', 'idempotency key reused with different entry');
-      }
-      if (prior.rows.length) fail('conflict', 'signal already reserved for this pass');
-      if (pass.status !== 'active') fail('state', `pass is ${pass.status}`);
-      if (pass.expired) fail('expired', 'pass has expired');
-      if (pass.entries >= pass.trade_count) fail('count_exceeded', 'trade count used');
-      if (amount > BigInt(pass.per_trade_micros)) fail('cap_exceeded', 'amount above per-trade limit');
-      const used = BigInt(pass.held_micros) + BigInt(pass.spent_micros);
-      if (used + amount > BigInt(pass.cap_micros)) fail('cap_exceeded', 'cumulative pass budget used');
-      const id = randomUUID();
-      const { rows } = await tx.query(`INSERT INTO reservations (id, pass_id, signal_id, idempotency_key,
-        amount_micros, status) VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING *`,
-        [id, passId, signalId, idempotencyKey, amount.toString()]);
-      await tx.query('UPDATE passes SET held_micros = held_micros + $2, entries = entries + 1 WHERE id = $1',
-        [passId, amount.toString()]);
-      await event(tx, passId, 'entry_reserved', { reservationId: id, signalId, amountMicros: amount.toString() });
-      return reservationFrom(rows[0]);
+    const command = cmd('entry.reserve', { reservationId: randomUUID(), passId, signalId, key: idempotencyKey, amountMicros });
+    return this.write<Reservation>(state => {
+      getPassRow(state, passId);
+      const existing = state.reservations.get(state.reservationKeys.get(entryKeyOf(passId, 'key', command.key)) ?? '');
+      if (!existing) return { command, result: s => reservationView(s.reservations.get(command.reservationId)!) };
+      const same = existing.signalId === command.signalId && existing.amount === BigInt(command.amountMicros);
+      return same ? { done: reservationView(existing) } : fail('conflict', 'idempotency key reused with different entry');
     });
   }
 
   async reconcileEntry(reservationId: string, filledMicros: string | bigint, remainingUnits: string | bigint,
     terminal: boolean, evidence: Record<string, unknown>): Promise<Reservation> {
-    uuid(reservationId, 'reservationId');
-    const filled = toMicros(filledMicros, 'filledMicros', true);
-    const units = toMicros(remainingUnits, 'remainingUnits', true);
-    check(typeof terminal === 'boolean', 'terminal must be boolean');
-    check(!!evidence && typeof evidence === 'object' && Object.keys(evidence).length > 0, 'evidence is required');
-    return transaction(this.db, async tx => {
-      const owner = await tx.query('SELECT pass_id FROM reservations WHERE id = $1', [reservationId]);
-      if (!owner.rows[0]) fail('not_found', 'reservation not found');
-      const passId = owner.rows[0].pass_id;
-      await lockPass(tx, passId); // lock order: pass then reservation
-      const { rows } = await tx.query('SELECT * FROM reservations WHERE id = $1 FOR UPDATE', [reservationId]);
-      const entry = rows[0];
-      const amount = BigInt(entry.amount_micros);
-      const previous = BigInt(entry.filled_micros);
+    const command = cmd('entry.reconcile', { reservationId, filledMicros, remainingUnits, terminal, evidence });
+    return this.write<Reservation>(state => {
+      const entry = state.reservations.get(reservationId) ?? fail('not_found', 'reservation not found');
       if (entry.status === 'settled') {
-        const same = previous === filled && BigInt(entry.remaining_units) === units && terminal;
-        return same ? reservationFrom(entry) : fail('state', 'reservation already settled');
+        const same = entry.filled === BigInt(command.filledMicros) && entry.units === BigInt(command.remainingUnits) && terminal;
+        return same ? { done: reservationView(entry) } : fail('state', 'reservation already settled');
       }
-      if (filled < previous) fail('invalid', 'filledMicros cannot decrease');
-      if (filled > amount) fail('cap_exceeded', 'fill exceeds reservation');
-      // Fill moves from held to spent; terminal releases only the unfilled remainder.
-      const released = terminal ? amount - filled : 0n;
-      const freedSlot = terminal && filled === 0n ? 1 : 0;
-      await tx.query(`UPDATE passes SET spent_micros = spent_micros + $2,
-        held_micros = held_micros - $2 - $3, entries = entries - $4 WHERE id = $1`,
-        [passId, (filled - previous).toString(), released.toString(), freedSlot]);
-      const updated = await tx.query(`UPDATE reservations SET filled_micros = $2, remaining_units = $3,
-        status = $4, updated_at = now() WHERE id = $1 RETURNING *`,
-        [reservationId, filled.toString(), units.toString(), terminal ? 'settled' : 'pending']);
-      await event(tx, passId, terminal ? 'entry_settled' : 'entry_reconciled', {
-        reservationId, filledMicros: filled.toString(), remainingUnits: units.toString(),
-        releasedMicros: released.toString(), evidence,
-      });
-      return reservationFrom(updated.rows[0]);
+      return { command, result: s => reservationView(s.reservations.get(reservationId)!) };
     });
   }
 
   async getPass(passId: string): Promise<Pass> {
     uuid(passId, 'passId');
-    const { rows } = await this.db.query('SELECT * FROM passes WHERE id = $1', [passId]);
-    return passFrom(rows[0] ?? fail('not_found', 'pass not found'));
+    return passView(getPassRow(await this.state(), passId));
   }
 
   async listPasses(walletAddress: string): Promise<Pass[]> {
-    const { rows } = await this.db.query('SELECT * FROM passes WHERE wallet = $1 ORDER BY created_at, id',
-      [wallet(walletAddress)]);
-    return rows.map(passFrom);
+    const owner = wallet(walletAddress);
+    return [...(await this.state()).passes.values()].filter(p => p.wallet === owner).map(passView);
   }
 
   async events(passId: string): Promise<LedgerEvent[]> {
     uuid(passId, 'passId');
-    const { rows } = await this.db.query('SELECT * FROM ledger_events WHERE pass_id = $1 ORDER BY seq', [passId]);
-    return rows.map(row => ({ seq: row.seq, passId: row.pass_id, kind: row.kind, payload: row.payload,
-      createdAt: row.created_at.toISOString() }));
+    return (await this.state()).events.filter(e => e.passId === passId);
   }
 
   async enqueueJob(kind: string, payload: unknown,
     options: { dedupeKey?: string; delayMs?: number; maxAttempts?: number } = {}): Promise<Job> {
-    key(kind, 'kind');
-    const delay = options.delayMs ?? 0;
-    const attempts = options.maxAttempts ?? 5;
-    check(intIn(delay, 0, 31 * 86_400_000) && intIn(attempts, 1, 100), 'job options invalid');
-    const { rows } = await this.db.query(`INSERT INTO jobs (kind, payload, dedupe_key, status, max_attempts, run_after)
-      VALUES ($1, $2, $3, 'queued', $4, now() + $5 * interval '1 millisecond')
-      ON CONFLICT (dedupe_key) DO UPDATE SET dedupe_key = jobs.dedupe_key RETURNING *`,
-      [kind, JSON.stringify(payload ?? null), options.dedupeKey ?? null, attempts, delay]);
-    return jobFrom(rows[0]);
+    const command = cmd('job.enqueue', { kind, payload, dedupeKey: options.dedupeKey ?? null,
+      delayMs: options.delayMs ?? 0, maxAttempts: options.maxAttempts ?? 5 });
+    return this.write<Job>(state => {
+      const existing = command.dedupeKey === null ? undefined : state.jobs.get(state.dedupe.get(command.dedupeKey) ?? '');
+      if (existing) return { done: jobView(existing) };
+      const id = String(state.nextJob);
+      return { command, result: s => jobView(s.jobs.get(id)!) };
+    });
   }
 
   /** Claims the next ready job (or one whose lease expired). Each claim counts as an attempt. */
   async claimJob(kinds: string[], leaseMs: number): Promise<Job | null> {
-    check(Array.isArray(kinds) && kinds.length > 0, 'kinds required');
-    check(intIn(leaseMs, 1, 3_600_000), 'leaseMs invalid');
-    return transaction(this.db, async tx => {
-      await tx.query(`UPDATE jobs SET status = 'dead', lease_token = NULL, updated_at = now(),
-        last_error = coalesce(last_error, 'lease expired') WHERE kind = ANY($1) AND status = 'running'
-        AND lease_until < now() AND attempts >= max_attempts`, [kinds]);
-      const { rows } = await tx.query(`UPDATE jobs SET status = 'running', attempts = attempts + 1,
-        lease_token = $3, lease_until = now() + $2 * interval '1 millisecond', updated_at = now()
-        WHERE id = (SELECT id FROM jobs WHERE kind = ANY($1) AND ((status = 'queued' AND run_after <= now())
-          OR (status = 'running' AND lease_until < now())) ORDER BY run_after, id
-          FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`, [kinds, leaseMs, randomUUID()]);
-      return rows[0] ? jobFrom(rows[0]) : null;
+    const command = cmd('job.claim', { kinds, leaseMs, leaseToken: randomUUID() });
+    return this.write<Job | null>((state, at) => {
+      const { dead, next } = claimPlan(state, command.kinds, at);
+      if (!dead.length && !next) return { done: null };
+      const id = next?.id;
+      return { command, result: s => id ? jobView(s.jobs.get(id)!) : null };
     });
   }
 
   async completeJob(jobId: string, leaseToken: string): Promise<void> {
-    const { rowCount } = await this.db.query(`UPDATE jobs SET status = 'done', lease_token = NULL,
-      lease_until = NULL, updated_at = now() WHERE id = $1 AND status = 'running' AND lease_token = $2 AND lease_until > now()`,
-      [jobKey(jobId), uuid(leaseToken, 'leaseToken')]);
-    if (!rowCount) fail('lease_lost', 'job lease no longer held');
+    const command = cmd('job.complete', { jobId, leaseToken });
+    return this.write<void>(state => {
+      const job = state.jobs.get(jobId);
+      // A retry after a lost acknowledgement finds its own completion already recorded.
+      if (job?.status === 'done' && job.doneToken === leaseToken) return { done: undefined };
+      return { command, result: () => undefined };
+    });
   }
 
   async failJob(jobId: string, leaseToken: string, error: string, retryDelayMs = 1_000): Promise<Job> {
-    check(intIn(retryDelayMs, 0, 86_400_000), 'retryDelayMs invalid');
-    const { rows } = await this.db.query(`UPDATE jobs SET lease_token = NULL, lease_until = NULL,
-      last_error = $3, updated_at = now(),
-      status = CASE WHEN attempts >= max_attempts THEN 'dead' ELSE 'queued' END,
-      run_after = now() + $4 * interval '1 millisecond'
-      WHERE id = $1 AND status = 'running' AND lease_token = $2 AND lease_until > now() RETURNING *`,
-      [jobKey(jobId), uuid(leaseToken, 'leaseToken'), String(error).slice(0, 2000), retryDelayMs]);
-    return rows[0] ? jobFrom(rows[0]) : fail('lease_lost', 'job lease no longer held');
+    const command = cmd('job.fail', { jobId, leaseToken, error, retryDelayMs });
+    return this.write<Job>(() => ({ command, result: s => jobView(s.jobs.get(jobId)!) }));
   }
 }
