@@ -12,3 +12,15 @@ dist-server/
 
 # Short-lived GitHub OIDC credential files must never enter Git or image layers.
 gha-creds-*.json
+
+# Local research, design studies, operational helpers, and generated reports.
+/docs/
+/scripts/
+/design/
+/design-qa.md
+/infra/secrets.sh
+/.dockerignore
+/.gcloudignore
+/runtime.json
+.DS_Store
+*.log
