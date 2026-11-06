@@ -24,6 +24,24 @@ jobs:
       ARKIV_WRITER_ADDRESS: "0x0000000000000000000000000000000000000001"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Reject tracked local files
+        run: |
+          python3 - <<'PYTHON'
+          import pathlib, subprocess, sys
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          local_dirs = {'.context', '.tokensave', '.playwright-cli', 'node_modules', 'dist', 'dist-server', 'docs', 'scripts', 'design'}
+          local_names = {'.DS_Store', '.dockerignore', '.gcloudignore', 'design-qa.md', 'runtime.json'}
+          bad = []
+          for value in filter(None, paths):
+              path = pathlib.PurePosixPath(value)
+              secret_env = path.name == '.env' or (path.name.startswith('.env.') and path.name != '.env.example')
+              if local_dirs.intersection(path.parts) or path.name in local_names or secret_env or value == 'infra/secrets.sh' or path.name.startswith('gha-creds-'):
+                  bad.append(value)
+          if bad:
+              print('Untrack local-only files before publishing:\n' + '\n'.join(bad))
+              sys.exit(1)
+          print('No local-only files are tracked.')
+          PYTHON
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
