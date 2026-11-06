@@ -37,7 +37,7 @@ function loadDraft(traderId: string): { draft: Draft; savedAt: number } | null {
     const raw = localStorage.getItem(draftKey(traderId));
     if (!raw) return null;
     const d = JSON.parse(raw) as Draft & { savedAt: number };
-    if (!DURATIONS.includes(d.durationDays) || !SAFETY_NETS.includes(d.safetyNetBps)) return null;
+    if (!d || typeof d !== 'object' || !Number.isSafeInteger(d.savedAt) || d.savedAt < 0 || d.savedAt > Date.now() + 300_000 || !DURATIONS.includes(d.durationDays) || !SAFETY_NETS.includes(d.safetyNetBps)) return null;
     return {
       savedAt: d.savedAt,
       draft: {
@@ -186,7 +186,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
         <span className="ps-pill ps-pill-preview">Preview profile</span>
       </div>
 
-      <main className="ps-main">
+      <div className="ps-main">
         <h1 ref={headingRef} tabIndex={-1} className="ps-title">{title}</h1>
 
         {step === 'edit' && (
@@ -217,7 +217,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
             <Choice legend="Safety-net stop per copy" name="ps-net" value={d.safetyNetBps}
               options={SAFETY_NETS.map((b) => ({ value: b, label: `−${b / 100}%` }))}
               onChange={(v) => set('safetyNetBps', v)} />
-            <p className="ps-hint ps-hint-tight">Used when {first}’s own stop is missing or wider. A copy may exit before {first}, never after.</p>
+            <p className="ps-hint ps-hint-tight">Used when {first}’s own stop is missing or wider. A tighter trigger can exit earlier. Actual fill timing and price can differ.</p>
             <div className="ps-fixed">
               <span>Profit share to {first}</span><b>{DEFAULT_TERMS.profitShareBps / 100}% · fixed</b>
             </div>
@@ -302,7 +302,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
           </section>
         )}
         <p className="ps-status" role="status" aria-live="polite">{status}</p>
-      </main>
+      </div>
     </div>
   );
 }

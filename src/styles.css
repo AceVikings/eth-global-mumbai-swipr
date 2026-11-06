@@ -539,3 +539,8 @@ main {
     scroll-behavior: auto !important;
   }
 }
+
+@media (max-width: 767px) {
+  .mobile-header { padding: 12px 0; }
+  .notice-host { bottom: 188px; }
+}

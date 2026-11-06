@@ -56,7 +56,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
   const act = useCallback((dir: Dir, t: Trader, i: number) => {
     if (dir === 'right') {
       onGhost(t);
-      setToast({ kind: 'ghost', trader: t, index: i, at: Date.now() });
+      setToast(null);
     } else {
       setToast({ kind: 'pass', trader: t, index: i, at: Date.now() });
     }
