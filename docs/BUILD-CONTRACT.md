@@ -41,8 +41,8 @@ Arkiv Rabdi and Swarm remain the intended integrations. Secrets stay server-side
   spectator/replay works offline, signing and workers require their real services.
 
 ## Implementation and verification
-Build the runnable app, financial domain and read-only integration boundaries in
-parallel. Keep preview fixtures permanently labeled; live mode starts empty until
+Build the website first in parallel: discovery, local ghosts and Copy Pass review.
+Provider adapters and financial execution follow this milestone. Keep preview fixtures permanently labeled; live mode starts empty until
 verified data is configured. Never manufacture fills, identity badges or proofs.
 Provider credentials, onchain deployment, real fills, signer policy enforcement,
 Bee setup/BMT and archive recovery are separate live acceptance gates. An installed
