@@ -75,6 +75,21 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build backend image (no credentials in build)
         run: docker build --tag swipr-backend:ci backend
+      - name: Smoke test API and worker containers
+        run: |
+          set -euo pipefail
+          trap 'docker rm --force swipr-api-smoke swipr-worker-smoke >/dev/null 2>&1 || true' EXIT
+          docker run --rm --entrypoint sh swipr-backend:ci -c 'test ! -e /app/.env && test ! -d /app/frontend && test ! -d /app/docs && test ! -d /app/.context'
+          docker run --detach --name swipr-api-smoke -e APP_MODE=preview -e PORT=8787 -p 127.0.0.1:8787:8787 swipr-backend:ci
+          docker run --detach --name swipr-worker-smoke -e APP_MODE=preview -e PORT=8788 -p 127.0.0.1:8788:8788 swipr-backend:ci npm run worker
+          for port in 8787 8788; do
+            if ! curl --fail --retry 10 --retry-connrefused --retry-delay 1 "http://127.0.0.1:${port}/health"; then
+              docker logs swipr-api-smoke
+              docker logs swipr-worker-smoke
+              exit 1
+            fi
+            test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${port}/ready")" = 503
+          done
       - id: auth
         name: Authenticate deployer with GitHub OIDC
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
