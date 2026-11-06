@@ -7,16 +7,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_TERMS, type Mode, type Terms, type Trader } from '../contracts/types';
 import '../pass-setup.css';
 
-type Props = { trader: Trader; onClose: () => void; initialPerTradeUsd?: number };
+type Props = { trader: Trader; onClose: () => void };
 type Step = 'edit' | 'review' | 'wallet';
 type Draft = {
-  amount: string; count: string; breakup: string; durationDays: Terms['durationDays'];
-  safetyNetBps: number; mode: Mode; liquidateOnBreakup: boolean;
+  count: string; durationDays: Terms['durationDays']; mode: Mode;
 };
 type Frozen = { terms: Terms; frozenAt: number };
 
 const DURATIONS = [1, 7, 30] as const;
-const SAFETY_NETS = [0, 300, 500, 800];
 const draftKey = (id: string) => `swipr.passDraft.v1.${id}`;
 
 const parseInt_ = (s: string, lo: number, hi: number) =>
@@ -26,13 +24,9 @@ const usd = (n: number) => `$${n.toLocaleString('en-US')}`;
 const when = (ms: number) =>
   new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(ms);
 
-function freshDraft(initialPerTradeUsd?: number): Draft {
-  const amount = initialPerTradeUsd == null || !Number.isFinite(initialPerTradeUsd)
-    ? DEFAULT_TERMS.perTradeUsd : clampInt(initialPerTradeUsd, 5, 50);
+function freshDraft(): Draft {
   return {
-    amount: String(amount), count: String(DEFAULT_TERMS.tradeCount),
-    breakup: String(DEFAULT_TERMS.breakupUsd), durationDays: DEFAULT_TERMS.durationDays,
-    safetyNetBps: DEFAULT_TERMS.safetyNetBps, mode: 'tap', liquidateOnBreakup: false,
+    count: String(DEFAULT_TERMS.tradeCount), durationDays: DEFAULT_TERMS.durationDays, mode: 'tap',
   };
 }
 
@@ -41,13 +35,11 @@ function loadDraft(traderId: string): { draft: Draft; savedAt: number } | null {
     const raw = localStorage.getItem(draftKey(traderId));
     if (!raw) return null;
     const d = JSON.parse(raw) as Draft & { savedAt: number };
-    if (!d || typeof d !== 'object' || !Number.isSafeInteger(d.savedAt) || d.savedAt < 0 || d.savedAt > Date.now() + 300_000 || !DURATIONS.includes(d.durationDays) || !SAFETY_NETS.includes(d.safetyNetBps)) return null;
+    if (!d || typeof d !== 'object' || !Number.isSafeInteger(d.savedAt) || d.savedAt < 0 || d.savedAt > Date.now() + 300_000 || !DURATIONS.includes(d.durationDays)) return null;
     return {
       savedAt: d.savedAt,
       draft: {
-        amount: String(d.amount), count: String(d.count), breakup: String(d.breakup),
-        durationDays: d.durationDays, safetyNetBps: d.safetyNetBps,
-        mode: d.mode === 'auto' ? 'auto' : 'tap', liquidateOnBreakup: d.liquidateOnBreakup === true,
+        count: String(d.count), durationDays: d.durationDays, mode: d.mode === 'auto' ? 'auto' : 'tap',
       },
     };
   } catch {
@@ -109,7 +101,7 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className="ps-row"><dt>{label}</dt><dd>{children}</dd></div>
 );
 
-export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props) {
+export default function PassSetup({ trader, onClose }: Props) {
   const session = useSession();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -124,7 +116,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
     return () => { active = false; };
   }, [session.address, trader.id]);
   const [stored] = useState(() => loadDraft(trader.id));
-  const [d, setD] = useState<Draft>(() => stored?.draft ?? freshDraft(initialPerTradeUsd));
+  const [d, setD] = useState<Draft>(() => stored?.draft ?? freshDraft());
   const [step, setStep] = useState<Step>('edit');
   const [frozen, setFrozen] = useState<Frozen | null>(null);
   const [ack, setAck] = useState(false);
@@ -133,12 +125,11 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
   const first = trader.name;
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
-  const amount = parseInt_(d.amount, 5, 50);
+  const amount = 5;
   const count = parseInt_(d.count, 1, 20);
   const cap = amount && count ? amount * count : null;
-  const breakupMax = cap ?? 1000;
-  const breakup = parseInt_(d.breakup, 1, breakupMax);
-  const valid = amount !== null && count !== null && breakup !== null;
+  const breakup = Math.min(DEFAULT_TERMS.breakupUsd, cap ?? DEFAULT_TERMS.breakupUsd);
+  const valid = amount === 5 && count !== null;
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -160,8 +151,8 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
       frozenAt: Date.now(),
       terms: {
         perTradeUsd: amount, tradeCount: count, durationDays: d.durationDays, mode: d.mode,
-        breakupUsd: breakup, safetyNetBps: d.safetyNetBps,
-        profitShareBps: DEFAULT_TERMS.profitShareBps, liquidateOnBreakup: d.liquidateOnBreakup,
+        breakupUsd: breakup, safetyNetBps: 0,
+        profitShareBps: DEFAULT_TERMS.profitShareBps, liquidateOnBreakup: false,
       },
     });
     setAck(false);
@@ -209,9 +200,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
         {step === 'edit' && (
           <form className="ps-form" onSubmit={(e) => { e.preventDefault(); review(); }} noValidate>
             <p className="ps-lede">Set your limits with {first}. Nothing is saved until you review, and no money moves on this page.</p>
-            <Stepper id="ps-amount" label="Per copied trade" big prefix="$" value={d.amount} min={5} max={50}
-              hint="Whole dollars, $5–$50 of USDC per copy."
-              error={amount === null ? 'Enter a whole number from 5 to 50.' : null} onChange={(v) => set('amount', v)} />
+            <dl className="ps-panel"><Row label="Per copied trade">$5 USDC</Row></dl>
             <Stepper id="ps-count" label="Number of trades" suffix="trades" value={d.count} min={1} max={20}
               hint="1–20 copies before the pass stops entering."
               error={count === null ? 'Enter a whole number from 1 to 20.' : null} onChange={(v) => set('count', v)} />
@@ -224,20 +213,6 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
               options={DURATIONS.map((n) => ({ value: n, label: n === 1 ? '1 day' : `${n} days` }))}
               onChange={(v) => set('durationDays', v)} />
             <p className="ps-hint ps-hint-tight">Requested duration: {d.durationDays} {d.durationDays === 1 ? 'day' : 'days'} from joining.</p>
-            <Stepper id="ps-breakup" label="Breakup threshold" prefix="−$" value={d.breakup} min={1} max={breakupMax}
-              hint={`Pause new entries if the pass falls this far below its best marked P&L. Not a guaranteed loss limit.`}
-              error={breakup === null ? `Enter a whole number from 1 to ${breakupMax}.` : null} onChange={(v) => set('breakup', v)} />
-            <label className="ps-check">
-              <input type="checkbox" checked={d.liquidateOnBreakup} onChange={(e) => set('liquidateOnBreakup', e.target.checked)} />
-              <span>Also sell my copied holdings if the threshold is hit<small>Requested behavior only. Joining does not create trades or grant permissions.</small></span>
-            </label>
-            <Choice legend="Safety-net stop per copy" name="ps-net" value={d.safetyNetBps}
-              options={SAFETY_NETS.map((b) => ({ value: b, label: b === 0 ? 'No stop' : `−${b / 100}%` }))}
-              onChange={(v) => set('safetyNetBps', v)} />
-            <p className="ps-hint ps-hint-tight">Requested stop level. A stop trigger does not guarantee a fill price.</p>
-            <div className="ps-fixed">
-              <span>Requested profit share to {first}</span><b>{DEFAULT_TERMS.profitShareBps / 100}% · fixed</b>
-            </div>
             <Choice legend="How you copy" name="ps-mode" value={d.mode} wide onChange={(v) => set('mode', v)}
               options={[
                 { value: 'tap', label: 'Tap to copy', sub: 'Default · you approve each new trade before entry' },
@@ -265,9 +240,6 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
               <dl className="ps-panel">
                 <Row label="Requested budget">{usd(t.perTradeUsd * t.tradeCount)}</Row>
                 <Row label="Pass length">{t.durationDays} {t.durationDays === 1 ? 'day' : 'days'} from joining</Row>
-                <Row label="Breakup threshold">−{usd(t.breakupUsd)} from best · {t.liquidateOnBreakup ? 'request an exit' : 'pause new entries'}</Row>
-                <Row label="Requested stop">{t.safetyNetBps === 0 ? 'No stop' : `−${t.safetyNetBps / 100}% per copy`}</Row>
-                <Row label="Requested profit share">{t.profitShareBps / 100}% of new realized net profit</Row>
               </dl>
 
               <p>Joining saves your chosen limits and takes an available seat automatically. Trading permissions and orders are separate.</p>

@@ -185,7 +185,6 @@ export default function App() {
             <PassSetup
               trader={realTrader}
               onClose={() => setRealTrader(null)}
-              initialPerTradeUsd={prefs.amount}
             />
           ) : (
             <>
