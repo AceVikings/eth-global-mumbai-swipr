@@ -24,3 +24,9 @@ export const canonical=(value:unknown):string=>{
  if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical((value as Record<string,unknown>)[k])).join(',')+'}';
  throw Error('Invalid canonical JSON value.');
 };
+
+/** Privy adds rule IDs and checksum-normalizes address values when storing a policy. */
+export function comparableRules(rules:Record<string,any>[]){
+ const address=(value:unknown)=>typeof value==='string'&&/^0x[0-9a-f]{40}$/i.test(value)?value.toLowerCase():value;
+ return rules.map(({id:_id,...rule})=>({...rule,conditions:rule.conditions.map((condition:Record<string,any>)=>({...condition,value:Array.isArray(condition.value)?condition.value.map(address):address(condition.value)}))}));
+}

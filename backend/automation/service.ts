@@ -4,8 +4,8 @@ import{ApiError,type Identity}from'../auth';
 import type{BotProfile}from'../contracts/bots';
 import type{SeatPass,SeatDirectory}from'../contracts/seats';
 import type{TradingService}from'../trading/service';
-import{createFlashClient,TOKENS}from'../providers/flash';
-import{copyPolicy,canonical}from'./policy';
+import{createFlashClient,TOKENS,validateTypedData,SWIPR_INTEGRATOR_FEE_BPS}from'../providers/flash';
+import{copyPolicy,canonical,comparableRules}from'./policy';
 import{parseGrant,type Grant}from'./grants';
 import{createPrivyControl}from'./privy';
 export function createAutomation(options:{control:ReturnType<typeof createPrivyControl>;signerId:string;trades:TradingService;flash:ReturnType<typeof createFlashClient>;
@@ -29,7 +29,7 @@ export function createAutomation(options:{control:ReturnType<typeof createPrivyC
   const signer=wallet.additional_signers?.find((s:any)=>s.signer_id===g.signerId);
   if(!signer||canonical(signer.override_policy_ids??[])!==canonical([g.policyId]))throw Error('This signer is not enabled.');
   const policy=await control.request(`/policies/${g.policyId}`),expected=copyPolicy(seat,g.vault);
-  if(policy.version!==expected.version||policy.chain_type!==expected.chain_type||canonical(policy.rules?.map(({id: _id,...rule}:Record<string,unknown>)=>rule))!==canonical(expected.rules))throw Error('Wallet policy does not match this pass.');
+  if(policy.version!==expected.version||policy.chain_type!==expected.chain_type||canonical(comparableRules(policy.rules))!==canonical(comparableRules(expected.rules)))throw Error('Wallet policy does not match this pass.');
  };
  return{
   async signers(identity:Identity,wallet:string){
@@ -55,7 +55,11 @@ export function createAutomation(options:{control:ReturnType<typeof createPrivyC
    if(!seat||seat.terms.mode!=='auto'||seat.budgetVersion!==1)throw new ApiError(409,'permission_required','Join a current auto-copy pass first.');
    const existing=(await options.grants()).filter(g=>g.wallet===wallet&&g.expiresAt>Date.now());
    if(existing.some(g=>g.seatId!==seatId))throw new ApiError(409,'permission_required','Stop your other automatic pass before enabling this one.');
-   const quote=await source(seat);if(!quote)throw new ApiError(409,'source_required','Your trader needs a fresh confirmed order before automatic copying can be enabled.');
+   // Permission setup is independent of a trader's short copy window. This unsigned
+   // authenticated quote only discovers Flash's vault; the worker still requires a fill.
+   const intent={side:'buy' as const,asset:'WETH' as const,qty:'5',funder:wallet,orderType:'market' as const,maxPriceImpact:'0.01',integratorFeeBps:SWIPR_INTEGRATOR_FEE_BPS};
+   const quote=await options.flash.quote(intent);
+   validateTypedData(quote.typedData,intent,{now:Math.floor(Date.now()/1000),maxDeadline:Math.floor(Date.now()/1000)+900,expectedVault:String(quote.typedData.message.vault)});
    const user=await control.request(`/users/${encodeURIComponent(identity.userId)}`);
    const linked=user.linked_accounts?.find((a:any)=>a.type==='wallet'&&a.wallet_client_type==='privy'&&a.address?.toLowerCase()===wallet&&a.id);
    if(!linked)throw new ApiError(409,'embedded_wallet_required','Automatic copying needs your embedded wallet.');

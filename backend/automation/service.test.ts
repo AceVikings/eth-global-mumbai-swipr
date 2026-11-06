@@ -5,17 +5,17 @@ import {copyPolicy} from './policy';
 import {DEFAULT_TERMS} from '../contracts/types';
 import {FLASH_DOMAIN,FLASH_DOMAIN_TYPES,FLASH_ORDER_TYPES,TOKENS} from '../providers/flash';
 const account=privateKeyToAccount(`0x${'22'.repeat(32)}`),wallet=account.address.toLowerCase();
-const seat={id:`0x${'11'.repeat(32)}`,owner:wallet,traderId:`0x${'33'.repeat(32)}`,traderOwner:`0x${'44'.repeat(20)}`,status:'joined',budgetVersion:1,expiresAt:Date.now()+3600000,terms:{...DEFAULT_TERMS,mode:'auto',safetyNetBps:0,liquidateOnBreakup:false}} as any;
+const seat={id:`0x${'11'.repeat(32)}`,owner:wallet,traderId:`0x${'33'.repeat(32)}`,traderOwner:`0x${'44'.repeat(20)}`,status:'joined',budgetVersion:1,expiresAt:Date.now()+300000,terms:{...DEFAULT_TERMS,mode:'auto',safetyNetBps:0,liquidateOnBreakup:false}} as any;
 const grant={wallet,walletId:'wallet123456',seatId:seat.id,policyId:'policy123456',signerId:'signer123456',vault:`0x${'55'.repeat(20)}`,expiresAt:seat.expiresAt};
 const td={domain:FLASH_DOMAIN,types:{EIP712Domain:FLASH_DOMAIN_TYPES,FlashOrder:FLASH_ORDER_TYPES},primaryType:'FlashOrder',message:{vault:grant.vault,swapper:wallet,recipient:wallet,fromToken:TOKENS.USDC.address,toToken:TOKENS.WETH.address,fromAmount:'5000000',salt:'1',deadline:String(Math.floor(seat.expiresAt/1000))}};
 let currentSeat:any,currentGrant:any,policy:any,signers:any,quote:any;
 const submit=vi.fn(),preflight=vi.fn(),quoteFn=vi.fn(),request=vi.fn();
 const build=()=>createAutomation({control:{request,publicKey:null},signerId:grant.signerId,trades:{quote:quoteFn,preflight,submit} as any,
- flash:{listOrders:async()=>({orders:[{orderId:'source'}]}),getOrder:async()=>({raw:{order:{side:'buy',orderType:'limit',expiresAt:new Date(Date.now()+60000).toISOString(),targetAsset:{address:TOKENS.WETH.address}}}})} as any,
+ flash:{quote:async()=>quote,listOrders:async()=>({orders:[{orderId:'source'}]}),getOrder:async()=>({raw:{order:{side:'buy',orderType:'limit',expiresAt:new Date(Date.now()+60000).toISOString(),targetAsset:{address:TOKENS.WETH.address}}}})} as any,
  profiles:async()=>[],seats:async()=>({passes:currentSeat?[currentSeat]:[],invitations:[],availability:[]}),grants:async()=>currentGrant?[currentGrant]:[]});
 beforeEach(()=>{
  vi.resetAllMocks();currentSeat=structuredClone(seat);currentGrant={...grant};policy=copyPolicy(currentSeat,grant.vault);
- policy.rules=policy.rules.map((r:any)=>({...r,id:'provider-generated-rule'}));
+ policy.rules=policy.rules.map((r:any)=>({...r,id:'provider-generated-rule',conditions:r.conditions.map((c:any)=>({...c,value:['swapper','recipient'].includes(c.field)?account.address:c.value}))}));
  signers=[{signer_id:grant.signerId,override_policy_ids:[grant.policyId]}];
  quote={ticket:'ticket',quoteId:'quote',typedData:td};quoteFn.mockResolvedValue(quote);submit.mockResolvedValue({orderId:'copy'});
  request.mockImplementation(async(path:string)=>{
@@ -63,4 +63,10 @@ it('creates an owner-controlled policy and refuses unsupported or competing pass
 it('preserves unrelated signers in the owner-authorized revocation snapshot',async()=>{
  signers.push({signer_id:'unrelated123',override_policy_ids:['otherpolicy123']});
  expect(await build().signers({userId:'did:privy:test',wallets:[wallet]},wallet)).toEqual({walletId:grant.walletId,signers});
+});
+
+it('can prepare permissions before a fresh trader order without signing or submitting a trade',async()=>{
+ quoteFn.mockRejectedValue(Error('no trader fill'));
+ expect(await build().prepare({userId:'did:privy:test',wallets:[wallet]},wallet,seat.id)).toMatchObject(grant);
+ expect(submit).not.toHaveBeenCalled();expect(preflight).not.toHaveBeenCalled();expect(request.mock.calls.some(([p])=>p.endsWith('/rpc'))).toBe(false);
 });
