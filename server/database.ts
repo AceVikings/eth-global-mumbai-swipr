@@ -89,9 +89,9 @@ CREATE INDEX IF NOT EXISTS jobs_ready ON jobs (status, run_after);
 `;
 
 export async function openDatabase(connectionString: string, poolMax = 10): Promise<Db> {
-  const pool = new pg.Pool({ connectionString, max: poolMax });
+  const pool = new pg.Pool({ connectionString, max: poolMax, connectionTimeoutMillis: 8000, statement_timeout: 15000, idle_in_transaction_session_timeout: 15000 });
   // Idle client errors (e.g. Cloud SQL failover) must not crash the process.
-  pool.on('error', error => console.error('ledger pool error', error.message));
+  pool.on('error', () => console.error('ledger_pool_connection_error'));
   try {
     await transaction(pool, async tx => {
       await tx.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK]);
