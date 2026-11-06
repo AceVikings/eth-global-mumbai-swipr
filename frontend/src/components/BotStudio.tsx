@@ -6,7 +6,7 @@ import {
   LIMITS, loadLocalDraft, saveLocalDraft, sendCommand, short, signAction, snippets, toolName, upsertData, validateDraft,
 } from '../lib/bots';
 import type { BotProfile, BotsResponse, Integration, ProfileDraft } from '../lib/bots';
-import type { SignedBotAction } from '../../../shared/bots';
+import type { SignedBotAction } from '../contracts/bots';
 import '../bots.css';
 
 /** onChanged fires after the service accepts an upsert or halt, so the host can refresh its directory. */

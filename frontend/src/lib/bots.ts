@@ -1,5 +1,5 @@
-import { BOT_ASSETS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES, botMessage } from '../../../shared/bots';
-import type { BotAction, BotAsset, BotProfile, BotsListResponse, BotStrategy, BotStyle, ProfileUpsertData, SignedBotAction } from '../../../shared/bots';
+import { BOT_ASSETS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES, botMessage } from '../contracts/bots';
+import type { BotAction, BotAsset, BotProfile, BotsListResponse, BotStrategy, BotStyle, ProfileUpsertData, SignedBotAction } from '../contracts/bots';
 
 export type { BotProfile, BotsListResponse as BotsResponse };
 export type BotTool = string | { name: string; description?: string };
@@ -144,7 +144,7 @@ export function snippets(i: Integration | null) {
     ].join('\n\n'),
     mcp: JSON.stringify({ mcpServers: { swipr: { type: 'http', url: mcp } } }, null, 2),
     example: [
-      '// Operator wallet signs EIP-191 personal_sign over botMessage(payload) from shared/bots.ts.',
+      '// Operator wallet signs EIP-191 personal_sign over botMessage(payload) from src/contracts/bots.ts.',
       '// Signals are proposals only — not executable orders or verified fills.',
       '// Owner management actions additionally require a Bearer token from the owner\'s Google session.',
       `const payload = ${JSON.stringify(signal, null, 2)};`,

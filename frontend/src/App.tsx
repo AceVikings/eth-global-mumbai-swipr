@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RuntimeStatus, Trader } from "../../shared/types";
+import type { RuntimeStatus, Trader } from "./contracts/types";
 import { SessionPanel, useSession } from './auth/Session';
 import Dropdown from './components/Dropdown';
 import Leaderboards from './components/Leaderboards';

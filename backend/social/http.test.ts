@@ -6,9 +6,9 @@ import { readConfig } from '../config';
 import { JournalError, type Journal, type JournalEvent } from '../arkiv-journal';
 import { Ledger } from '../ledger';
 import { ProjectStore } from '../bots/store';
-import { botMessage, type BotAction } from '../../shared/bots';
+import { botMessage, type BotAction } from '../contracts/bots';
 import { SocialStore } from './store';
-import { socialMessage, type SocialAction } from '../../shared/social';
+import { socialMessage, type SocialAction } from '../contracts/social';
 import type { VerifiedClosedPosition } from './rankings';
 
 // Only tests instantiate this double. Runtime always reads and writes Arkiv.

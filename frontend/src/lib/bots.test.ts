@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SignedBotAction } from '../../../shared/bots';
+import type { SignedBotAction } from '../contracts/bots';
 import { BotRequestError, buildAction, isUncertain, sendCommand, snippets } from './bots';
 
 const integration = { audience: 'swipr-test', apiUrl: 'https://api.example.com', mcpUrl: 'https://api.example.com/mcp', tools: [], tradingEnabled: false as const };

@@ -7,13 +7,13 @@ import { createBotGateway, PARSE_ERROR_BODY } from './bots/gateway';
 import { createWorkerBridge } from './bots/bridge';
 import { verifyBotAction } from './bots/auth';
 import { BotError } from './bots/validation';
-import type { BotProfile } from '../shared/bots';
+import type { BotProfile } from './contracts/bots';
 import type { ProjectStore } from './bots/store';
 import { randomUUID } from 'node:crypto';
 import { ApiError, createAuthenticator, requireWallet } from './auth';
 import type { Config } from './config';
 import type { Ledger } from './ledger';
-import type { Terms } from '../shared/types';
+import type { Terms } from './contracts/types';
 import { createFlashClient, type OrderIntent, validateTypedData } from './providers/flash';
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { recoverMessageAddress } from 'viem';
-import { botMessage, type BotAction } from '../../shared/bots';
+import { botMessage, type BotAction } from '../contracts/bots';
 import { BotError, parseEnvelope } from './validation';
 
 export type VerifiedAction = { payload: BotAction; actor: string; digest: string };

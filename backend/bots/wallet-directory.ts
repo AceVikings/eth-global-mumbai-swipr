@@ -4,7 +4,7 @@ import { and, eq, desc } from '@arkiv-network/sdk/query';
 import { str } from '@arkiv-network/sdk/schema';
 import { http } from 'viem';
 import { WALLET_PROFILE_SCHEMA, WALLET_PROFILE_PROJECT } from '../arkiv-profile';
-import type { BotProfile } from '../../shared/bots';
+import type { BotProfile } from '../contracts/bots';
 import { address, profileUpsert } from './validation';
 
 /** Native chain metadata supplies ownership, identity and timestamps, never JSON claims. */

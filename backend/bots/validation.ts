@@ -1,7 +1,7 @@
 import {
   BOT_ACTIONS, BOT_ASSETS, BOT_CHAIN_ID, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES,
   type BotAction, type BotAsset, type ProfileHaltData, type ProfileUpsertData, type SignalPublishData, type SignedBotAction,
-} from '../../shared/bots';
+} from '../contracts/bots';
 
 export type BotErrorCode = 'invalid' | 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'expired'
   | 'halted' | 'limit' | 'read_only' | 'unavailable' | 'ambiguous';

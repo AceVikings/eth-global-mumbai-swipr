@@ -5,7 +5,7 @@ import { createApi } from '../api';
 import { readConfig } from '../config';
 import { Ledger } from '../ledger';
 import { ProjectStore } from './store';
-import { botMessage, type BotAction } from '../../shared/bots';
+import { botMessage, type BotAction } from '../contracts/bots';
 import { JournalError, type Journal, type JournalEvent } from '../arkiv-journal';
 
 // Explicit journal contract double: never instantiated by runtime code.

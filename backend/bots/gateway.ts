@@ -1,6 +1,6 @@
 import { ApiError } from '../auth';
 import { BOT_ASSETS, BOT_CHAIN_ID, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES,
-  type BotActionType, type BotAsset, type SignedBotAction } from '../../shared/bots';
+  type BotActionType, type BotAsset, type SignedBotAction } from '../contracts/bots';
 
 // Transport-neutral dispatcher shared by POST /mcp (stateless JSON-RPC 2.0, MCP 2025-03-26)
 // and POST /api/agent ({ tool, arguments }). The host owns HTTP parsing, CORS, body limits

@@ -1,7 +1,7 @@
 import { isSocialCommand, replaySocial, validateSocialCommand } from './social/store';
 import { isProjectCommand, replayProject, validateProjectCommand } from './bots/store';
 import { randomUUID } from 'node:crypto';
-import type { Terms } from '../shared/types';
+import type { Terms } from './contracts/types';
 import { withJournalWrite, type Journal, type JournalSnapshot } from './arkiv-journal';
 import {
   apply, check, claimPlan, emptyState, entryKeyOf, fail, getPassRow, intIn, jobView, LedgerError, passView, requestKeyOf, reservationView, type ChainProof, type Command, type Job, type LedgerEvent,

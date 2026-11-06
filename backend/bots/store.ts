@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BOT_ACTIONS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, type BotActionType, type BotProfile, type BotSignal } from '../../shared/bots';
+import { BOT_ACTIONS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, type BotActionType, type BotProfile, type BotSignal } from '../contracts/bots';
 import { withJournalWrite, JournalError, type Journal, type JournalEvent, type JournalSnapshot } from '../arkiv-journal';
 import { verifyBotAction } from './auth';
 import { address, BotError, check, checkFresh, profileHalt, profileUpsert, signalPublish, uuid } from './validation';

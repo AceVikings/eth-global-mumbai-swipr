@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TERMS } from '../shared/types';
+import { DEFAULT_TERMS } from './contracts/types';
 import type { Journal, JournalEvent } from './arkiv-journal';
 import { Ledger, LedgerError, freezeTerms, type ChainProof } from './ledger';
 

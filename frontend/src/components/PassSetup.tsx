@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_TERMS, type Mode, type Terms, type Trader } from '../../../shared/types';
+import { DEFAULT_TERMS, type Mode, type Terms, type Trader } from '../contracts/types';
 import '../pass-setup.css';
 
 type Props = { trader: Trader; onClose: () => void; initialPerTradeUsd?: number };

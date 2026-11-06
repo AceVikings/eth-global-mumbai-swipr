@@ -1,4 +1,4 @@
-import type { Ghost } from '../../../shared/types';
+import type { Ghost } from '../contracts/types';
 
 // Local, free simulations started by a right swipe. Only parameters are
 // stored; results are derived later from recorded trades, never invented here.

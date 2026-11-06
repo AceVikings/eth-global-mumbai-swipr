@@ -3,7 +3,7 @@ import { keccak256, recoverMessageAddress, stringToBytes } from 'viem';
 import {
   SOCIAL_ACTIONS, SOCIAL_CHAIN_ID, SOCIAL_LIMITS, SOCIAL_MAX_TTL_SECONDS, socialMessage,
   type SocialAction, type SocialActionType,
-} from '../../shared/social';
+} from '../contracts/social';
 import { JournalError, withJournalWrite, type Journal, type JournalEvent, type JournalSnapshot } from '../arkiv-journal';
 import { address, BotError, check, checkFresh, uuid } from '../bots/validation';
 

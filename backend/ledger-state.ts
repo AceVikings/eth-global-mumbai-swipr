@@ -1,4 +1,4 @@
-import type { Terms } from '../shared/types';
+import type { Terms } from './contracts/types';
 
 export type Micros = string;
 export type PassStatus = 'requested' | 'accepted' | 'active';

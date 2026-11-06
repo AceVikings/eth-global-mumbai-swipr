@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { keccak256, stringToBytes, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { SOCIAL_LIMITS, socialMessage, type SignedSocialAction, type SocialAction } from '../../shared/social';
+import { SOCIAL_LIMITS, socialMessage, type SignedSocialAction, type SocialAction } from '../contracts/social';
 import { JournalError, type Journal, type JournalEvent, type JournalSnapshot } from '../arkiv-journal';
 import { BotError } from '../bots/validation';
 import { replaySocial, SocialStore, validateSocialCommand, type SocialCommand } from './store';

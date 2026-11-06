@@ -1,4 +1,4 @@
-import type { LeaderboardRow } from '../../shared/social';
+import type { LeaderboardRow } from '../contracts/social';
 
 /**
  * A closed round trip reconstructed by the server from verified on-chain fills. Trusted INTERNAL

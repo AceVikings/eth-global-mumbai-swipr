@@ -1,5 +1,5 @@
-import { SOCIAL_MAX_TTL_SECONDS } from '../../../shared/social';
-import type { LeaderboardResponse, LeaderboardRow, SignedSocialAction, SocialAction, SocialResponse } from '../../../shared/social';
+import { SOCIAL_MAX_TTL_SECONDS } from '../contracts/social';
+import type { LeaderboardResponse, LeaderboardRow, SignedSocialAction, SocialAction, SocialResponse } from '../contracts/social';
 
 export type { LeaderboardRow, SignedSocialAction, SocialAction };
 export type Role = LeaderboardRow['kind'];

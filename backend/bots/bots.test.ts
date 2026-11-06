@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { Hex } from 'viem';
-import { botMessage, type BotAction, type SignedBotAction } from '../../shared/bots';
+import { botMessage, type BotAction, type SignedBotAction } from '../contracts/bots';
 import { ArkivJournal, JournalError, type ArkivPort, type Journal, type JournalEvent, type JournalSnapshot, type StoredEvent } from '../arkiv-journal';
 import { ProjectStore, replayProject, validateProjectCommand } from './store';
 import { BotError } from './validation';

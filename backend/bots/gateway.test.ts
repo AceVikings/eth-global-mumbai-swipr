@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../auth';
-import type { BotActionType } from '../../shared/bots';
+import type { BotActionType } from '../contracts/bots';
 import { createBotGateway, MCP_PROTOCOL_VERSION, TOOL_NAMES, validate, type BotGatewayDeps } from './gateway';
 
 const ADDR = `0x${'a'.repeat(40)}`;

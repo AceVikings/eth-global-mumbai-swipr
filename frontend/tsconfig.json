@@ -23,7 +23,6 @@
     "src",
     "build",
     "vite.config.ts",
-    "vitest.config.ts",
-    "../shared"
+    "vitest.config.ts"
   ]
 }
