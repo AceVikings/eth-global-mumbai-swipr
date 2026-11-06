@@ -548,3 +548,5 @@ main {
 .service-list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 12px; }
 .service-list small { grid-column: 1 / -1; color: var(--muted); }
 @media (max-width: 440px) { .service-list li { grid-template-columns: 1fr; } }
+
+.directory-status { margin: 0 0 12px; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

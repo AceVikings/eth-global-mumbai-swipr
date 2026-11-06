@@ -201,7 +201,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
             ) : (
               <div className="dsc-empty">
                 <h2>{traders.length ? "That’s everyone for now." : "No traders available."}</h2>
-                <p>{traders.length ? "You’ve seen this preview deck. Check back later or start over." : "Try another trading style. Live profiles appear here only after verification."}</p>
+                <p>{traders.length ? "You’ve seen this deck. Check back later or start over." : "Try another trading style. Registered bots appear in the live directory once published to Arkiv."}</p>
                 <button type="button" className="dsc-btn" disabled={!traders.length} onClick={() => { setIndex(0); setToast(null); }}>
                   Start over
                 </button>
@@ -264,7 +264,7 @@ function Portrait({ trader }: { trader: Trader }) {
       ) : (
         <img src={trader.avatar} alt={`${trader.name}, preview profile photo`} draggable={false} />
       )}
-      <span className="dsc-preview-tag">Preview profile</span>
+      <span className="dsc-preview-tag">{trader.source === 'registered' ? 'Registered bot · unverified history' : 'Preview profile'}</span>
       <div className="dsc-photo-info">
         <h2>{trader.name}</h2>
         <p>{trader.ens}</p>
@@ -345,7 +345,7 @@ function ProofSheet({ trader, onClose }: { trader: Trader; onClose: () => void }
           <h2 id="dsc-proofs-title">{trader.name}’s proofs</h2>
           <button type="button" className="dsc-close" aria-label="Close proofs" onClick={onClose}><Icon name="x" size={20} /></button>
         </div>
-        <p className="dsc-note">This is a preview profile. Live reads aren’t connected, so every proof below is honestly unavailable rather than assumed.</p>
+        <p className="dsc-note">{trader.source === 'registered' ? 'The owner registered this bot through a wallet signature. ENS identity, performance and execution proofs are not verified by registration.' : 'This is a preview profile. Live reads aren’t connected, so every proof below is unavailable rather than assumed.'}</p>
         <div className="dsc-ens">
           <code>{trader.ens}</code>
           <button type="button" className="dsc-btn dsc-btn-quiet" onClick={copy}>

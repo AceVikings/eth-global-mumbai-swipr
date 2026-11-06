@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import type { RuntimeStatus, Trader } from "../shared/types";
+import { SessionPanel } from './auth/Session';
+import Leaderboards from './components/Leaderboards';
+import BotStudio from "./components/BotStudio";
 import Discover from "./components/Discover";
 import Ghosts from "./components/Ghosts";
 import PassSetup from "./components/PassSetup";
@@ -12,10 +15,11 @@ import {
   type GhostChange,
 } from "./lib/ghosts";
 import { previewTraders } from "./fixtures";
+import { getBots } from "./lib/bots";
 import { getRuntime } from "./lib/api";
 
-type Page = "discover" | "ghosts" | "matches" | "you";
-const pages: Page[] = ["discover", "ghosts", "matches", "you"];
+type Page = "discover" | "ghosts" | "matches" | "bots" | "leaderboards" | "you";
+const pages: Page[] = ["discover", "ghosts", "matches", "leaderboards", "bots", "you"];
 const vibes = ["All", "Steady", "Balanced", "Spicy"];
 const PREFS_KEY = "swipr.preferences.v1";
 const SESSION_ONLY_NOTICE =
@@ -54,9 +58,27 @@ export default function App() {
   const [realTrader, setRealTrader] = useState<Trader | null>(null);
   const [notice, setNotice] = useState("");
   const [online, setOnline] = useState(navigator.onLine);
+  const [registeredTraders, setRegisteredTraders] = useState<Trader[]>([]);
+  const [directoryVersion, setDirectoryVersion] = useState(0);
+  const [directoryState, setDirectoryState] = useState("Loading registered traders…");
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [serviceState, setServiceState] = useState("Not checked");
   const [mode, setMode] = useState<"preview" | "live">("preview");
+  useEffect(() => {
+    if (mode !== "live") return;
+    const controller = new AbortController();
+    setDirectoryState("Loading registered traders…");
+    void getBots(controller.signal).then(value => {
+      if (controller.signal.aborted) return;
+      setRegisteredTraders(value.profiles.filter(p => p.status === "active").map(p => ({
+        id: p.id, profileId: p.id, name: p.name, ens: "",
+        bio: p.bio, style: p.style, avatar: "", kind: "agent" as const, owner: `${p.owner.slice(0, 6)}…${p.owner.slice(-4)}`,
+        operator: p.operator, source: "registered" as const,
+      })));
+      setDirectoryState(value.state === "ready" ? "Registered bot profiles · execution history unverified" : value.detail);
+    }).catch(() => { if (!controller.signal.aborted) { setRegisteredTraders([]); setDirectoryState("Trader directory unavailable. Try again from Bots."); } });
+    return () => controller.abort();
+  }, [mode, directoryVersion]);
   useEffect(() => {
     if (page !== "you" && mode !== "live") return;
     const controller = new AbortController();
@@ -138,7 +160,7 @@ export default function App() {
       ? previewTraders.filter(
           (t) => prefs.vibe === "All" || t.style === prefs.vibe,
         )
-      : [];
+      : registeredTraders.filter(t => prefs.vibe === "All" || t.style === prefs.vibe);
   const nav = (
     <nav aria-label="Main navigation">
       {pages.map((p) => (
@@ -169,7 +191,7 @@ export default function App() {
           ·{" "}
           {mode === "preview"
             ? "Illustrative profiles. No live trades or funds."
-            : "Not connected. No verified profiles available."}
+            : "Registered profiles · execution history unverified."}
         </span>
       </div>
       {ghostStorage === "session-only" && (
@@ -254,6 +276,7 @@ export default function App() {
                       </select>
                     </label>
                   </div>
+                  {mode === "live" && <p className="directory-status" role="status">{directoryState} <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button></p>}
                   <Discover
               key={`${mode}:${prefs.vibe}`}
                     traders={traders}
@@ -267,7 +290,7 @@ export default function App() {
               {page === "ghosts" && (
                 <Ghosts
                   ghosts={ghosts}
-                  traders={previewTraders}
+                  traders={[...previewTraders, ...registeredTraders]}
                   onReal={setRealTrader}
                   onRemove={(id) => {
                     void ghostStore
@@ -321,6 +344,8 @@ export default function App() {
                   </button>
                 </section>
               )}
+              {page === "bots" && <BotStudio onChanged={() => setDirectoryVersion(v => v + 1)} />}
+              {page === "leaderboards" && <Leaderboards mode={mode} />}
               {page === "you" && (
                 <section className="content-page">
                   <span className="eyebrow">MAKE YOURSELF AT HOME</span>
@@ -328,7 +353,7 @@ export default function App() {
                     Your kind of trading<span>.</span>
                   </h1>
                   <p className="page-lead">
-                    A little about you. No wallet needed yet.
+                    Sign in with Google and make yourself at home.
                   </p>
                   <div className="settings-group">
                     <h2>Your ghost defaults</h2>
@@ -370,15 +395,7 @@ export default function App() {
                       amount and start time.
                     </p>
                   </div>
-                  <div className="settings-group">
-                    <h2>Your wallet</h2>
-                    <p>
-                      Connect with email when you’re ready to make a copy real.
-                      Wallet login and Base funding will be available when the
-                      live service is connected.
-                    </p>
-                    <span className="status-pill">Not connected</span>
-                  </div>
+                  <SessionPanel />
                   <div className="settings-group">
                     <h2>Explore the website</h2>
                     <p>
