@@ -180,9 +180,11 @@ export function createFlashClient(o: { apiKey: string; fetch: FetchLike; timeout
     /** Relays a user signature; re-validates first and never retries (an error may be `ambiguous`). */
     async submitOrder(a: { intent: OrderIntent; quote: FlashQuote; userSignature: string; policy: SignPolicy }) {
       validateIntent(a.intent);
-      validateTypedData(parseTypedData(a.quote.typedDataRaw), a.intent, a.policy);
+      const signedData = parseTypedData(a.quote.typedDataRaw);
+      validateTypedData(signedData, a.intent, a.policy);
+      if (a.intent.attachedBracket) throw invalid('attached brackets require a separate protective-order signature');
       const j = ok(await http.json(`${base}/order`, { method: 'POST', headers, body: JSON.stringify({
-        ...body(a.intent, new Date(Number(a.quote.typedData.message.deadline) * 1000).toISOString()), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
+        ...body(a.intent, new Date(Number(signedData.message.deadline) * 1000).toISOString()), userSignature: checkSig(a.userSignature), evmOrderTypedData: a.quote.typedDataRaw, quoteId: a.quote.quoteId,
       }) }), 'order');
       if (typeof j.orderId !== 'string') throw new ProviderError('flash', 'bad_response', 'order id missing', { ambiguous: true });
       return { orderId: j.orderId as string };

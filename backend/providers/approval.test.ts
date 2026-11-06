@@ -23,6 +23,18 @@ describe('Flash authorization bounds', () => {
     await expect(client.quote({ ...intent, expireTime: new Date(Date.now() + 3600000).toISOString() })).rejects.toThrow('15 minutes');
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it('does not submit a bracket without its separate protective signature', async () => {
+    const fetcher = vi.fn(); const client = createFlashClient({ apiKey: 'private-test-key', fetch: fetcher });
+    const now = Math.floor(Date.now() / 1000);
+    const { FLASH_ORDER_TYPES, FLASH_DOMAIN_TYPES } = await import('./flash');
+    const td = { domain: FLASH_DOMAIN, primaryType: 'FlashOrder', types: { FlashOrder: FLASH_ORDER_TYPES, EIP712Domain: FLASH_DOMAIN_TYPES },
+      message: { swapper: intent.funder, recipient: intent.funder, vault: intent.funder, fromToken: TOKENS.USDC.address,
+        toToken: TOKENS.WETH.address, fromAmount: '5000000', salt: '1', deadline: String(now + 600) } };
+    await expect(client.submitOrder({ intent: { ...intent, attachedBracket: { stopLoss: { notionalPrice: '900' } } },
+      quote: { quoteId: 'test', typedData: td, typedDataRaw: JSON.stringify(td), raw: {} }, userSignature: '0x' + 'ab'.repeat(65),
+      policy: { now, maxDeadline: now + 900, expectedVault: intent.funder } })).rejects.toThrow('separate');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('rejects excessive price impact and slippage before requesting a quote', async () => {
     const fetcher = vi.fn(); const client = createFlashClient({ apiKey: 'private-test-key', fetch: fetcher });
     await expect(client.quote({ ...intent, maxPriceImpact: '0.06' })).rejects.toThrow('5%');
