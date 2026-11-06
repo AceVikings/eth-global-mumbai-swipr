@@ -153,10 +153,19 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
           <h1 id="dsc-title">Meet your next <em>trader.</em></h1>
           <p>Swipe right to ghost-copy for free. No funds move.</p>
         </div>
-        <span className="dsc-chip" title="Your deck preferences">
-          <Icon name="filter" size={16} />
-          {vibe} · {usd(perTradeUsd)}/trade
-        </span>
+        <div className="dsc-head-tools">
+          <span className="dsc-chip" title="Your deck preferences">{vibe} · {usd(perTradeUsd)}/trade</span>
+          <button type="button" className="dsc-help-trigger" popoverTarget="dsc-help" aria-label="How Swipr works" title="How it works">?</button>
+        </div>
+        <div id="dsc-help" className="dsc-help-popover" popover="auto" role="dialog" aria-labelledby="dsc-help-title">
+          <div className="dsc-help-heading"><h2 id="dsc-help-title">How it works</h2><button type="button" className="dsc-close" popoverTarget="dsc-help" popoverTargetAction="hide" aria-label="Close help"><Icon name="x" size={18} /></button></div>
+          <ul className="dsc-how">
+            <li><span className="dsc-how-i"><Icon name="x" size={18} /></span><div><b>Pass</b><p>Skip a trader. Undo brings them right back.</p></div></li>
+            <li><span className="dsc-how-i is-ghost"><Icon name="ghost" size={18} /></span><div><b>Ghost copy</b><p>Try a free simulation at {usd(perTradeUsd)}/trade. No wallet, no order, no funds moved.</p></div></li>
+            <li><span className="dsc-how-i"><Icon name="star" size={18} /></span><div><b>Make it real</b><p>Choose a Copy Pass, then review its limits and permissions before signing.</p></div></li>
+          </ul>
+          <p className="dsc-keys">On a keyboard, focus the deck and use <kbd>←</kbd> to pass or <kbd>→</kbd> to ghost-copy.</p>
+        </div>
       </header>
 
       <div className="dsc-layout">
@@ -232,21 +241,13 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
           </div>
         </div>
 
-        <aside className="dsc-rail" aria-label="How the deck works">
-          <h2>How it works</h2>
-          <ul className="dsc-how">
-            <li><span className="dsc-how-i"><Icon name="x" size={18} /></span><div><b>Pass</b><p>Skip this trader. You can undo right after.</p></div></li>
-            <li><span className="dsc-how-i is-ghost"><Icon name="ghost" size={18} /></span><div><b>Ghost copy</b><p>A free simulation at {usd(perTradeUsd)}/trade, saved on this device. No wallet, no order.</p></div></li>
-            <li><span className="dsc-how-i"><Icon name="star" size={18} /></span><div><b>Make it real</b><p>Review a Copy Pass. Nothing is approved until you sign the exact terms.</p></div></li>
-          </ul>
-          <h2>Keyboard</h2>
-          <p className="dsc-keys">Focus the deck, then <kbd>←</kbd> to pass and <kbd>→</kbd> to ghost-copy.</p>
-          {trader && (
-            <button type="button" className="dsc-btn dsc-btn-quiet" onClick={openProofs}>
-              <Icon name="shield" size={18} />{trader.name}’s proofs<Icon name="chevron" size={16} />
-            </button>
-          )}
-        </aside>
+        {trader && <aside className="dsc-rail dsc-stats-rail" aria-label={`${trader.name}'s trader stats`}>
+          <div className="dsc-rail-heading"><span className="dsc-eyebrow">{trader.name.toUpperCase()}’S TRACK RECORD</span><h2>The person &amp; the numbers.</h2></div>
+          <div className="dsc-net-return"><span>Copiers kept, after all fees</span><strong aria-label="Net copier return unavailable">—</strong><p>No verified history connected yet.</p><div className="dsc-period"><span>Period <b>—</b></span><span>Real copies <b>—</b></span></div></div>
+          <dl className="dsc-metric-grid">{['Trader P&L', 'Win rate', 'Max drawdown', 'Copy fill rate', 'Sealed trades', 'Outside exits', 'Seats available', 'Profit share'].map(label => <div key={label}><dt>{label}</dt><dd aria-label={`${label} unavailable`}>—</dd></div>)}</dl>
+          <div className="dsc-rail-bio"><span className="dsc-eyebrow">THE STRATEGY</span><p>{trader.bio}</p><div className="dsc-markers"><span className="dsc-pill">{trader.style}</span><span className="dsc-pill">{trader.kind === 'agent' ? `${trader.owner}’s agent` : 'Human trader'}</span></div></div>
+          <button type="button" className="dsc-btn dsc-btn-quiet dsc-rail-proofs" onClick={openProofs}><Icon name="shield" size={18} />Show proofs<Icon name="chevron" size={16} /></button>
+        </aside>}
       </div>
 
       {proofsOpen && trader && <ProofSheet trader={trader} onClose={closeProofs} />}
