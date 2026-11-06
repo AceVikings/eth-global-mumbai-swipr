@@ -47,7 +47,56 @@ Signals are proposals, not executed trades. Profit rankings require verified exe
 
 `frontend/` and `backend/` are independent packages with their own lockfiles and tests. Shared wire contracts are checked for consistency.
 
-Swipr issues trader subnames under its ENSv2 Sepolia root and pays for setup and record updates. Each subname is assigned to the trader wallet with a dedicated resolver. Swipr receives permission to update only the profile, stats and timestamp text records; the trader can revoke that permission. Readers check ownership, expiry, address resolution and whether records match current Arkiv data and confirmed wallet settlements. Open positions do not count as realized profit. Records are timestamped snapshots. The platform retains administration of the parent namespace.
+## Sponsor integrations and judging highlights
+
+Swipr connects identity, user-owned social data and real execution. ENS publishes a trader's current identity and records; Arkiv stores the application's persistent records; Definitive executes wallet-signed orders. Swarm is the planned independent archive layer. The sections below distinguish the working integration from the research roadmap.
+
+### ENSv2 — a trader identity anyone can verify
+
+**Talking point:** “Resolve the trader's name, then check the wallet and the records behind it.”
+
+- Traders receive service-paid subnames under `swipr.eth` on Sepolia, assigned to their own wallets with dedicated resolvers. They do not need to register a separate root name.
+- `swipr.profile`, `swipr.stats` and `swipr.updatedAt` publish the current profile, receipt-verified wallet activity and snapshot time. Address records bind the identity to the trader's wallet.
+- Swipr's publisher has permission to update only those three text records. The trader can revoke that permission. Verification checks ownership, expiry, address resolution, freshness and correspondence with Arkiv and confirmed settlements.
+- Stats cover the latest 20 wallet orders and disclose pagination. They are wallet-level evidence, not proof that a particular bot generated every trade; open buys do not establish realized profit.
+
+**Show the judges:** open a trader's ENS details, inspect its profile and fill references, and compare the resolved owner with the wallet that owns its Arkiv profile. See the [registrar](backend/ens/registrar.ts), [record comparison](backend/ens/records.ts) and [receipt-backed stats](backend/ens/stats.ts).
+
+ENS Copy Pass names, Agent Charters and emancipated “Forever” identities remain roadmap items. Swipr currently retains administration of the parent namespace.
+
+### Arkiv — social records owned by the people who create them
+
+**Talking point:** “Your profile, following list, ghost settings and Copy Pass records belong to your wallet.”
+
+- Arkiv Rabdi is the project database for profiles, social relationships, ghost settings and public or invited private seats. Native `$owner` determines who can update or delete a user's records.
+- The backend prepares user transactions and sponsors bounded tGLM funding for eligible writes; the user's wallet authorizes the actual data change. Reloading or signing in from another browser restores records from Arkiv.
+- Operational events use a separate readonly, service-owned Arkiv journal with revision and writer checks. User-controlled records and operational history have distinct ownership.
+- Account deletion removes current wallet-owned application records before removing the Privy login. It does not erase historical chain transactions or public ENS snapshots.
+
+**Show the judges:** save a following list or ghost, reload, inspect its native owner, and demonstrate an approved edit or deletion. A rejected signature leaves the record unchanged. See the [wallet ghost reader](backend/ghosts/wallet.ts) and [Arkiv event journal](backend/arkiv-journal.ts).
+
+Saved ghosts currently persist parameters; simulated returns, a complete sealed trade/exit history and independently recomputable performance snapshots are not yet connected.
+
+### Definitive Flash — copy a real order under the same limit
+
+**Talking point:** “The copier uses the trader's limit price and remaining order window, with settlement into the copier's own wallet.”
+
+- The implemented tap-copy flow submits reviewed 5 USDC limit buys on Base through Definitive Flash. Supported assets are WETH and cbBTC, subject to the trader's enabled assets.
+- A copy requires a confirmed matching trader fill and inherits its limit and expiry. An expired source window is rejected before requesting a wallet signature. A shared limit does not imply identical actual execution prices.
+- Quotes bind the reviewed fields, wallet signatures are verified, and approvals are checked for exactly 5 USDC. Swipr's integrator fee is **10 bps (0.1%) per trade**, not a percentage of profit.
+- Wallet history checks successful Base receipts and token movements with at least two confirmations. An order proposal or pending provider response is never displayed as a confirmed fill.
+
+**Show the judges:** compare the completed [trader buy](https://basescan.org/tx/0x357532ba9b39b71e079a882d362a9b60ae5bd6d6d6f90d32c65f04d224946f14) and [copier buy](https://basescan.org/tx/0x570171b7b506492de5060fa70436695919bf8deaaf8fb897231a1d18303b32ac), then reload wallet history. Both spent 5 USDC; their WETH proceeds differ. These are team-operated rehearsal trades, not evidence of external adoption or profitable performance. See the [execution and receipt checks](backend/trading/service.ts).
+
+Automatic copying, scoped delegation, cumulative pass accounting, protected exits and shared exit fan-out remain unfinished. The current supported path requires reviewed wallet signatures.
+
+### Swarm — independent recovery of public history
+
+**Talking point for the intended design:** “Archive the evidence so readers can recover it independently of Swipr.”
+
+The current [Bee adapter](backend/providers/bee.ts) implements pinned byte upload/download with a postage batch and rejects encrypted references in this public archive path. It explicitly reports content integrity as **unverified**.
+
+A configured live Bee node and postage batch, archive manifests and Arkiv pointers, BMT verification, and a frontend served from Swarm are still required. Swarm is not yet a completed live sponsor demonstration; do not present server-off recovery or permanent archival as working features.
 
 ## Project status
 
