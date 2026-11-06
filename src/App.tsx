@@ -37,10 +37,10 @@ function readPrefs(): { amount: number; vibe: string } {
           : 10,
       vibe: vibes.includes(prefs.vibe)
         ? prefs.vibe
-        : "All",
+        : "Balanced",
     };
   } catch {
-    return { amount: 10, vibe: "All" };
+    return { amount: 10, vibe: "Balanced" };
   }
 }
 export default function App() {
