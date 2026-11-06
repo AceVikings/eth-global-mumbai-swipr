@@ -56,10 +56,18 @@ One short empty-state action leads to Everyone. No separate follow-management pa
 ## Before implementation
 
 - [x] Document why the current draft is dense and the simpler information hierarchy.
-- [ ] Generate three separate image mockups from the existing visual language.
+- [x] Render three separate static image mockups locally from the existing visual language.
 - [ ] Review the images with the user and select a direction.
 - [ ] Apply the chosen direction, then verify desktop and mobile spacing and interactions.
 
-Image generation is pending: the built-in image tool is unavailable in this session.
-The API fallback requires explicit user choice and a local OPENAI_API_KEY.
+The user selected regular mockups without an API. The local Pillow renderer is
+`design/leaderboards/render_mockups.py`; it uses existing project fonts and sample avatars.
+Run `uv run --with pillow python design/leaderboards/render_mockups.py` to reproduce:
+
+- `.context/leaderboards/01-people-first.png`
+- `.context/leaderboards/02-numbers-first.png`
+- `.context/leaderboards/03-your-circle.png`
+
+These are static image studies with illustrative figures; the running app is unchanged.
+PNG previews live in the gitignored `.context` directory; the renderer and brief are committed.
 No redesign implementation is authorized by selecting this document alone.
