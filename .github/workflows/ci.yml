@@ -50,7 +50,7 @@ jobs:
             frontend/package-lock.json
             backend/package-lock.json
       - name: Verify browser and backend API contracts agree
-        run: diff --recursive backend/contracts frontend/src/contracts
+        run: diff --recursive --exclude="*.test.ts" backend/contracts frontend/src/contracts
       - run: npm ci --prefix frontend
       - run: npm ci --prefix backend
       - run: npm run typecheck --prefix frontend

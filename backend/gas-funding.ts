@@ -1,7 +1,7 @@
 import { createPublicClient, createWalletClient, ExpirationTime, type Expression } from '@arkiv-network/sdk';
 import { rabdi } from '@arkiv-network/sdk/chains';
 import { and, eq, desc } from '@arkiv-network/sdk/query';
-import { defineSchema, str, addr, u64 } from '@arkiv-network/sdk/schema';
+import { defineSchema, str, addr, u64, bytes } from '@arkiv-network/sdk/schema';
 import { http, isAddress, keccak256, parseEther, type Hex } from 'viem';
 import { getGasPrice } from 'viem/actions';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -12,7 +12,7 @@ const PROJECT = 'swipr-mumbai26';
 const SCHEMA = 'swipr.gas-grant.v1';
 const Grants = defineSchema(SCHEMA, {
   project: str().indexed(), day: str().indexed(), subject: str().indexed(),
-  recipient: addr().indexed(), amount: str(), nonce: u64().indexed(), raw: str(),
+  recipient: addr().indexed(), amount: str(), nonce: u64().indexed(), raw: bytes(),
 });
 export const FUNDING = { threshold: parseEther('0.001'), target: parseEther('0.005'), daily: parseEther('0.1') };
 
@@ -79,7 +79,7 @@ export function createGasFunder(options: { key: string; accessKey?: string; rpcU
     if (gasPrice * 21000n > parseEther('0.001')) throw new ApiError(503, 'gas_price_high', 'Write-gas funding is temporarily paused.');
     const raw = await writer.signTransaction({ account, chain, to: wallet, value: amount, nonce: nonce + 1, gas: 21000n, gasPrice, type: 'legacy' });
     const result = await writer.createEntity(Grants, { project: PROJECT, day, subject: subjectHash,
-      recipient: addr(wallet), amount: amount.toString(), nonce: u64(BigInt(nonce + 1)), raw },
+      recipient: addr(wallet), amount: amount.toString(), nonce: u64(BigInt(nonce + 1)), raw: bytes(raw) },
     { expiration: ExpirationTime.fromDays(180) }, { nonce });
     // A replacement or concurrent revision must not cause us to send another grant's transfer.
     const recorded = await reader.getEntity(result.entityKey);

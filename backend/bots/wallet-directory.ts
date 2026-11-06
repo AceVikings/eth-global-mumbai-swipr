@@ -2,7 +2,7 @@ import { createPublicClient, type FullEntity } from '@arkiv-network/sdk';
 import { rabdi } from '@arkiv-network/sdk/chains';
 import { and, eq, desc } from '@arkiv-network/sdk/query';
 import { str } from '@arkiv-network/sdk/schema';
-import { http } from 'viem';
+import { http, hexToString, type Hex } from 'viem';
 import { WALLET_PROFILE_SCHEMA, WALLET_PROFILE_PROJECT } from '../contracts/wallet-profile';
 import type { BotProfile } from '../contracts/bots';
 import { address, profileUpsert } from './validation';
@@ -11,10 +11,10 @@ import { address, profileUpsert } from './validation';
 export function decodeWalletProfile(entity: FullEntity, createdAt: number, updatedAt: number): BotProfile {
   const attrs = entity.$attributes;
   if (attrs['arkiv.schema']?.value !== WALLET_PROFILE_SCHEMA || attrs.project?.value !== WALLET_PROFILE_PROJECT
-    || attrs.profile?.type !== 'str' || attrs.status?.type !== 'str'
+    || attrs.profile?.type !== 'bytes' || attrs.status?.type !== 'str'
     || !['active', 'halted'].includes(attrs.status.value)
     || !/^0x[0-9a-f]{64}$/i.test(entity.$key)) throw new Error('Invalid wallet profile entity.');
-  const raw: unknown = JSON.parse(attrs.profile.value);
+  const raw: unknown = JSON.parse(hexToString(attrs.profile.value as Hex));
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) || 'profileId' in raw) throw new Error('Invalid wallet profile contents.');
   // Reuse the registry's field/secret validation; the native entity key is the actual ID.
   const { profileId: _, ...data } = profileUpsert({ ...raw, profileId: '00000000-0000-4000-8000-000000000001' });
@@ -37,7 +37,7 @@ export function createWalletDirectory(options: { accessKey?: string; rpcUrl?: st
       if (!timestamps.has(blockNumber)) timestamps.set(blockNumber, Number((await client.getBlock({ blockNumber })).timestamp));
       return timestamps.get(blockNumber)!;
     };
-    const head = await client.getBlockNumber();
+    const head = await client.getBlockNumber({ cacheTime: 0 });
     // Bound work per request. Expired entities are already excluded by Arkiv's query surface.
     for (let offset = 0; offset < 500; offset += 100) {
       const result = await client.query(and(eq('arkiv.schema', str(WALLET_PROFILE_SCHEMA)),

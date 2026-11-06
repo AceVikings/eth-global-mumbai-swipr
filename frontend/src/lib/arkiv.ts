@@ -1,6 +1,6 @@
 import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
 import { custom, defineChain, type EIP1193Provider, type Hex } from 'viem';
-import { WalletProfileSchema, WalletSocialSchema, WALLET_PROFILE_PROJECT } from '../contracts/wallet-profile';
+import { WalletProfileSchema, WalletSocialSchema, walletJson, WALLET_PROFILE_PROJECT } from '../contracts/wallet-profile';
 import type { ProfileUpsertData } from '../contracts/bots';
 import type { Session } from '../auth/Session';
 
@@ -43,8 +43,11 @@ export async function saveWalletProfile(session: Session, data: ProfileUpsertDat
     if (record.$owner.toLowerCase() !== address.toLowerCase()) throw new Error('Your wallet does not own this profile.');
   }
   await fund(session, address);
-  if (profileId) return client.patchEntity(WalletProfileSchema, profileId as Hex, { set: { profile: JSON.stringify(profile) } });
-  return client.createEntity(WalletProfileSchema, { project: WALLET_PROFILE_PROJECT, profile: JSON.stringify(profile), status: 'active' }, { expiration: ExpirationTime.fromDays(30) });
+  const result = profileId
+    ? await client.patchEntity(WalletProfileSchema, profileId as Hex, { set: { profile: walletJson(profile) } })
+    : await client.createEntity(WalletProfileSchema, { project: WALLET_PROFILE_PROJECT, profile: walletJson(profile), status: 'active' }, { expiration: ExpirationTime.fromDays(30) });
+  await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
+  return result;
 }
 export async function haltWalletProfile(session: Session, key: string) {
   const { client, reader, address } = await connection(session);
@@ -52,7 +55,9 @@ export async function haltWalletProfile(session: Session, key: string) {
   const record = await reader.getEntity(key as Hex);
   if (record.$owner.toLowerCase() !== address.toLowerCase()) throw new Error('Your wallet does not own this profile.');
   await fund(session, address);
-  return client.patchEntity(WalletProfileSchema, key as Hex, { set: { status: 'halted' } });
+  const result = await client.patchEntity(WalletProfileSchema, key as Hex, { set: { status: 'halted' } });
+  await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
+  return result;
 }
 export async function writeWalletFollow(session: Session, target: string, follow: boolean) {
   const { client, address } = await connection(session);
@@ -63,9 +68,11 @@ export async function writeWalletFollow(session: Session, target: string, follow
   if (follow) set.add(target.toLowerCase()); else set.delete(target.toLowerCase());
   if (set.size > 200) throw new Error('You can follow up to 200 wallets.');
   await fund(session, address);
-  const following = JSON.stringify([...set].sort());
-  if (current.entityKey) await client.patchEntity(WalletSocialSchema, current.entityKey, { set: { following } });
-  else await client.createEntity(WalletSocialSchema, { project: WALLET_PROFILE_PROJECT, following }, { expiration: ExpirationTime.fromDays(30) });
+  const following = walletJson([...set].sort());
+  const result = current.entityKey
+    ? await client.patchEntity(WalletSocialSchema, current.entityKey, { set: { following } })
+    : await client.createEntity(WalletSocialSchema, { project: WALLET_PROFILE_PROJECT, following }, { expiration: ExpirationTime.fromDays(30) });
+  await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
 }
 export async function deleteWalletAccount(session: Session, progress: (text: string) => void) {
   const { client, reader, address } = await connection(session);
@@ -76,7 +83,8 @@ export async function deleteWalletAccount(session: Session, progress: (text: str
     progress('Preparing gas for your data deletion…');
     await fund(session, address);
     progress('Approve deletion of your Swipr records in your wallet…');
-    await client.executeBatch({ deletes: manifest.entities.map(e => ({ entityKey: e.key })) });
+    const result = await client.executeBatch({ deletes: manifest.entities.map(e => ({ entityKey: e.key })) });
+    await client.waitForTransactionReceipt({ hash: result.txHash, confirmations: 2 });
   }
   // Wait for the read index, then use a fresh, short-lived deletion challenge.
   for (let attempt = 0; attempt < 20; attempt++) {

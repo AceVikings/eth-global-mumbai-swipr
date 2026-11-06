@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FullEntity } from '@arkiv-network/sdk';
-import { str } from '@arkiv-network/sdk/schema';
+import { str, bytes } from '@arkiv-network/sdk/schema';
 import { decodeWalletProfile } from './wallet-directory';
 import { WALLET_PROFILE_PROJECT, WALLET_PROFILE_SCHEMA } from '../contracts/wallet-profile';
 const owner = `0x${'12'.repeat(20)}`, creator = `0x${'34'.repeat(20)}`;
@@ -10,7 +10,7 @@ const entity = (profile: unknown = data) => ({
   $key: `0x${'ab'.repeat(32)}`, $owner: owner, $creator: creator,
   $attributes: { 'arkiv.schema': { type: 'str', value: WALLET_PROFILE_SCHEMA },
     project: { type: 'str', value: WALLET_PROFILE_PROJECT },
-    profile: { type: 'str', value: JSON.stringify(profile) }, status: { type: 'str', value: 'active' } },
+    profile: bytes(new TextEncoder().encode(JSON.stringify(profile))), status: { type: 'str', value: 'active' } },
 } as unknown as FullEntity);
 
 describe('native wallet profile authority', () => {
