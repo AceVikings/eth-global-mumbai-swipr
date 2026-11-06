@@ -1,3 +1,4 @@
+import { writeWalletFollow } from '../lib/arkiv';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { socialMessage } from '../contracts/social';
@@ -130,17 +131,16 @@ export default function Leaderboards() {
     if (pending || busy) return;
     if (following.status !== 'ready') { setNotice({ tone: 'error', text: 'Following is unavailable, so changes cannot be sent right now.' }); return; }
     if (same(target, wallet)) { setNotice({ tone: 'error', text: 'You cannot follow your own wallet.' }); return; }
-    const payload = buildSocialAction(following.audience, action, target);
     setBusy(true);
-    let signed: SignedSocialAction;
+    setNotice({ tone: 'info', text: 'Approve the follow change in your wallet…' });
     try {
-      signed = { payload, signature: (await session.signMessage(socialMessage(payload))).signature };
+      await writeWalletFollow(session, target, action === 'follow');
+      setPending(null);
+      setNotice({ tone: 'ok', text: `${action === 'follow' ? 'Following' : 'Unfollowed'} ${short(target)}.` });
+      setReload(n => n + 1);
     } catch (e) {
-      setBusy(false);
-      setNotice({ tone: 'error', text: e instanceof Error ? e.message : 'The signature was not created.' });
-      return;
-    }
-    await submit(signed, wallet);
+      setNotice({ tone: 'error', text: e instanceof Error ? e.message : 'Your wallet could not confirm the change.' });
+    } finally { setBusy(false); }
   };
 
   const onAdd = (e: FormEvent) => {

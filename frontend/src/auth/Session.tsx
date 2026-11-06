@@ -4,6 +4,8 @@ import { PrivyProvider, useLogin, useLogout, usePrivy, useWallets } from '@privy
 import type { ConnectedWallet, PrivyClientConfig } from '@privy-io/react-auth';
 import { getAddress, isAddress, recoverMessageAddress, toHex } from 'viem';
 import { base } from 'viem/chains';
+import type { EIP1193Provider } from 'viem';
+import { arkivChain, deleteWalletAccount } from '../lib/arkiv';
 import './session.css';
 
 export type Address = `0x${string}`;
@@ -24,6 +26,7 @@ export type Session = {
   signMessage: (message: string) => Promise<SignedMessage>;
   /** Fresh Privy access token, kept in memory only. Null when signed out. */
   getAccessToken: () => Promise<string | null>;
+  getArkivWallet: () => Promise<{ address: Address; provider: EIP1193Provider }>;
 };
 
 const appId = (import.meta.env.VITE_PRIVY_APP_ID as string | undefined)?.trim() || '';
@@ -36,7 +39,7 @@ const config: PrivyClientConfig = {
   appearance: { theme: 'light', accentColor: '#6A56A4', walletChainType: 'ethereum-only' },
   embeddedWallets: { ethereum: { createOnLogin: 'all-users' } },
   defaultChain: base,
-  supportedChains: [base],
+  supportedChains: [base, arkivChain],
 };
 
 const unconfigured: Session = {
@@ -45,6 +48,7 @@ const unconfigured: Session = {
   logout: async () => {},
   signMessage: async () => { throw new Error(notConfigured); },
   getAccessToken: async () => null,
+  getArkivWallet: async () => { throw new Error(notConfigured); },
 };
 
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -118,6 +122,14 @@ function PrivySession({ children }: { children: ReactNode }) {
     try { return await getAccessToken(); } catch { return null; }
   }, [authenticated, getAccessToken]);
   const login = useCallback(() => { setError(null); openLogin(); }, [openLogin]);
+  const getArkivWallet = useCallback(async () => {
+    const { address: signer, wallet: target } = current.current;
+    if (!signer || !target) throw new Error('Sign in and wait for your wallet.');
+    await target.switchChain(arkivChain.id);
+    if (current.current.address !== signer) throw new Error('Your account changed. Try again.');
+    const provider = await target.getEthereumProvider();
+    return { address: signer, provider: provider as EIP1193Provider };
+  }, []);
 
   const google = user?.google;
   const email = user?.email?.address;
@@ -125,8 +137,8 @@ function PrivySession({ children }: { children: ReactNode }) {
     configured: true, ready, authenticated, error, login, logout, signMessage,
     address: authenticated ? address : null,
     userLabel: authenticated ? google?.name || google?.email || email || null : null,
-    getAccessToken: accessToken,
-  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken]);
+    getAccessToken: accessToken, getArkivWallet,
+  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getArkivWallet]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
@@ -162,6 +174,8 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
   const session = useSession();
   const { configured, ready, authenticated, address, userLabel, error } = session;
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletionStatus, setDeletionStatus] = useState('');
   const balance = useBaseBalance(showBalance && authenticated, address, session.getAccessToken);
   const signOut = async () => { setBusy(true); try { await session.logout(); } finally { setBusy(false); } };
 
@@ -190,6 +204,16 @@ export function SessionPanel({ showBalance = false }: { showBalance?: boolean })
       {configured && (authenticated
         ? <button type="button" className="session-btn session-btn-quiet" onClick={signOut} disabled={busy}>{busy ? 'Signing out…' : 'Sign out'}</button>
         : <button type="button" className="session-btn" onClick={session.login} disabled={!ready}>Sign in</button>)}
+      {authenticated && address && <div className="session-delete">
+        <button type="button" className="session-btn session-btn-quiet" disabled={busy || deleting} onClick={async () => {
+          if (!window.confirm('Delete your Swipr account and wallet-owned Swipr data? Public blockchain history remains. Export your wallet first if it holds funds. This cannot be undone.')) return;
+          setDeleting(true);
+          try { await deleteWalletAccount(session, setDeletionStatus); setDeletionStatus('Your Swipr account was deleted.'); }
+          catch (e) { setDeletionStatus(e instanceof Error ? e.message : 'Deletion could not be confirmed. You can retry.'); }
+          finally { setDeleting(false); }
+        }}>{deleting ? 'Deleting…' : 'Delete account and data'}</button>
+        {deletionStatus && <p role="status">{deletionStatus}</p>}
+      </div>}
     </section>
   );
 }

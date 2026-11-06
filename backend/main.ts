@@ -1,6 +1,7 @@
 import { createWalletDirectory } from './bots/wallet-directory';
 import { createAccountService } from './account';
 import { createArkivRpc } from './arkiv-rpc';
+import { createWalletSocial } from './social/wallet';
 import { SocialStore } from './social/store';
 import { ProjectStore } from './bots/store';
 import { createApi } from './api';
@@ -16,6 +17,7 @@ const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
 const social = journal ? new SocialStore(journal, config.botAudience) : null;
 const server = createApi({ config, ledger, projects, social,
   account: createAccountService(config), arkivRpc: createArkivRpc(config.arkiv),
+  walletSocial: createWalletSocial(config.arkiv),
   walletProfiles: config.arkiv.accessKey ? createWalletDirectory(config.arkiv) : undefined });
 server.listen(config.port, '0.0.0.0', () => console.log(JSON.stringify({ service: 'api', port: config.port })));
 let closing = false;

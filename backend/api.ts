@@ -25,6 +25,7 @@ export type ApiDependencies = {
   fundGas?: (input: unknown) => Promise<unknown>;
   account?: { list(wallet: string): Promise<{ key: string; schema: string }[]>; remove(identity: import('./auth').Identity, wallet: string, input: Record<string, unknown>): Promise<unknown> };
   arkivRpc?: (input: Record<string, unknown>) => Promise<unknown>;
+  walletSocial?: (wallet: string) => Promise<{ entityKey: string | null; following: string[] }>;
   authenticate?: ReturnType<typeof createAuthenticator>;
   fetcher?: typeof fetch;
 };
@@ -35,7 +36,7 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSocial, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const listBots = async () => {
@@ -50,6 +51,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   const forwardBot = async (input: unknown, authorization?: string) => {
     try {
       const verified = await verifyBotAction(input, config.botAudience);
+      if (walletProfiles && verified.payload.action !== 'signal.publish') throw new ApiError(409, 'wallet_transaction_required', 'Profile changes must be sent by the owner’s wallet on Arkiv.');
       if (verified.payload.action !== 'signal.publish') {
         const identity = await authenticate(authorization);
         requireWallet(identity, verified.actor);
@@ -169,11 +171,13 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       if (req.method === 'GET' && path === '/api/social') {
         const identity = await authenticate(req.headers.authorization);
         const wallet = requireWallet(identity, url.searchParams.get('wallet'));
+        if (walletSocial) return send(200, { ...await walletSocial(wallet), state: 'ready', audience: config.botAudience, detail: 'Following owned by your Arkiv wallet.' });
         return send(200, social
           ? { following: await social.following(wallet), state: 'ready', detail: 'Following stored in Arkiv.', audience: config.botAudience }
           : { following: [], state: 'unavailable', detail: 'Arkiv social storage is not configured.', audience: config.botAudience });
       }
       if (req.method === 'POST' && path === '/api/social/commands') {
+        if (walletSocial) throw new ApiError(409, 'wallet_transaction_required', 'Follow changes must be sent by your wallet on Arkiv.');
         const identity = await authenticate(req.headers.authorization);
         const input = await body(req);
         const { actor } = await verifySocialAction(input, config.botAudience);
@@ -189,8 +193,8 @@ export function createApi({ config, ledger, projects = null, social = null, wall
         if (scope === 'following') {
           const identity = await authenticate(req.headers.authorization);
           const wallet = requireWallet(identity, url.searchParams.get('wallet'));
-          if (!social) return send(200, { state: 'unavailable', rows: [], asOf: null, detail: 'Arkiv social storage is not configured.' });
-          following = await social.following(wallet);
+          if (!social && !walletSocial) return send(200, { state: 'unavailable', rows: [], asOf: null, detail: 'Arkiv social storage is not configured.' });
+          following = walletSocial ? (await walletSocial(wallet)).following : await social!.following(wallet);
         }
         if (!verifiedPositions) return send(200, { state: 'unavailable', rows: [], asOf: null, detail: 'Verified closed fill history is not connected. Ghosts and proposed signals are excluded.' });
         const data = await verifiedPositions();

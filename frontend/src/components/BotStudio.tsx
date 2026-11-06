@@ -1,3 +1,4 @@
+import { saveWalletProfile, haltWalletProfile } from '../lib/arkiv';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useSession } from '../auth/Session';
@@ -120,7 +121,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
     setBusy(p.label);
     try {
       const token = await session.getAccessToken();
-      if (!token) throw new Error('Your Google session expired. Sign in again.');
+      if (!token) throw new Error('Your session expired. Sign in again.');
       setNotice({ tone: 'info', text: 'Submitting signed action…' });
       await sendCommand(p.signed, token);
       setPending(null);
@@ -148,17 +149,17 @@ export default function BotStudio({ onChanged }: Props = {}) {
     if (blocked) { setNotice({ tone: 'error', text: blocked }); return; }
     const owner = account!;
     setBusy(label);
-    setNotice({ tone: 'info', text: 'Waiting for your wallet signature…' });
-    let signed: SignedBotAction;
+    setNotice({ tone: 'info', text: 'Preparing your wallet-owned Arkiv transaction…' });
     try {
-      signed = await signAction(buildAction(integration!.audience, action, data), session.signMessage);
+      if (action === 'profile.upsert') await saveWalletProfile(session, data as Parameters<typeof saveWalletProfile>[1]);
+      else await haltWalletProfile(session, (data as { profileId: string }).profileId);
+      if (accountRef.current !== owner) return;
+      if (clearDraft) { saveLocalDraft(null); setDraft(null); }
+      setNotice({ tone: 'ok', text: done });
+      refresh(); onChanged?.();
     } catch (e) {
-      setBusy(null);
-      setNotice({ tone: 'error', text: e instanceof Error ? e.message : 'Your wallet could not sign.' });
-      return;
-    }
-    if (accountRef.current !== owner) { setBusy(null); setNotice({ tone: 'info', text: 'Your account changed while signing. Nothing was sent.' }); return; }
-    await deliver({ signed, owner, label, done, clearDraft });
+      if (accountRef.current === owner) setNotice({ tone: 'error', text: e instanceof Error ? e.message : 'Your wallet could not confirm the transaction.' });
+    } finally { setBusy(null); }
   };
 
   const update = (patch: Partial<ProfileDraft>) => {

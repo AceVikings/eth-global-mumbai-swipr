@@ -7,3 +7,8 @@ export const WALLET_PROFILE_SCHEMA = 'swipr.wallet-profile.v1';
 export const WalletProfileSchema = defineSchema(WALLET_PROFILE_SCHEMA, {
   project: str().indexed(), profile: str(), status: str().indexed(),
 });
+
+export const WALLET_SOCIAL_SCHEMA = 'swipr.wallet-social.v1';
+export const WalletSocialSchema = defineSchema(WALLET_SOCIAL_SCHEMA, {
+  project: str().indexed(), following: str(),
+});
