@@ -30,3 +30,6 @@
 .session-btn-quiet:hover:not(:disabled) { background: var(--ghost-soft, #f0edf7); }
 .session-btn:focus-visible { outline: 3px solid var(--ghost, #6a56a4); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .session-btn { transition: none; } }
+
+.session-delete { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.session-delete > p { flex-basis: 100%; margin: 0; }

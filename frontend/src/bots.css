@@ -105,11 +105,10 @@
 .bs-integration-info summary { cursor: pointer; width: fit-content; }
 .bs-integration-info details p { margin-top: 12px; }
 .bs-copy pre {
-  margin: 0; padding: 14px; max-height: 280px; overflow: auto; border-radius: 14px;
+  margin: 0; padding: 20px; min-width: 0; border-radius: 14px;
   background: var(--bs-code); color: #E6E1F5; font-size: 12px; line-height: 18px;
-  scrollbar-width: thin; scrollbar-color: #5A5070 transparent;
 }
-.bs-copy pre code { white-space: pre; overflow-wrap: normal; }
+.bs-copy pre code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
 
 @media (min-width: 900px) {
   .bs { padding-top: 32px; }
