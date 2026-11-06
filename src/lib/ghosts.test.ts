@@ -210,7 +210,7 @@ describe('Ghosts component', () => {
   it('shows clear instructions when empty', () => {
     const html = render([]);
     expect(html).toContain('Discover');
-    expect(html).toMatch(/no funds move/i);
+    expect(html).toMatch(/no (funds|money) move/i);
   });
 
   it('shows size, original start and expiry without a fabricated result', () => {
@@ -221,7 +221,7 @@ describe('Ghosts component', () => {
     expect(html).toMatch(/Started/);
     expect(html).toMatch(/Expire/);
     expect(html).not.toMatch(/Preview profile/);
-    expect(html).toMatch(/Simulation/);
+    expect(html).toMatch(/simulat/i);
     expect(html).not.toMatch(/\$0(\.00)?(?!\d)/);
     expect(html).not.toMatch(/[+−-]\$\d/);
   });

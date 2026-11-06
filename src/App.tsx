@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RuntimeStatus, Trader } from "../shared/types";
-import { SessionPanel } from './auth/Session';
+import { SessionPanel, useSession } from './auth/Session';
+import Dropdown from './components/Dropdown';
 import Leaderboards from './components/Leaderboards';
 import BotStudio from "./components/BotStudio";
 import Discover from "./components/Discover";
@@ -47,7 +48,17 @@ function readPrefs(): { amount: number; vibe: string } {
     return { amount: 10, vibe: "Balanced" };
   }
 }
+function AccountButton({ onAccount }: { onAccount: () => void }) {
+  const session = useSession();
+  return <button type="button" className="account-button"
+    onClick={session.authenticated ? onAccount : session.login}
+    disabled={!session.ready || !session.configured}>
+    {!session.ready ? 'Loading…' : session.authenticated ? 'Your account' : 'Sign in'}
+  </button>;
+}
+
 export default function App() {
+  const session = useSession();
   const [page, setPage] = useState<Page>(currentPage);
   const [ghostStore] = useState(() => createGhostStore());
   const [{ ghosts, status: ghostStorage }, setGhostSnapshot] = useState(
@@ -199,18 +210,8 @@ export default function App() {
               <img src="/assets/mark.svg" alt="" />
               swipr<span>.</span>
             </a>
+            <div className="sidebar-account"><AccountButton onAccount={() => navigate("you")} /></div>
             {nav}
-            <div className="sidebar-bottom">
-              <span className="eyebrow">A LITTLE SHARED CONVICTION</span>
-              <p>
-                Find your people.
-                <br />
-                Keep your own keys.
-              </p>
-              <span className="local-indicator">
-                <i /> Your wallet. Your call.
-              </span>
-            </div>
           </aside>
         )}
         <main id="main" tabIndex={-1}>
@@ -231,14 +232,9 @@ export default function App() {
                   <img src="/assets/mark.svg" alt="" />
                   swipr<span>.</span>
                 </a>
-                <button
-                  className="avatar-button"
-                  onClick={() => navigate("you")}
-                  aria-label="Your preferences"
-                >
-                  You
-                </button>
+                <AccountButton onAccount={() => navigate("you")} />
               </header>
+              {session.error && page !== "you" && <p className="account-error" role="alert">{session.error}</p>}
               {page === "discover" && (
                 <>
                   <div className="discovery-filter">
@@ -246,20 +242,11 @@ export default function App() {
                       <button className="text-button" onClick={() => setDirectoryVersion(v => v + 1)}>Refresh</button>
                       <button className="text-button" onClick={() => navigate("bots")}>Add your bot</button>
                     </div>
-                    <label className="filter-select">
+                    <div className="filter-select">
                       <Icon name="filter" size={16} />
-                      <span className="sr-only">Trading style</span>
-                      <select
-                        value={prefs.vibe}
-                        onChange={(e) =>
-                          updatePrefs(prefs.amount, e.target.value)
-                        }
-                      >
-                        {vibes.map((v) => (
-                          <option key={v}>{v}</option>
-                        ))}
-                      </select>
-                    </label>
+                      <Dropdown label="Trading style" value={prefs.vibe} options={vibes.map(v => [v, v])}
+                        onChange={v => updatePrefs(prefs.amount, v)} />
+                    </div>
                   </div>
                   <Discover
                     key={`${prefs.vibe}:${traders.map(t => t.id).join(',')}`}
@@ -337,7 +324,7 @@ export default function App() {
                     Your kind of trading<span>.</span>
                   </h1>
                   <p className="page-lead">
-                    Sign in with Google and make yourself at home.
+                    Sign in and make yourself at home.
                   </p>
                   <div className="settings-group">
                     <h2>Your ghost defaults</h2>
