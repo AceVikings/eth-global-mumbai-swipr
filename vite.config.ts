@@ -24,10 +24,8 @@ function offlineShell() {
             "dan.jpg",
             "priya.jpg",
             "mark.svg",
-            "fonts.css",
             "icon-192.png",
             "icon-512.png",
-            ...Array.from({ length: 8 }, (_, i) => `font-${i}.ttf`),
           ].map((file) => `/assets/${file}`),
         ]),
       ];

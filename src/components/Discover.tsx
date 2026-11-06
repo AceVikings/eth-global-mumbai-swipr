@@ -12,7 +12,7 @@ type Props = {
   vibe: string;
 };
 type Dir = 'left' | 'right';
-type Toast = { kind: 'pass' | 'ghost'; trader: Trader; index: number; at: number };
+type Toast = { trader: Trader; index: number };
 
 const LOCK_PX = 8;
 const COMMIT_PX = 96;
@@ -25,8 +25,6 @@ const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && !!el.closest('input, textarea, select, [contenteditable="true"]');
-const clock = (ms: number) =>
-  new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const usd = (n: number) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 
 export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }: Props) {
@@ -58,7 +56,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
       onGhost(t);
       setToast(null);
     } else {
-      setToast({ kind: 'pass', trader: t, index: i, at: Date.now() });
+      setToast({ trader: t, index: i });
     }
     setIndex(i + 1);
     setDx(0);
@@ -75,7 +73,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
   }, [act, index, trader]);
 
   const undo = () => {
-    if (toast?.kind !== 'pass') return;
+    if (!toast) return;
     setIndex(toast.index);
     setToast(null);
   };
@@ -189,9 +187,9 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
               </div>
             ) : (
               <div className="dsc-empty">
-                <h2>That’s everyone for now.</h2>
-                <p>No more traders match this preview deck. Check back later or start over.</p>
-                <button type="button" className="dsc-btn" onClick={() => { setIndex(0); setToast(null); }}>
+                <h2>{traders.length ? "That’s everyone for now." : "No traders available."}</h2>
+                <p>{traders.length ? "You’ve seen this preview deck. Check back later or start over." : "Try another trading style. Live profiles appear here only after verification."}</p>
+                <button type="button" className="dsc-btn" disabled={!traders.length} onClick={() => { setIndex(0); setToast(null); }}>
                   Start over
                 </button>
               </div>
@@ -221,16 +219,10 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
 
           <div className="dsc-toast-slot" aria-live="polite">
             {toast && (
-              <div className={`dsc-toast dsc-toast-${toast.kind}`}>
-                <Icon name={toast.kind === 'ghost' ? 'ghost' : 'x'} size={18} />
-                {toast.kind === 'ghost' ? (
-                  <span>Ghost-copying {toast.trader.name} from {clock(toast.at)} · {usd(perTradeUsd)}/trade · no funds moved</span>
-                ) : (
-                  <>
-                    <span>Passed on {toast.trader.name}</span>
-                    <button type="button" onClick={undo}><Icon name="undo" size={16} />Undo</button>
-                  </>
-                )}
+              <div className="dsc-toast dsc-toast-pass">
+                <Icon name="x" size={18} />
+                <span>Passed on {toast.trader.name}</span>
+                <button type="button" onClick={undo}><Icon name="undo" size={16} />Undo</button>
               </div>
             )}
           </div>
