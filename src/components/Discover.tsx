@@ -100,7 +100,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
   // Direction lock: a vertical start reads the profile natively (touch-action: pan-y);
   // only a horizontal start moves the card and can commit a decision.
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (busy.current || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (drag.current || busy.current || (e.pointerType === 'mouse' && e.button !== 0)) return;
     dragged.current = false;
     drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), axis: null };
   };
