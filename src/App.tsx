@@ -1,14 +1,24 @@
 import { useEffect, useState } from "react";
-import type { Ghost, Trader } from "../shared/types";
+import type { Trader } from "../shared/types";
 import Discover from "./components/Discover";
 import Ghosts from "./components/Ghosts";
 import PassSetup from "./components/PassSetup";
 import { Icon } from "./components/Icons";
-import { loadGhosts, saveGhosts, startGhost, removeGhost } from "./lib/ghosts";
+import {
+  createGhostStore,
+  GHOSTS_KEY,
+  MAX_PER_TRADE_USD,
+  MIN_PER_TRADE_USD,
+  type GhostChange,
+} from "./lib/ghosts";
 import { previewTraders } from "./fixtures";
 
 type Page = "discover" | "ghosts" | "matches" | "you";
 const pages: Page[] = ["discover", "ghosts", "matches", "you"];
+const vibes = ["All", "Steady", "Balanced", "Spicy"];
+const PREFS_KEY = "swipr.preferences.v1";
+const SESSION_ONLY_NOTICE =
+  "Browser storage is unavailable. Your ghosts will last for this visit only.";
 function currentPage(): Page {
   const hash = location.hash.slice(1);
   return pages.includes(hash as Page) ? (hash as Page) : "discover";
@@ -16,16 +26,16 @@ function currentPage(): Page {
 function readPrefs(): { amount: number; vibe: string } {
   try {
     const prefs = JSON.parse(
-      localStorage.getItem("swipr.preferences.v1") ?? "{}",
+      localStorage.getItem(PREFS_KEY) ?? "{}",
     );
     return {
       amount:
         Number.isInteger(prefs.amount) &&
-        prefs.amount >= 5 &&
-        prefs.amount <= 50
+        prefs.amount >= MIN_PER_TRADE_USD &&
+        prefs.amount <= MAX_PER_TRADE_USD
           ? prefs.amount
           : 10,
-      vibe: ["All", "Steady", "Balanced", "Spicy"].includes(prefs.vibe)
+      vibe: vibes.includes(prefs.vibe)
         ? prefs.vibe
         : "All",
     };
@@ -35,7 +45,10 @@ function readPrefs(): { amount: number; vibe: string } {
 }
 export default function App() {
   const [page, setPage] = useState<Page>(currentPage);
-  const [ghosts, setGhosts] = useState<Ghost[]>(() => loadGhosts());
+  const [ghostStore] = useState(() => createGhostStore());
+  const [{ ghosts, status: ghostStorage }, setGhostSnapshot] = useState(
+    ghostStore.getSnapshot,
+  );
   const [prefs, setPrefs] = useState(readPrefs);
   const [realTrader, setRealTrader] = useState<Trader | null>(null);
   const [notice, setNotice] = useState("");
@@ -57,6 +70,19 @@ export default function App() {
     };
   }, []);
   useEffect(() => {
+    const unsubscribe = ghostStore.subscribe(setGhostSnapshot);
+    // Other tabs write the same key; storage events keep this tab current.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === GHOSTS_KEY) ghostStore.refresh();
+    };
+    window.addEventListener("storage", onStorage);
+    ghostStore.refresh();
+    return () => {
+      unsubscribe();
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [ghostStore]);
+  useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 6500);
     return () => clearTimeout(timer);
@@ -67,28 +93,25 @@ export default function App() {
     setRealTrader(null);
     window.scrollTo(0, 0);
   };
-  const persistGhosts = (next: Ghost[]) => {
-    setGhosts(next);
-    if (!saveGhosts(next))
-      setNotice(
-        "Browser storage is unavailable. Your ghosts will last for this visit only.",
-      );
-  };
   const ghost = (trader: Trader) => {
-    const existing = ghosts.some((g) => g.traderId === trader.id);
-    const next = startGhost(ghosts, trader.id, prefs.amount);
-    setNotice(
-      existing
-        ? `${trader.name} is already in your ghosts. Original start time kept.`
-        : `Ghost-copying ${trader.name} · $${prefs.amount}/trade · no funds moved.`,
-    );
-    persistGhosts(next);
+    const amount = prefs.amount;
+    void ghostStore
+      .start(trader.id, amount)
+      .then(({ existed, status }: GhostChange) =>
+        setNotice(
+          status === "session-only"
+            ? SESSION_ONLY_NOTICE
+            : existed
+              ? `${trader.name} is already in your ghosts. Original start time kept.`
+              : `Ghost-copying ${trader.name} · $${amount}/trade · no funds moved.`,
+        ),
+      );
   };
   const updatePrefs = (amount: number, vibe: string) => {
     const next = { amount, vibe };
     setPrefs(next);
     try {
-      localStorage.setItem("swipr.preferences.v1", JSON.stringify(next));
+      localStorage.setItem(PREFS_KEY, JSON.stringify(next));
     } catch {
       setNotice(
         "Preferences changed for this visit. Browser storage is unavailable.",
@@ -111,9 +134,7 @@ export default function App() {
           onClick={() => navigate(p)}
         >
           <Icon name={p} size={22} />
-          <span>
-            {p === "ghosts" ? "Ghosts" : p[0].toUpperCase() + p.slice(1)}
-          </span>
+          <span>{p[0].toUpperCase() + p.slice(1)}</span>
           {p === "ghosts" && ghosts.length > 0 && (
             <small>{ghosts.length}</small>
           )}
@@ -136,6 +157,11 @@ export default function App() {
             : "Not connected. No verified profiles available."}
         </span>
       </div>
+      {ghostStorage === "session-only" && (
+        <div className="offline-banner" role="status">
+          {SESSION_ONLY_NOTICE}
+        </div>
+      )}
       {!online && (
         <div className="offline-banner" role="status">
           You’re offline. Local ghosts are available; prices and trading need a
@@ -207,7 +233,7 @@ export default function App() {
                           updatePrefs(prefs.amount, e.target.value)
                         }
                       >
-                        {["All", "Steady", "Balanced", "Spicy"].map((v) => (
+                        {vibes.map((v) => (
                           <option key={v}>{v}</option>
                         ))}
                       </select>
@@ -229,8 +255,15 @@ export default function App() {
                   traders={previewTraders}
                   onReal={setRealTrader}
                   onRemove={(id) => {
-                    persistGhosts(removeGhost(ghosts, id));
-                    setNotice("Ghost removed from this browser.");
+                    void ghostStore
+                      .remove(id)
+                      .then(({ status }) =>
+                        setNotice(
+                          status === "session-only"
+                            ? SESSION_ONLY_NOTICE
+                            : "Ghost removed from this browser.",
+                        ),
+                      );
                   }}
                 />
               )}
@@ -290,8 +323,8 @@ export default function App() {
                     <input
                       id="trade-size"
                       type="range"
-                      min="5"
-                      max="50"
+                      min={MIN_PER_TRADE_USD}
+                      max={MAX_PER_TRADE_USD}
                       step="1"
                       value={prefs.amount}
                       onChange={(e) =>
@@ -299,8 +332,8 @@ export default function App() {
                       }
                     />
                     <div className="range-ends">
-                      <span>$5</span>
-                      <span>$50</span>
+                      <span>${MIN_PER_TRADE_USD}</span>
+                      <span>${MAX_PER_TRADE_USD}</span>
                     </div>
                     <label className="setting-label" htmlFor="style">
                       Your trading style
@@ -313,7 +346,7 @@ export default function App() {
                         updatePrefs(prefs.amount, e.target.value)
                       }
                     >
-                      {["All", "Steady", "Balanced", "Spicy"].map((v) => (
+                      {vibes.map((v) => (
                         <option key={v}>{v}</option>
                       ))}
                     </select>
