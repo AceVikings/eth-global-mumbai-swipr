@@ -55,11 +55,11 @@ export function createApi({ config, ledger, authenticate = createAuthenticator(c
       if (req.method === 'GET' && path === '/api/runtime') return send(200, {
         mode: config.mode, tradingEnabled: false,
         integrations: [
-          ['database', !!ledger, 'Durable PostgreSQL ledger'], ['flash', !!flash, 'Quote adapter; execution gates pending'],
+          ['database', !!ledger, 'Arkiv confirmed event journal'], ['flash', !!flash, 'Quote adapter; execution gates pending'],
           ['privy', !!(config.privyAppId && config.privySecret && config.privyVerificationKey), 'JWT and linked-wallet verification'],
           ['baseRpc', !!config.baseRpc, 'Receipt adapter; funded acceptance tests pending'],
           ['ens', !!config.sepoliaRpc, 'Registry deployment and mint verification pending'],
-          ['arkiv', false, 'Signed directory and sealed entity adapter pending'],
+          ['arkiv', !!ledger, 'Rabdi journal adapter; trader directory and funded acceptance pending'],
           ['swarm', !!(config.beeUrl && config.swarmBatchId), 'Archive transport; BMT and gateway acceptance pending'],
         ].map(([name, configured, detail]) => ({ name, configured, verified: false, detail })),
       });

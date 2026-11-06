@@ -10,7 +10,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     if (url.origin !== origin || !['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid ALLOWED_ORIGINS');
     if (env.NODE_ENV === 'production' && url.protocol !== 'https:') throw new Error('Production origins require HTTPS');
   }
-  return { port, origins, mode, databaseUrl: env.DATABASE_URL,
+  const confirmations = Number(env.ARKIV_CONFIRMATIONS || 2);
+  if (!Number.isSafeInteger(confirmations) || confirmations < 1 || confirmations > 20) throw new Error('Invalid ARKIV_CONFIRMATIONS');
+  return { port, origins, mode,
+    arkiv: { rpcUrl: env.ARKIV_RPC_URL, accessKey: env.ARKIV_ACCESS_KEY,
+      writerAddress: env.ARKIV_WRITER_ADDRESS || '', privateKey: env.ARKIV_RELAYER_PK,
+      stream: env.ARKIV_ENGINE_STREAM || 'swipr-engine-v1', confirmations },
     privyAppId: env.PRIVY_APP_ID || env.VITE_PRIVY_APP_ID,
     privySecret: env.PRIVY_APP_SECRET, privyVerificationKey: env.PRIVY_VERIFICATION_KEY,
     flashKey: env.FLASH_KEY_EXEC || env.FLASH_API_KEY,
