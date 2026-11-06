@@ -4,6 +4,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { createTradingService } from './service';
 import { FLASH_DOMAIN, FLASH_ORDER_TYPES, FLASH_DOMAIN_TYPES, TOKENS } from '../providers/flash';
 import type { BotProfile } from '../contracts/bots';
+import {DEFAULT_TERMS} from '../contracts/types';
 import type { SeatDirectory } from '../contracts/seats';
 const chain = vi.hoisted(() => ({ getChainId: vi.fn(), getBalance: vi.fn(), getCode: vi.fn(), getBlockNumber: vi.fn(), getTransactionReceipt: vi.fn(), getTransaction: vi.fn(), readContract: vi.fn() }));
 vi.mock('viem', async original => ({ ...await original<typeof import('viem')>(), createPublicClient: () => chain }));
@@ -97,7 +98,7 @@ it('requires two confirmations for receipt-backed fills and verifies real transf
  expect(result.unverifiedFills).toBe(0);
 });
 
-it.each([{ mode: 'auto', safetyNetBps: 0 }, { mode: 'tap', safetyNetBps: 500 }])('refuses a copier pass whose execution promises are unavailable: %j', async terms => {
+it.each([{ mode: 'auto', safetyNetBps: 0 }, { mode: 'tap', safetyNetBps: 500 }, {mode:'tap',safetyNetBps:0,liquidateOnBreakup:true}])('refuses a copier pass whose execution promises are unavailable: %j', async terms => {
  const directory = { passes: [{ id: 'seat-1', owner: copier.address.toLowerCase(), traderId: profile.id, status: 'joined', terms: { perTradeUsd: 5, ...terms } }], availability: [], invitations: [] } as unknown as SeatDirectory;
  const { service, fetcher } = setup({}, directory);
  await expect(service.quote(copier.address, { ...input, seatId: 'seat-1', sourceOrderId: 'trader-order' })).rejects.toThrow('protected or automatic');
@@ -121,5 +122,13 @@ it('checks real spending balance and approval gas before any wallet prompt', asy
  await expect(service.preflight(trader.address, q.ticket)).rejects.toThrow('ETH on Base');
  chain.getBalance.mockResolvedValue(1000000000000000n);
  expect(await service.preflight(trader.address, q.ticket)).toEqual({ ready: true });
+ expect(sent).toBe(0);
+});
+
+it('allows a default tap seat to reach trader fill verification instead of requiring unimplemented stops',async()=>{
+ const directory={passes:[{id:'seat-1',owner:copier.address.toLowerCase(),traderId:profile.id,status:'joined',terms:DEFAULT_TERMS}],availability:[],invitations:[]} as unknown as SeatDirectory;
+ const {service,fetcher}=setup({},directory);
+ await expect(service.quote(copier.address,{...input,seatId:'seat-1',sourceOrderId:'trader-order'})).rejects.toThrow('matching trader limit buy');
+ expect(fetcher).toHaveBeenCalledOnce();
  expect(sent).toBe(0);
 });

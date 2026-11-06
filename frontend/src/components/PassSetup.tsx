@@ -15,7 +15,7 @@ type Draft = {
 type Frozen = { terms: Terms; frozenAt: number };
 
 const DURATIONS = [1, 7, 30] as const;
-const SAFETY_NETS = [300, 500, 800];
+const SAFETY_NETS = [0, 300, 500, 800];
 const draftKey = (id: string) => `swipr.passDraft.v1.${id}`;
 
 const parseInt_ = (s: string, lo: number, hi: number) =>
@@ -231,7 +231,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
               <span>Also sell my copied holdings if the threshold is hit<small>Requested behavior only. Joining does not create trades or grant permissions.</small></span>
             </label>
             <Choice legend="Safety-net stop per copy" name="ps-net" value={d.safetyNetBps}
-              options={SAFETY_NETS.map((b) => ({ value: b, label: `−${b / 100}%` }))}
+              options={SAFETY_NETS.map((b) => ({ value: b, label: b === 0 ? 'No stop' : `−${b / 100}%` }))}
               onChange={(v) => set('safetyNetBps', v)} />
             <p className="ps-hint ps-hint-tight">Requested stop level. A stop trigger does not guarantee a fill price.</p>
             <div className="ps-fixed">
@@ -265,7 +265,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
                 <Row label="Requested budget">{usd(t.perTradeUsd * t.tradeCount)}</Row>
                 <Row label="Pass length">{t.durationDays} {t.durationDays === 1 ? 'day' : 'days'} from joining</Row>
                 <Row label="Breakup threshold">−{usd(t.breakupUsd)} from best · {t.liquidateOnBreakup ? 'request an exit' : 'pause new entries'}</Row>
-                <Row label="Requested stop">−{t.safetyNetBps / 100}% per copy</Row>
+                <Row label="Requested stop">{t.safetyNetBps === 0 ? 'No stop' : `−${t.safetyNetBps / 100}% per copy`}</Row>
                 <Row label="Requested profit share">{t.profitShareBps / 100}% of new realized net profit</Row>
               </dl>
 

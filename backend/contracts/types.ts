@@ -12,7 +12,7 @@ export type Terms = {
 };
 export const DEFAULT_TERMS: Terms = {
   perTradeUsd: 10, tradeCount: 5, durationDays: 7, mode: 'tap',
-  breakupUsd: 10, safetyNetBps: 500, profitShareBps: 500,
+  breakupUsd: 10, safetyNetBps: 0, profitShareBps: 500,
   liquidateOnBreakup: false,
 };
 export type Trader = {
