@@ -71,6 +71,7 @@ jobs:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: ${{ vars.GCP_REGION }}
       COMMIT_SHA: ${{ github.sha }}
+      FUNDING_START_NONCE: ${{ vars.ARKIV_FUNDING_START_NONCE }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build backend image (no credentials in build)
@@ -100,6 +101,24 @@ jobs:
       - name: Set up gcloud
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+      - name: Sync backend secrets to Secret Manager
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
+        env:
+          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+          PRIVY_VERIFICATION_KEY: ${{ secrets.PRIVY_VERIFICATION_KEY }}
+          FLASH_KEY_EXEC: ${{ secrets.FLASH_KEY_EXEC }}
+          ARKIV_ACCESS_KEY: ${{ secrets.ARKIV_ACCESS_KEY }}
+          ARKIV_RELAYER_PK: ${{ secrets.ARKIV_RELAYER_PK }}
+          ARKIV_MAINTAINER_PK: ${{ secrets.ARKIV_MAINTAINER_PK }}
+        run: |
+          set -euo pipefail
+          for mapping in PRIVY_APP_ID:swipr-privy-app-id PRIVY_APP_SECRET:swipr-privy-app-secret PRIVY_VERIFICATION_KEY:swipr-privy-verification-key FLASH_KEY_EXEC:swipr-flash-key-exec ARKIV_ACCESS_KEY:swipr-arkiv-access-key ARKIV_RELAYER_PK:swipr-arkiv-relayer-pk ARKIV_MAINTAINER_PK:swipr-arkiv-maintainer-pk; do
+            key="${mapping%%:*}"
+            secret="${mapping#*:}"
+            test -n "${!key}"
+            printf '%s' "${!key}" | gcloud secrets versions add "$secret" --project "$PROJECT_ID" --data-file=- --quiet >/dev/null
+          done
       - name: Push commit image
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
         run: |
@@ -124,8 +143,14 @@ jobs:
             expected="${service}@${PROJECT_ID}.iam.gserviceaccount.com"
             actual="$(gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" --format='value(spec.template.spec.serviceAccountName)')"
             [[ "$actual" == "$expected" ]] || { echo "Unexpected runtime identity on ${service}" >&2; exit 3; }
+            extra=()
+            if [[ "$role" == worker ]]; then
+              [[ "$FUNDING_START_NONCE" =~ ^[0-9]+$ ]]
+              extra+=(--update-env-vars "ARKIV_FUNDING_ENABLED=true,ARKIV_FUNDING_START_NONCE=${FUNDING_START_NONCE}")
+              extra+=(--update-secrets "ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest")
+            fi
             gcloud run services update "$service" --project "$PROJECT_ID" --region "$REGION" \
-              --image "$immutable_image" --update-labels "commit-sha=${COMMIT_SHA}" --quiet
+              --image "$immutable_image" --update-labels "commit-sha=${COMMIT_SHA}" "${extra[@]}" --quiet
             gcloud run services update-traffic "$service" --project "$PROJECT_ID" --region "$REGION" --to-latest --quiet
             url="$(gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
             if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf '%s_url=%s\n' "$role" "$url" >> "$GITHUB_OUTPUT"; fi
