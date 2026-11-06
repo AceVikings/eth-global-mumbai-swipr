@@ -1,9 +1,6 @@
+import { createWorkerServer } from './worker-http';
 import { SocialStore } from './social/store';
-import { ApiError } from './auth';
-import { jsonBody } from './http';
 import { ProjectStore } from './bots/store';
-import { BotError } from './bots/validation';
-import { createServer } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Ledger, type Job } from './ledger';
 import { readConfig } from './config';
@@ -21,41 +18,23 @@ export async function runJob(job: Job, baseRpc?: string, fetcher: typeof fetch =
 }
 async function main() {
   const config = readConfig();
-  if (!config.arkiv.writerAddress) throw new Error('ARKIV_WRITER_ADDRESS is required by the worker');
-  const renew = config.arkivMaintainerKey ? createArkivMaintainer(config.arkiv, config.arkivMaintainerKey) : null;
+  const renew = config.arkiv.writerAddress && config.arkivMaintainerKey ? createArkivMaintainer(config.arkiv, config.arkivMaintainerKey) : null;
   if (renew) await renew();
-  const journal = createArkivJournal(config.arkiv);
-  const ledger = await Ledger.open(journal);
-  const social = new SocialStore(journal, config.botAudience);
-  const projects = new ProjectStore(journal, config.botAudience);
+  const journal = config.arkiv.writerAddress ? createArkivJournal(config.arkiv) : null;
+  const ledger = journal ? await Ledger.open(journal) : null;
+  const social = journal ? new SocialStore(journal, config.botAudience) : null;
+  const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
-  const server = createServer(async (req, res) => {
-    const path = req.url?.split('?')[0];
-    if (path === '/internal/bots' || path === '/internal/social') {
-      res.setHeader('content-type', 'application/json'); res.setHeader('cache-control', 'no-store');
-      if (stopping || req.method !== 'POST') { res.writeHead(stopping ? 503 : 405); res.end(JSON.stringify({ error: { code: 'unavailable', message: 'Worker cannot accept this command.' } })); return; }
-      try {
-        const input = await jsonBody(req);
-        const result = await (path === '/internal/social' ? social.execute(input) : projects.execute(input));
-        res.writeHead(200); res.end(JSON.stringify(result));
-      } catch (error) {
-        const known = error instanceof BotError || error instanceof ApiError;
-        res.writeHead(known ? error.status : 503);
-        res.end(JSON.stringify({ error: { code: known ? error.code : 'unavailable', message: known ? error.message : 'Bot command was not confirmed; reconcile the same request ID.' } }));
-      }
-      return;
-    }
-    if (!['/healthz', '/readyz', '/health', '/ready'].includes(path || '')) { res.writeHead(404); res.end(); return; }
-    const ok = !stopping && Date.now() - lastHealthy < 60000;
-    res.writeHead(ok ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({ ok, service: 'worker', lastHealthyAt: lastHealthy ? new Date(lastHealthy).toISOString() : null }));
-  });
+  // Missing credentials keeps liveness available, but readiness and all writes fail closed.
+  const server = createWorkerServer({ social, projects, stopping: () => stopping,
+    lastHealthyAt: () => lastHealthy, canWrite: () => journal?.canWrite === true });
   await new Promise<void>(resolve => server.listen(config.port, '0.0.0.0', resolve));
   const shutdown = () => { stopping = true; };
   process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);
   console.log(JSON.stringify({ service: 'worker', port: config.port }));
   try {
     while (!stopping) {
+      if (!ledger) { await delay(2000); continue; }
       try {
         if (renew && Date.now() - lastRenewal > 3600000) { await renew(); lastRenewal = Date.now(); }
         if (!(await ledger.health()).ok) throw new Error('arkiv_unhealthy');
@@ -81,7 +60,7 @@ async function main() {
     }
   } finally {
     server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
-    await ledger.close();
+    await ledger?.close();
   }
 }
 if (process.argv[1]?.endsWith('/worker.ts')) void main().catch(() => {
