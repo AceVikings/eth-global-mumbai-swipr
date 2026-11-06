@@ -1,3 +1,4 @@
+import { createWalletSignals } from './bots/wallet-signals';
 import { createWalletDirectory } from './bots/wallet-directory';
 import { createAccountService } from './account';
 import { createArkivRpc } from './arkiv-rpc';
@@ -19,6 +20,7 @@ const server = createApi({ config, ledger, projects, social,
   account: config.arkiv.accessKey ? createAccountService(config) : undefined,
   arkivRpc: config.arkiv.accessKey ? createArkivRpc(config.arkiv) : undefined,
   walletSocial: config.arkiv.accessKey ? createWalletSocial(config.arkiv) : undefined,
+  walletSignals: config.arkiv.accessKey ? createWalletSignals(config.arkiv) : undefined,
   walletProfiles: config.arkiv.accessKey ? createWalletDirectory(config.arkiv) : undefined });
 server.listen(config.port, '0.0.0.0', () => console.log(JSON.stringify({ service: 'api', port: config.port })));
 let closing = false;

@@ -49,6 +49,12 @@ After funding, the user approves the actual Arkiv write. Funding does not grant 
 
 The funding signer is the dedicated maintenance wallet and must not also send retention transactions. `ARKIV_FUNDING_START_NONCE` anchors its starting state; CI obtains it from the repository variable. Do not change that variable just to bypass a reconciliation failure.
 
+## Connect a trading bot
+
+Bot Studio supplies the API address and MCP configuration automatically. `POST /api/bots/wallet-transaction` and the MCP tool `swipr_prepare_wallet_action` accept a public wallet, an action (`profile.upsert`, `profile.halt`, or `signal.publish`) and its data, and return an unsigned Rabdi transaction. The owner wallet signs profile changes; the registered operator signs signal transactions. Neither interface receives a private key or broadcasts for the caller.
+
+Signals are read from native wallet-owned Arkiv records after two confirmations. The directory checks the current profile, operator and allowed asset. A copied schema, unrelated sender, halted profile or user-supplied performance claim cannot become a valid signal. Signals remain proposals and do not contribute to profit leaderboards.
+
 ## Delete account and data
 
 Under **You → Delete account and data**, the user confirms the action, signs deletion of their wallet-owned Swipr records, and signs a short-lived account-deletion message. The backend checks that all linked wallets have removed their Swipr records before deleting the Privy login. Local Swipr browser storage is then cleared and the session signs out.

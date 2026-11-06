@@ -3,17 +3,14 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useSession } from '../auth/Session';
 import {
-  ASSETS, BotRequestError, STRATEGIES, STYLES, buildAction, draftFrom, emptyDraft, getBots, getIntegration, isUncertain,
-  LIMITS, loadLocalDraft, saveLocalDraft, sendCommand, short, signAction, snippets, toolName, upsertData, validateDraft,
+  ASSETS, STRATEGIES, STYLES, buildAction, draftFrom, emptyDraft, getBots, getIntegration,
+  LIMITS, loadLocalDraft, saveLocalDraft, short, snippets, toolName, upsertData, validateDraft,
 } from '../lib/bots';
 import type { BotProfile, BotsResponse, Integration, ProfileDraft } from '../lib/bots';
-import type { SignedBotAction } from '../contracts/bots';
 import '../bots.css';
 
 /** onChanged fires after the service accepts an upsert or halt, so the host can refresh its directory. */
 type Props = { onChanged?: () => void };
-/** A signed envelope whose outcome is unknown. Memory only; dropped on sign-out or account switch. */
-type Pending = { signed: SignedBotAction; owner: string; label: string; done: string; clearDraft: boolean };
 type Load = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'done'; data: BotsResponse };
 type Notice = { tone: 'ok' | 'error' | 'info'; text: string } | null;
 type FieldErrors = Partial<Record<keyof ProfileDraft, string>>;
@@ -72,16 +69,8 @@ export default function BotStudio({ onChanged }: Props = {}) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
   const [tick, setTick] = useState(0);
   const formTitle = useId();
-
-  useEffect(() => {
-    if (pending && pending.owner !== account) {
-      setPending(null);
-      setNotice({ tone: 'info', text: 'You signed out or switched accounts, so the unconfirmed action was discarded. Refresh to check whether it was applied.' });
-    }
-  }, [account, pending]);
 
   useEffect(() => {
     const local = loadLocalDraft();
@@ -109,39 +98,10 @@ export default function BotStudio({ onChanged }: Props = {}) {
   const refresh = useCallback(() => setTick(t => t + 1), []);
 
   const ensureReady = (): string | null => {
-    if (pending) return 'Resolve the unconfirmed action first: retry it.';
     if (!online) return 'You are offline. Reconnect to sign and submit.';
     if (!integration) return 'Integration details are unavailable, so the signing audience is unknown. Refresh and try again.';
     if (!account) return 'Sign in first.';
     return null;
-  };
-
-  /** Sends a signed envelope. Uncertain outcomes keep it pending so only the exact same envelope is retried. */
-  const deliver = async (p: Pending) => {
-    setBusy(p.label);
-    try {
-      const token = await session.getAccessToken();
-      if (!token) throw new Error('Your session expired. Sign in again.');
-      setNotice({ tone: 'info', text: 'Submitting signed action…' });
-      await sendCommand(p.signed, token);
-      setPending(null);
-      if (p.clearDraft) { saveLocalDraft(null); setDraft(null); }
-      setNotice({ tone: 'ok', text: p.done });
-      refresh();
-      onChanged?.();
-      return true;
-    } catch (e) {
-      const text = e instanceof Error ? e.message : 'The action failed.';
-      if (accountRef.current !== p.owner) return false;
-      if (isUncertain(e)) {
-        setPending(p);
-        setNotice({ tone: 'error', text: `${text} The outcome is unknown. Retry the same signed action (it cannot apply twice).` });
-      } else {
-        if (e instanceof BotRequestError) setPending(null);
-        setNotice({ tone: 'error', text });
-      }
-      return false;
-    } finally { setBusy(null); }
   };
 
   const run = async (label: string, action: 'profile.upsert' | 'profile.halt', data: Parameters<typeof buildAction>[2], done: string, clearDraft = false) => {
@@ -184,7 +144,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
   const names = new Map(profiles.map(p => [p.id, p.name]));
   const isOwner = (p: BotProfile) => !!account && p.owner.toLowerCase() === account;
   const snip = snippets(integration);
-  const locked = !!busy || !!pending;
+  const locked = !!busy;
 
   return (
     <section className="bs" aria-labelledby="bs-title" aria-busy={load.kind === 'loading' || !!busy}>
@@ -209,18 +169,6 @@ export default function BotStudio({ onChanged }: Props = {}) {
       {!online && <p className="bs-banner bs-banner-warn" role="status">Offline. Showing the last loaded data; signing and submission are paused.</p>}
       {data?.state === 'unavailable' && <p className="bs-banner bs-banner-warn" role="status">Bot storage unavailable: {data.detail || 'no detail provided.'}</p>}
       {notice && <p className={`bs-banner bs-banner-${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>}
-      {pending && (
-        <div className="bs-banner bs-banner-warn" role="status">
-          <p>An action is unconfirmed. Other changes are paused until you retry.</p>
-          <div className="bs-row-actions">
-            <button type="button" className="bs-btn" disabled={!!busy || !online} onClick={() => void deliver(pending)}>
-              {busy === pending.label ? 'Retrying…' : 'Retry same signed action'}
-            </button>
-
-          </div>
-        </div>
-      )}
-
       <div className="bs-grid">
         <section className="bs-panel" aria-labelledby="bs-list">
           <div className="bs-panel-head">
@@ -261,15 +209,15 @@ export default function BotStudio({ onChanged }: Props = {}) {
                         onClick={() => { setDraft(draftFrom(p)); setDraftSource('edit'); setErrors({}); }} aria-label={`Edit ${p.name}`}>Edit</button>
                       <button type="button" className="bs-btn bs-btn-danger" disabled={locked || !online} aria-label={`Halt ${p.name}`}
                         onClick={() => {
-                          if (window.confirm(`Halt ${p.name}? Halting is permanent: new signals and edits will be rejected.`)) {
-                            void run(p.id, 'profile.halt', { profileId: p.id }, `${p.name} halted; new signals and edits will be rejected.`);
+                          if (window.confirm(`Halt ${p.name}? New signals will no longer appear in Swipr.`)) {
+                            void run(p.id, 'profile.halt', { profileId: p.id }, `${p.name} halted; new signals will no longer appear.`);
                           }
                         }}>
                         {busy === p.id ? 'Signing…' : 'Halt'}
                       </button>
                     </div>
                   )}
-                  {isOwner(p) && p.status === 'halted' && <p className="bs-hint bs-row-actions">Halted bots cannot be edited or resumed.</p>}
+                  {isOwner(p) && p.status === 'halted' && <p className="bs-hint bs-row-actions">This bot is halted and cannot publish new signals in Swipr.</p>}
                 </li>
               ))}
             </ul>

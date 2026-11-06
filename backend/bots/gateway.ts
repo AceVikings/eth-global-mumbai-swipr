@@ -20,6 +20,7 @@ export interface EnsTextArgs { name: string; key: string; value: string }
 
 export interface BotGatewayDeps {
   listBots(): Promise<unknown>;
+  prepareWalletAction?(input: Record<string, unknown>): Promise<unknown>;
   /** Must forward the raw envelope to the worker, which verifies EIP-191, freshness and replay. */
   executeBot(envelope: SignedBotAction): Promise<unknown>;
   quote(input: QuoteArgs): Promise<unknown>;
@@ -113,11 +114,18 @@ const bot = (action: BotActionType): Run => (deps, args: { signedAction: SignedB
   return deps.executeBot(args.signedAction);
 };
 
-export const TOOL_NAMES = ['swipr_list_bots', 'swipr_register_bot', 'swipr_halt_bot', 'swipr_publish_signal',
+export const TOOL_NAMES = ['swipr_prepare_wallet_action', 'swipr_list_bots', 'swipr_register_bot', 'swipr_halt_bot', 'swipr_publish_signal',
   'flash_quote', 'flash_get_order', 'flash_submit_order', 'swipr_seal_fill', 'set_ens_text'] as const;
 export type ToolName = typeof TOOL_NAMES[number];
 
 const TOOLS = [
+  tool('swipr_prepare_wallet_action', 'Prepare an unsigned Arkiv profile or signal transaction. The owner/operator wallet must approve and send it on Rabdi. Never trades or transfers funds.', obj({
+    wallet: FUNDER, action: str('Wallet action.', { enum: ['profile.upsert', 'profile.halt', 'signal.publish'] }),
+    data: { type: 'object', additionalProperties: true, description: 'Profile fields, profileId for halt, or profileId/asset/side/quantity/limitPrice/thesis for a signal. Use the native 0x entity key.' },
+  }), { readOnlyHint: true }, (deps, args) => {
+    if (!deps.prepareWalletAction) throw new ApiError(503, 'storage_unavailable', 'Wallet storage is unavailable.');
+    return deps.prepareWalletAction(args);
+  }),
   tool('swipr_list_bots', 'List registered bot profiles and published signals with storage readiness.', obj({}),
     { readOnlyHint: true, idempotentHint: true }, deps => deps.listBots()),
   tool('swipr_register_bot', 'Create or edit a bot profile. Must be signed by the owner wallet.',
@@ -202,6 +210,9 @@ const validId = (id: unknown): id is string | number => typeof id === 'string' |
 export const PARSE_ERROR_BODY = rpcError(null, -32700, 'Parse error');
 
 export function createBotGateway(deps: BotGatewayDeps) {
+  const descriptors = deps.prepareWalletAction
+    ? TOOL_DESCRIPTORS.filter(t => ['swipr_list_bots', 'swipr_prepare_wallet_action', 'flash_quote', 'flash_get_order'].includes(t.name))
+    : TOOL_DESCRIPTORS;
   async function dispatch(name: unknown, args: unknown): Promise<ToolOutcome> {
     const def = typeof name === 'string' ? BY_NAME.get(name) : undefined;
     if (!def) return failure(404, 'unknown_tool', 'Unknown tool.');
@@ -250,10 +261,12 @@ export function createBotGateway(deps: BotGatewayDeps) {
         if (inBatch) return rpcError(id, -32600, 'initialize must not be batched');
         return rpcResult(id, {
           protocolVersion: MCP_PROTOCOL_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO,
-          instructions: 'Swipr bot tools. Mutations require a wallet-signed SignedBotAction; signals are proposals, not orders or fills. Trading stays disabled until verified gates pass.',
+          instructions: deps.prepareWalletAction
+            ? 'Prepare wallet writes with swipr_prepare_wallet_action, then approve and send the returned transaction using the owner/operator wallet on Arkiv Rabdi. API/MCP never signs or broadcasts. Signals are proposals, not orders or fills.'
+            : 'Swipr bot tools. Mutations require a wallet-signed SignedBotAction; signals are proposals, not orders or fills. Trading stays disabled until verified gates pass.',
         });
       case 'ping': return rpcResult(id, {});
-      case 'tools/list': return rpcResult(id, { tools: TOOL_DESCRIPTORS });
+      case 'tools/list': return rpcResult(id, { tools: descriptors });
       case 'tools/call': {
         if (typeof params.name !== 'string') return rpcError(id, -32602, 'Invalid params: name is required');
         if (!BY_NAME.has(params.name)) return rpcError(id, -32602, `Unknown tool: ${params.name.slice(0, 64)}`);
@@ -276,6 +289,6 @@ export function createBotGateway(deps: BotGatewayDeps) {
     return { status: invalid ? 400 : 200, body: reply };
   }
 
-  return { mcp, agent, callTool, dispatch, tools: TOOL_DESCRIPTORS };
+  return { mcp, agent, callTool, dispatch, tools: descriptors };
 }
 export type BotGateway = ReturnType<typeof createBotGateway>;

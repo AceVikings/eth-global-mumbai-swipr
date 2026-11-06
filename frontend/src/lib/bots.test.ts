@@ -13,10 +13,11 @@ describe('snippets', () => {
     const s = snippets(integration);
     expect(s.curl).toContain('curl -s https://api.example.com/api/bots\n');
     expect(s.curl).toContain('https://api.example.com/api/bots/integration');
-    expect(s.curl).toContain('POST https://api.example.com/api/bots/commands');
-    expect(s.curl).toContain('Bearer');
+    expect(s.curl).toContain('POST https://api.example.com/api/bots/wallet-transaction');
+    expect(s.curl).not.toContain('Bearer');
+    expect(s.example).toContain('eth_sendTransaction');
     expect(s.curl).not.toContain('/api/api');
-    expect(s.example).toContain("fetch('https://api.example.com/api/bots/commands'");
+    expect(s.example).toContain("fetch('https://api.example.com/api/bots/wallet-transaction'");
     expect(JSON.parse(s.mcp).mcpServers.swipr.url).toBe('https://api.example.com/mcp');
   });
 });

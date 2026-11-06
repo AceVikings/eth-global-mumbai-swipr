@@ -128,28 +128,30 @@ export const short = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.sli
 export function snippets(i: Integration | null) {
   const origin = (i?.apiUrl || absoluteBase()).replace(/\/$/, '');
   const mcp = i?.mcpUrl || `${origin}/mcp`;
-  const audience = i?.audience || '<audience from /api/bots/integration>';
-  const signal = {
-    version: 1, audience, chainId: 8453, requestId: '<uuid v4>', issuedAt: '<unix seconds>', expiresAt: '<issuedAt + 300>',
-    action: 'signal.publish',
-    data: { profileId: '<profile id>', asset: 'WETH', side: 'buy', quantity: '0.01', limitPrice: '3000', thesis: 'optional rationale' },
-  };
+  const signal = { wallet: '<operator wallet address>', action: 'signal.publish',
+    data: { profileId: '<Arkiv profile entity key>', asset: 'WETH', side: 'buy', quantity: '0.01', limitPrice: '3000', thesis: 'optional rationale' } };
   return {
     curl: [
       `curl -s ${origin}/api/bots`,
       `curl -s ${origin}/api/bots/integration`,
-      '# signal.publish: operator-signed envelope only, no Bearer token.',
-      '# profile.upsert / profile.halt also need -H "authorization: Bearer <Google session token>" for the signing owner.',
-      `curl -s -X POST ${origin}/api/bots/commands \\\n  -H 'content-type: application/json' \\\n  -d @signed-action.json`,
+      '# Prepare an unsigned wallet transaction. This request does not publish anything.',
+      `curl -s -X POST ${origin}/api/bots/wallet-transaction -H 'content-type: application/json' -d @wallet-action.json`,
+      '# Send the returned transaction through the registered operator wallet on Arkiv Rabdi.',
     ].join('\n\n'),
     mcp: JSON.stringify({ mcpServers: { swipr: { type: 'http', url: mcp } } }, null, 2),
     example: [
-      '// Operator wallet signs EIP-191 personal_sign over botMessage(payload) from src/contracts/bots.ts.',
-      '// Signals are proposals only — not executable orders or verified fills.',
-      '// Owner management actions additionally require a Bearer token from the owner\'s Google session.',
-      `const payload = ${JSON.stringify(signal, null, 2)};`,
-      'const signature = await wallet.signMessage({ message: botMessage(payload) });',
-      `await fetch('${origin}/api/bots/commands', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ payload, signature }) });`,
+      '// The registered operator wallet owns its signal records on Arkiv Rabdi.',
+      '// Signals are proposals; publishing never places a trade.',
+      `const action = ${JSON.stringify(signal, null, 2)};`,
+      `const response = await fetch('${origin}/api/bots/wallet-transaction', {`,
+      "  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(action),",
+      '});',
+      "if (!response.ok) throw new Error('Transaction could not be prepared.');",
+      'const { transaction } = await response.json();',
+      '// Use your wallet provider; the platform never asks for its private key.',
+      "await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: transaction.chainId }] });",
+      "const txHash = await provider.request({ method: 'eth_sendTransaction', params: [transaction] });",
+      '// Wait for two confirmations, then refresh GET /api/bots.',
     ].join('\n'),
   };
 }

@@ -15,3 +15,8 @@ export const WalletSocialSchema = defineSchema(WALLET_SOCIAL_SCHEMA, {
 
 /** JSON belongs in Arkiv bytes columns; text columns are capped at 128 UTF-8 bytes. */
 export const walletJson = (value: unknown) => bytes(new TextEncoder().encode(JSON.stringify(value)));
+
+export const WALLET_SIGNAL_SCHEMA = 'swipr.wallet-signal.v1';
+export const WalletSignalSchema = defineSchema(WALLET_SIGNAL_SCHEMA, {
+  project: str().indexed(), profileId: str().indexed(), signal: bytes(),
+});

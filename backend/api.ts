@@ -1,4 +1,5 @@
 import express from 'express';
+import { buildWalletAction } from './bots/wallet-actions';
 import { deleteAccountMessage } from './account';
 import { verifySocialAction, type SocialStore } from './social/store';
 import { rankClosedPositions, type VerifiedClosedPosition } from './social/rankings';
@@ -8,7 +9,7 @@ import { createBotGateway, PARSE_ERROR_BODY } from './bots/gateway';
 import { createWorkerBridge } from './bots/bridge';
 import { verifyBotAction } from './bots/auth';
 import { BotError } from './bots/validation';
-import type { BotProfile } from './contracts/bots';
+import type { BotProfile, BotSignal } from './contracts/bots';
 import type { ProjectStore } from './bots/store';
 import { randomUUID } from 'node:crypto';
 import { ApiError, createAuthenticator, requireWallet } from './auth';
@@ -19,6 +20,7 @@ import { createFlashClient, type OrderIntent, validateTypedData } from './provid
 export type ApiDependencies = {
   config: Config; ledger: Ledger | null; projects?: ProjectStore | null; social?: SocialStore | null;
   walletProfiles?: () => Promise<BotProfile[]>;
+  walletSignals?: (profiles: BotProfile[]) => Promise<BotSignal[]>;
   executeSocial?: (input: unknown) => Promise<unknown>;
   verifiedPositions?: () => Promise<{ positions: VerifiedClosedPosition[]; asOf: string }>;
   executeBot?: (input: unknown) => Promise<unknown>;
@@ -36,11 +38,14 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSocial, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, walletSignals, walletSocial, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const listBots = async () => {
-    if (walletProfiles) return { profiles: await walletProfiles(), signals: [], state: 'ready', detail: 'Wallet-owned Arkiv profiles. Performance requires verified fills.' };
+    if (walletProfiles) {
+      const profiles = await walletProfiles();
+      return { profiles, signals: walletSignals ? await walletSignals(profiles) : [], state: 'ready', detail: 'Wallet-owned Arkiv profiles and operator proposals. Performance requires verified fills.' };
+    }
     if (!projects) return { profiles: [], signals: [], state: 'unavailable', detail: 'Arkiv writer is not configured. Bot profiles have not been published.' };
     const result = await projects.list();
     return { ...result, state: 'ready', detail: 'Owner-signed registrations stored in Arkiv. Execution history is unverified.' };
@@ -51,7 +56,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   const forwardBot = async (input: unknown, authorization?: string) => {
     try {
       const verified = await verifyBotAction(input, config.botAudience);
-      if (walletProfiles && verified.payload.action !== 'signal.publish') throw new ApiError(409, 'wallet_transaction_required', 'Profile changes must be sent by the owner’s wallet on Arkiv.');
+      if (walletProfiles) throw new ApiError(409, 'wallet_transaction_required', 'Prepare profile and signal writes at /api/bots/wallet-transaction, then send them through the owner/operator wallet.');
       if (verified.payload.action !== 'signal.publish') {
         const identity = await authenticate(authorization);
         requireWallet(identity, verified.actor);
@@ -64,6 +69,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   };
   const makeGateway = (authorization?: string) => createBotGateway({
     listBots, executeBot: input => forwardBot(input, authorization),
+    ...(walletProfiles ? { prepareWalletAction: async (input: Record<string, unknown>) => buildWalletAction(input, await walletProfiles()) } : {}),
     async quote(input) {
       if (!flash) throw new ApiError(503, 'quotes_unavailable', 'Flash quotes are not configured.');
       const intent: OrderIntent = { side: input.side, asset: input.asset, qty: input.qty, funder: input.funder,
@@ -156,6 +162,10 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       });
       }
       if (path === '/api/bots' && req.method === 'GET') return send(200, await listBots());
+      if (path === '/api/bots/wallet-transaction' && req.method === 'POST') {
+        if (!walletProfiles) throw new ApiError(503, 'storage_unavailable', 'Wallet storage is unavailable.');
+        return send(200, buildWalletAction(await body(req), await walletProfiles()));
+      }
       if (path === '/api/bots/commands' && req.method === 'POST') return send(200, await forwardBot(await body(req), req.headers.authorization));
       if (req.method === 'GET' && path === '/api/runtime') return send(200, {
         mode: config.mode, tradingEnabled: false,
