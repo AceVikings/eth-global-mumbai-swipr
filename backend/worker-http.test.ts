@@ -40,6 +40,7 @@ it('can serve bounded gas funding without a central product writer', async () =>
   const a = server.address(); if (!a || typeof a === 'string') throw new Error('No port');
   const url = `http://127.0.0.1:${a.port}`;
   expect((await fetch(`${url}/ready`)).status).toBe(200);
+  expect(await (await fetch(`${url}/ready`)).json()).toMatchObject({ready:true,writable:false});
   expect((await fetch(`${url}/internal/bots`, { method: 'POST', body: '{}' })).status).toBe(503);
   expect((await fetch(`${url}/internal/gas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status).toBe(200);
 });

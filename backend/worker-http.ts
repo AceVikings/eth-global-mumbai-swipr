@@ -39,7 +39,7 @@ export function createWorkerServer(options: {
     const alive = !options.stopping();
     const ready = alive && (options.canWrite() || !!options.canFund?.()) && lastHealthyAt > 0 && Date.now() - lastHealthyAt < 60000;
     const ok = path === '/health' || path === '/healthz' ? alive : ready;
-    return send(ok ? 200 : 503, { ok, service: 'worker', ready,
+    return send(ok ? 200 : 503, { ok, service: 'worker', ready, writable: options.canWrite(),
       lastHealthyAt: lastHealthyAt ? new Date(lastHealthyAt).toISOString() : null });
   });
   const server = createServer(app);

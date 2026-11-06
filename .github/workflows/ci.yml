@@ -152,7 +152,7 @@ jobs:
             if [[ "$role" == worker ]]; then
               [[ "$FUNDING_START_NONCE" =~ ^[0-9]+$ ]]
               extra+=(--update-env-vars "ARKIV_FUNDING_ENABLED=true,ARKIV_FUNDING_START_NONCE=${FUNDING_START_NONCE}")
-              extra+=(--update-secrets "ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest,ENS_REGISTRAR_PK=swipr-ens-registrar-pk:latest,PRIVY_AUTOMATION_KEY=swipr-privy-automation-key:latest")
+              extra+=(--update-secrets "ARKIV_RELAYER_PK=swipr-arkiv-relayer-pk:latest,ARKIV_MAINTAINER_PK=swipr-arkiv-maintainer-pk:latest,ENS_REGISTRAR_PK=swipr-ens-registrar-pk:latest,PRIVY_AUTOMATION_KEY=swipr-privy-automation-key:latest")
             fi
             if [[ "$role" == api && -n "$MEDIA_BEE_URL" ]]; then
               [[ "$MEDIA_BEE_URL" =~ ^http://10\.[0-9]+\.[0-9]+\.[0-9]+:1633$ ]]
@@ -193,13 +193,19 @@ jobs:
           token_format: id_token
           id_token_audience: ${{ steps.release.outputs.worker_url }}
           id_token_include_email: true
-      - name: Verify authenticated worker liveness
+      - name: Verify authenticated worker writer readiness
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.SWIPR_DEPLOY_ENABLED == 'true'
         env:
           WORKER_URL: ${{ steps.release.outputs.worker_url }}
           WORKER_ID_TOKEN: ${{ steps.worker-auth.outputs.id_token }}
         run: |
-          curl --fail --retry 5 --retry-delay 2 -H "Authorization: Bearer $WORKER_ID_TOKEN" "$WORKER_URL/health"
+          for attempt in {1..12}; do
+            if curl --silent --fail -H "Authorization: Bearer $WORKER_ID_TOKEN" "$WORKER_URL/ready" > worker-ready.json &&
+              jq --exit-status '.ready == true and .writable == true' worker-ready.json; then exit 0; fi
+            sleep 5
+          done
+          echo 'Worker has not confirmed a healthy writable Arkiv journal.' >&2
+          exit 1
 
   frontend:
     needs: backend
