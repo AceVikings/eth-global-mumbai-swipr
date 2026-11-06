@@ -31,14 +31,19 @@ async function main() {
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
   // Missing credentials keeps liveness available, but readiness and all writes fail closed.
   const server = createWorkerServer({ social, projects, funding, stopping: () => stopping,
-    lastHealthyAt: () => lastHealthy, canWrite: () => journal?.canWrite === true });
+    lastHealthyAt: () => lastHealthy, canWrite: () => journal?.canWrite === true, canFund: () => !!funding });
   await new Promise<void>(resolve => server.listen(config.port, '0.0.0.0', resolve));
   const shutdown = () => { stopping = true; };
   process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);
   console.log(JSON.stringify({ service: 'worker', port: config.port }));
   try {
     while (!stopping) {
-      if (!ledger) { await delay(2000); continue; }
+      if (!ledger) {
+        if (funding && Date.now() - lastHealthy > 15000) {
+          try { lastHealthy = await funding.health() ? Date.now() : 0; } catch { lastHealthy = 0; }
+        }
+        await delay(2000); continue;
+      }
       try {
         if (renew && Date.now() - lastRenewal > 3600000) { await renew(); lastRenewal = Date.now(); }
         if (!(await ledger.health()).ok) throw new Error('arkiv_unhealthy');

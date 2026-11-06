@@ -32,3 +32,14 @@ it('fails liveness and refuses writes during shutdown', async () => {
   expect((await fetch(`${url}/internal/social`, { method: 'POST', body: '{}' })).status).toBe(503);
   expect(execute).not.toHaveBeenCalled();
 });
+
+it('can serve bounded gas funding without a central product writer', async () => {
+  const server = createWorkerServer({ social: null, projects: null, funding: { execute: async () => ({ funded: false }) },
+    canWrite: () => false, canFund: () => true, lastHealthyAt: () => Date.now(), stopping: () => false });
+  servers.push(server); await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const a = server.address(); if (!a || typeof a === 'string') throw new Error('No port');
+  const url = `http://127.0.0.1:${a.port}`;
+  expect((await fetch(`${url}/ready`)).status).toBe(200);
+  expect((await fetch(`${url}/internal/bots`, { method: 'POST', body: '{}' })).status).toBe(503);
+  expect((await fetch(`${url}/internal/gas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status).toBe(200);
+});

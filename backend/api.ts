@@ -23,7 +23,7 @@ export type ApiDependencies = {
   verifiedPositions?: () => Promise<{ positions: VerifiedClosedPosition[]; asOf: string }>;
   executeBot?: (input: unknown) => Promise<unknown>;
   fundGas?: (input: unknown) => Promise<unknown>;
-  account?: { list(wallet: string): Promise<{ key: string; schema: string }[]>; remove(identity: import('./auth').Identity, wallet: string, input: Record<string, unknown>): Promise<unknown> };
+  account?: { health?(): Promise<{ ok: boolean }>; list(wallet: string): Promise<{ key: string; schema: string }[]>; remove(identity: import('./auth').Identity, wallet: string, input: Record<string, unknown>): Promise<unknown> };
   arkivRpc?: (input: Record<string, unknown>) => Promise<unknown>;
   walletSocial?: (wallet: string) => Promise<{ entityKey: string | null; following: string[] }>;
   authenticate?: ReturnType<typeof createAuthenticator>;
@@ -132,7 +132,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       }
       if (req.method === 'GET' && ['/healthz', '/health'].includes(path)) return send(200, { ok: true, service: 'api' });
       if (req.method === 'GET' && ['/readyz', '/ready'].includes(path)) {
-        const database = ledger ? await ledger.health() : { ok: false };
+        const database = account?.health ? await account.health() : ledger ? await ledger.health() : { ok: false };
         return send(database.ok ? 200 : 503, { ok: database.ok, database });
       }
       if (path === '/mcp' || path === '/api/agent') {
@@ -160,11 +160,11 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       if (req.method === 'GET' && path === '/api/runtime') return send(200, {
         mode: config.mode, tradingEnabled: false,
         integrations: [
-          ['database', !!ledger, 'Arkiv confirmed event journal'], ['flash', !!flash, 'Quote adapter; execution gates pending'],
+          ['database', !!walletProfiles || !!ledger, 'Wallet-owned Arkiv records'], ['flash', !!flash, 'Quote adapter; execution gates pending'],
           ['privy', !!(config.privyAppId && config.privySecret && config.privyVerificationKey), 'JWT and linked-wallet verification'],
           ['baseRpc', !!config.baseRpc, 'Receipt adapter; funded acceptance tests pending'],
           ['ens', !!config.sepoliaRpc, 'Registry deployment and mint verification pending'],
-          ['arkiv', !!ledger, 'Rabdi journal adapter; trader directory and funded acceptance pending'],
+          ['arkiv', !!walletProfiles || !!ledger, 'Rabdi native wallet ownership; execution receipts remain separate'],
           ['swarm', !!(config.beeUrl && config.swarmBatchId), 'Archive transport; BMT and gateway acceptance pending'],
         ].map(([name, configured, detail]) => ({ name, configured, verified: false, detail })),
       });

@@ -8,6 +8,7 @@ type Executor = { execute(input: unknown): Promise<unknown> };
 export function createWorkerServer(options: {
   social: Executor | null; projects: Executor | null;
   funding?: Executor | null;
+  canFund?: () => boolean;
   stopping: () => boolean; lastHealthyAt: () => number; canWrite: () => boolean;
 }) {
   const app = express();
@@ -36,7 +37,7 @@ export function createWorkerServer(options: {
     if (req.method !== 'GET') return send(405, { error: 'method_not_allowed' });
     const lastHealthyAt = options.lastHealthyAt();
     const alive = !options.stopping();
-    const ready = alive && options.canWrite() && lastHealthyAt > 0 && Date.now() - lastHealthyAt < 60000;
+    const ready = alive && (options.canWrite() || !!options.canFund?.()) && lastHealthyAt > 0 && Date.now() - lastHealthyAt < 60000;
     const ok = path === '/health' || path === '/healthz' ? alive : ready;
     return send(ok ? 200 : 503, { ok, service: 'worker', ready,
       lastHealthyAt: lastHealthyAt ? new Date(lastHealthyAt).toISOString() : null });

@@ -11,7 +11,7 @@ async function start() {
   const remove = vi.fn(async () => ({ deleted: true }));
   const server = createApi({ config: readConfig({}), ledger: null,
     authenticate: async () => ({ userId: 'did:privy:owner', wallets: [wallet] }), fundGas,
-    account: { list: async () => [], remove } });
+    account: { health: async () => ({ ok: true }), list: async () => [], remove } });
   servers.push(server); await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const a = server.address(); if (!a || typeof a === 'string') throw new Error('No port');
   return { base: `http://127.0.0.1:${a.port}`, fundGas, remove };
@@ -29,4 +29,10 @@ it('never funds or deletes another wallet’s account', async () => {
       body: JSON.stringify({ wallet: `0x${'34'.repeat(20)}` }) })).status).toBe(403);
   }
   expect(fundGas).not.toHaveBeenCalled(); expect(remove).not.toHaveBeenCalled();
+});
+
+it('reports native storage readiness without enabling trading or requiring a journal writer', async () => {
+  const { base } = await start();
+  expect((await fetch(`${base}/ready`)).status).toBe(200);
+  expect(await (await fetch(`${base}/api/runtime`)).json()).toMatchObject({ tradingEnabled: false });
 });

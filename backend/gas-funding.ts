@@ -87,7 +87,9 @@ export function createGasFunder(options: { key: string; accessKey?: string; rpcU
     const txHash = await confirm(raw);
     return { funded: true, txHash, chainId: 7794095, token: 'tGLM', amount: amount.toString() };
   };
-  return { execute(input: unknown) {
+  return { async health() {
+    return await reader.getChainId() === 7794095 && await reader.getBalance({ address: account.address }) > FUNDING.target;
+  }, execute(input: unknown) {
     const result = queue.then(() => execute(input));
     queue = result.then(() => {}, () => {});
     return result;

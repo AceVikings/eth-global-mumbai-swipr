@@ -20,6 +20,7 @@ export function createAccountService(config: Config, fetcher: typeof fetch = fet
   };
   return {
     list,
+    async health() { return { ok: await client.getChainId() === 7794095 }; },
     async remove(identity: Identity, wallet: string, input: Record<string, unknown>) {
       const expires = input.expires;
       const now = Math.floor(Date.now() / 1000);

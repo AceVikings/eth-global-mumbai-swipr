@@ -16,8 +16,9 @@ const ledger = journal ? await Ledger.open(journal) : null;
 const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
 const social = journal ? new SocialStore(journal, config.botAudience) : null;
 const server = createApi({ config, ledger, projects, social,
-  account: createAccountService(config), arkivRpc: createArkivRpc(config.arkiv),
-  walletSocial: createWalletSocial(config.arkiv),
+  account: config.arkiv.accessKey ? createAccountService(config) : undefined,
+  arkivRpc: config.arkiv.accessKey ? createArkivRpc(config.arkiv) : undefined,
+  walletSocial: config.arkiv.accessKey ? createWalletSocial(config.arkiv) : undefined,
   walletProfiles: config.arkiv.accessKey ? createWalletDirectory(config.arkiv) : undefined });
 server.listen(config.port, '0.0.0.0', () => console.log(JSON.stringify({ service: 'api', port: config.port })));
 let closing = false;
