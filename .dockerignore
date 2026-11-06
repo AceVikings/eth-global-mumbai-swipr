@@ -13,3 +13,6 @@ docs
 infra
 Dockerfile
 .dockerignore
+
+# Short-lived GitHub OIDC credential files must never enter Git or image layers.
+gha-creds-*.json
