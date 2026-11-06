@@ -5,7 +5,6 @@ import '../ghosts.css';
 type Props = {
   ghosts: Ghost[];
   traders: Trader[];
-  directoryStatus?: string;
   onReal: (t: Trader) => void;
   onRemove: (id: string) => void;
 };
@@ -49,7 +48,7 @@ function Row({ ghost, trader, now, onReal, onRemove }: {
             {trader?.kind === 'agent' && trader.owner ? ` · agent by ${trader.owner}` : ''}
           </p>
           <div className="gh-tags">
-            <span className="gh-pill">{expired ? 'Expired · history' : 'Ghost · not executed'}</span>
+            <span className="gh-pill">{expired ? 'Expired' : 'Simulated'}</span>
           </div>
         </div>
       </div>
@@ -69,7 +68,7 @@ function Row({ ghost, trader, now, onReal, onRemove }: {
       </dl>
       <p className="gh-result">
         <span className="gh-dash" aria-hidden="true">—</span>
-        Result unavailable. No recorded trades are loaded for this ghost, so no estimate is shown.
+        No trade results yet.
       </p>
       <div className="gh-actions">
         {trader && (
@@ -86,7 +85,7 @@ function Row({ ghost, trader, now, onReal, onRemove }: {
   );
 }
 
-export default function Ghosts({ ghosts, traders, directoryStatus, onReal, onRemove }: Props) {
+export default function Ghosts({ ghosts, traders, onReal, onRemove }: Props) {
   const now = Date.now();
   const byId = new Map(traders.map((t) => [t.id, t]));
   const sorted = [...ghosts].sort((a, b) =>
@@ -96,23 +95,16 @@ export default function Ghosts({ ghosts, traders, directoryStatus, onReal, onRem
   return (
     <section className="gh" aria-labelledby="gh-title">
       <header className="gh-header">
-        <span className="gh-pill gh-badge">Simulation · no funds move</span>
         <h1 id="gh-title" className="gh-title">Your ghosts</h1>
         <p className="gh-lede">
-          Free, local “what if” copies. Nothing here places an order, holds a seat or moves money.
+          Simulate trades for free. No money moves.
         </p>
       </header>
 
-      {directoryStatus && <p className="gh-note" role="status">{directoryStatus}</p>}
       {sorted.length === 0 ? (
         <div className="gh-empty">
           <h2 className="gh-empty-title">No ghosts yet</h2>
-          <ol className="gh-steps">
-            <li>Open <strong>Discover</strong> from the navigation.</li>
-            <li>Swipe right or tap <strong>Ghost copy</strong> on a trader you like.</li>
-            <li>Their ghost appears here with its start time, size per trade and 7-day expiry.</li>
-          </ol>
-          <p className="gh-note">Ghosts are a free simulation saved on this device. No funds move.</p>
+          <p className="gh-note">Find a trader in Discover and tap Ghost copy. Your simulation stays on this device.</p>
         </div>
       ) : (
         <>
@@ -126,8 +118,7 @@ export default function Ghosts({ ghosts, traders, directoryStatus, onReal, onRem
             ))}
           </ul>
           <p className="gh-note">
-            Results will come from the trader’s recorded trades since your start time, assuming fills at
-            their price. Real fills may differ. Expired ghosts stay as history; remove one to start it again.
+            Estimates use the trader’s recorded prices. Real results may differ.
           </p>
         </>
       )}
