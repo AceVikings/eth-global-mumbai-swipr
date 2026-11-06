@@ -36,6 +36,6 @@ export default function EnsProfile({profile}:{profile:BotProfile;onChanged?:()=>
   {name&&<EnsIdentity profileId={profile.id} name={name}/>}
   {busy&&<p role="status">Setting up your trader name…</p>}
   {error&&<p role="status">{error}</p>}
-  <div className="bs-row-actions"><button type="button" className="bs-btn bs-btn-quiet" disabled={busy} onClick={run}>{name?'Update records':'Set up trader name'}</button></div>
+  <div className="bs-row-actions">{error&&<button type="button" className="bs-btn bs-btn-quiet" disabled={busy} onClick={run}>Try again</button>}</div>
  </details>;
 }

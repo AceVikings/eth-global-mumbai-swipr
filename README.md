@@ -55,7 +55,7 @@ Wallet sign-in, wallet-owned profiles, following lists, ghost simulations and pu
 
 Automatic copy execution and scoped trade delegation, ENS Copy Pass minting, and Swarm archive recovery are still in development. They are not presented as completed integrations. Ghost copying is a simulation and does not place trades.
 
-Deleting an account removes current Swipr records and login access. It cannot erase public blockchain history or third-party archives. Export your wallet first if it holds funds.
+Deleting an account removes current Arkiv records and login access. Public ENS snapshots, blockchain history and third-party archives remain public. Export your wallet first if it holds funds.
 
 ## Run locally
 
