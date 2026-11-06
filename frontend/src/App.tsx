@@ -1,3 +1,4 @@
+import TradeDesk from './components/TradeDesk';
 import { botPortrait } from './lib/profile-images';
 import Matches from './components/Matches';
 import { useEffect, useState } from "react";
@@ -17,8 +18,8 @@ import {
 import { getBots } from "./lib/bots";
 import { useWalletGhosts } from "./auth/useWalletGhosts";
 
-type Page = "discover" | "ghosts" | "matches" | "bots" | "leaderboards" | "you";
-const pages: Page[] = ["discover", "ghosts", "matches", "leaderboards", "bots", "you"];
+type Page = "trades" | "discover" | "ghosts" | "matches" | "bots" | "leaderboards" | "you";
+const pages: Page[] = ["discover", "ghosts", "matches", "leaderboards", "bots", "trades", "you"];
 const vibes = ["All", "Steady", "Balanced", "Spicy"];
 const PREFS_KEY = "swipr.preferences.v1";
 function currentPage(): Page {
@@ -57,6 +58,7 @@ function AccountButton({ onAccount }: { onAccount: () => void }) {
 export default function App() {
   const session = useSession();
   const [page, setPage] = useState<Page>(currentPage);
+  const [tradeProfileId, setTradeProfileId] = useState('');
   const { store: ghostStore, ghosts, loading: ghostsLoading, busy: ghostsBusy, error: ghostsError } = useWalletGhosts(session);
   const [prefs, setPrefs] = useState(readPrefs);
   const [realTrader, setRealTrader] = useState<Trader | null>(null);
@@ -138,6 +140,7 @@ export default function App() {
           key={p}
           aria-current={page === p ? "page" : undefined}
           className={page === p ? "selected" : ""}
+          data-page={p}
           onClick={() => navigate(p)}
         >
           <Icon name={p} size={22} />
@@ -218,6 +221,7 @@ export default function App() {
                   />
                 </>
               )}
+              {page === "trades" && <TradeDesk initialProfileId={tradeProfileId} />}
               {page === "ghosts" && (
                 <Ghosts
                   ghosts={ghosts}
@@ -236,8 +240,8 @@ export default function App() {
                   }}
                 />
               )}
-              {page === "matches" && <Matches onDiscover={() => navigate("discover")} onJoin={id => { const trader = registeredTraders.find(t => t.id === id); if (trader) setRealTrader(trader); }} />}
-              {page === "bots" && <BotStudio onChanged={() => setDirectoryVersion(v => v + 1)} />}
+              {page === "matches" && <Matches onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onDiscover={() => navigate("discover")} onJoin={id => { const trader = registeredTraders.find(t => t.id === id); if (trader) setRealTrader(trader); }} />}
+              {page === "bots" && <BotStudio onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onChanged={() => setDirectoryVersion(v => v + 1)} />}
               {page === "leaderboards" && <Leaderboards />}
               {page === "you" && (
                 <section className="content-page">

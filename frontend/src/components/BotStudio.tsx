@@ -11,7 +11,7 @@ import type { BotProfile, BotsResponse, Integration, ProfileDraft } from '../lib
 import '../bots.css';
 
 /** onChanged fires after the service accepts an upsert or halt, so the host can refresh its directory. */
-type Props = { onChanged?: () => void };
+type Props = { onChanged?: () => void; onTrade?: (profileId: string) => void };
 type Load = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'done'; data: BotsResponse };
 type Notice = { tone: 'ok' | 'error' | 'info'; text: string } | null;
 type FieldErrors = Partial<Record<keyof ProfileDraft, string>>;
@@ -56,7 +56,7 @@ function CopyBlock({ title, text, hint }: { title: string; text: string; hint?: 
   );
 }
 
-export default function BotStudio({ onChanged }: Props = {}) {
+export default function BotStudio({ onChanged, onTrade }: Props = {}) {
   const online = useOnline();
   const session = useSession();
   const account = session.address?.toLowerCase() ?? null;
@@ -216,6 +216,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
                   </dl>
                   {isOwner(p) && p.status === 'active' && (
                     <div className="bs-row-actions">
+                      {onTrade && <button type="button" className="bs-btn" disabled={locked} onClick={() => onTrade(p.id)}>Trade</button>}
                       <button type="button" className="bs-btn bs-btn-quiet" disabled={locked}
                         onClick={() => { imageEpoch.current++; setDraft(draftFrom(p)); setDraftSource('edit'); setErrors({}); }} aria-label={`Edit ${p.name}`}>Edit</button>
                       <button type="button" className="bs-btn bs-btn-danger" disabled={locked || !online} aria-label={`Halt ${p.name}`}

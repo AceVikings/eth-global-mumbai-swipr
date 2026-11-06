@@ -27,6 +27,7 @@ export type Session = {
   signMessage: (message: string) => Promise<SignedMessage>;
   /** Fresh Privy access token, kept in memory only. Null when signed out. */
   getAccessToken: () => Promise<string | null>;
+  getBaseWallet: () => Promise<{ address: Address; provider: EIP1193Provider }>;
   getArkivWallet: () => Promise<{ address: Address; provider: EIP1193Provider }>;
   exportWallet: () => Promise<void>;
 };
@@ -50,6 +51,7 @@ const unconfigured: Session = {
   logout: async () => {},
   signMessage: async () => { throw new Error(notConfigured); },
   getAccessToken: async () => null,
+  getBaseWallet: async () => { throw new Error(notConfigured); },
   getArkivWallet: async () => { throw new Error(notConfigured); },
   exportWallet: async () => { throw new Error(notConfigured); },
 };
@@ -127,6 +129,18 @@ function PrivySession({ children }: { children: ReactNode }) {
     try { return await getAccessToken(); } catch { return null; }
   }, [authenticated, getAccessToken]);
   const login = useCallback(() => { setError(null); openLogin(); }, [openLogin]);
+  const getBaseWallet = useCallback(async () => {
+    const { address: signer, wallet: target } = current.current;
+    if (!signer || !target) throw new Error('Sign in and wait for your wallet.');
+    await target.switchChain(base.id);
+    const provider = await target.getEthereumProvider();
+    if (current.current.address !== signer) throw new Error('Your account changed.');
+    const scoped = { request: async (input: { method: string; params?: unknown }) => {
+      if (current.current.address !== signer) throw new Error('Your account changed.');
+      return provider.request(input as Parameters<typeof provider.request>[0]);
+    } };
+    return { address: signer, provider: scoped as EIP1193Provider };
+  }, []);
   const getArkivWallet = useCallback(async () => {
     const { address: signer, wallet: target } = current.current;
     if (!signer || !target) throw new Error('Sign in and wait for your wallet.');
@@ -159,8 +173,8 @@ function PrivySession({ children }: { children: ReactNode }) {
     configured: true, ready, authenticated, error, login, logout, signMessage,
     address: authenticated ? address : null,
     userLabel: authenticated ? google?.name || google?.email || email || null : null,
-    getAccessToken: accessToken, getArkivWallet, exportWallet,
-  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getArkivWallet, exportWallet]);
+    getAccessToken: accessToken, getBaseWallet, getArkivWallet, exportWallet,
+  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getBaseWallet, getArkivWallet, exportWallet]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
