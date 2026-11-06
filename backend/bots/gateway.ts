@@ -78,6 +78,7 @@ const ACTION_DATA: Record<BotActionType, JsonSchema> = {
   'profile.upsert': obj({
     profileId: str('Omit to create (the new ID is this requestId); set to edit.', { pattern: UUID }),
     operator: str('Wallet allowed to publish signals for this bot.', { pattern: ADDRESS }),
+    image: str('Optional WebP thumbnail data URL (8 KB decoded); empty removes it.', { maxLength: 10947 }),
     name: str('Display name.', { minLength: 1 }), bio: str('Short bio.'),
     style: str('Risk style.', { enum: BOT_STYLES }), strategy: str('How signals are produced.', { enum: BOT_STRATEGIES }),
     assets: { type: 'array', items: ASSET, minItems: 1, maxItems: 8 },

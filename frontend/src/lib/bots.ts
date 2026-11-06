@@ -1,3 +1,4 @@
+import { profileImage } from '../contracts/profile-image';
 import { BOT_ASSETS, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES, botMessage } from '../contracts/bots';
 import type { BotAction, BotAsset, BotProfile, BotsListResponse, BotStrategy, BotStyle, ProfileUpsertData, SignedBotAction } from '../contracts/bots';
 
@@ -9,7 +10,7 @@ export type Integration = { audience: string; mcpUrl: string; apiUrl: string; to
 export type ProfileDraft = {
   profileId?: string; operator: string; name: string; bio: string;
   style: BotStyle; strategy: BotStrategy; assets: BotAsset[];
-  publicSeats?: number; privateSeats?: number;
+  publicSeats?: number; privateSeats?: number; image?: string;
 };
 
 export const STYLES = BOT_STYLES;
@@ -91,6 +92,7 @@ export async function signAction(payload: BotAction, sign: (message: string) => 
 export function validateDraft(d: ProfileDraft): Partial<Record<keyof ProfileDraft, string>> {
   const errors: Partial<Record<keyof ProfileDraft, string>> = {};
   if (!ADDRESS.test(d.operator.trim())) errors.operator = 'Enter a 0x operator address (40 hex characters).';
+  try { if (d.image !== undefined) profileImage(d.image); } catch (e) { errors.image = (e as Error).message; }
   const name = d.name.trim().length;
   if (name < BOT_LIMITS.nameMin || name > BOT_LIMITS.nameMax) errors.name = `Name must be ${BOT_LIMITS.nameMin}–${BOT_LIMITS.nameMax} characters.`;
   if (d.bio.trim().length > BOT_LIMITS.bioMax) errors.bio = `Bio must be ${BOT_LIMITS.bioMax} characters or fewer.`;
@@ -104,6 +106,7 @@ export const upsertData = (d: ProfileDraft): ProfileUpsertData => ({
   ...(d.profileId ? { profileId: d.profileId } : {}),
   operator: d.operator.trim().toLowerCase(), name: d.name.trim(), bio: d.bio.trim(),
   style: d.style, strategy: d.strategy, assets: BOT_ASSETS.filter(a => d.assets.includes(a)),
+  ...(d.image === undefined ? {} : { image: profileImage(d.image) }),
   ...(d.publicSeats === undefined ? {} : { publicSeats: d.publicSeats }),
   ...(d.privateSeats === undefined ? {} : { privateSeats: d.privateSeats }),
 });
@@ -112,7 +115,7 @@ export const emptyDraft = (operator = ''): ProfileDraft =>
   ({ operator, name: '', bio: '', style: 'Balanced', strategy: 'rule-based', assets: ['WETH'], publicSeats: 20, privateSeats: 0 });
 
 export const draftFrom = (p: BotProfile): ProfileDraft =>
-  ({ profileId: p.id, operator: p.operator, name: p.name, bio: p.bio, style: p.style, strategy: p.strategy, assets: [...p.assets], publicSeats: p.publicSeats ?? 20, privateSeats: p.privateSeats ?? 0 });
+  ({ profileId: p.id, operator: p.operator, name: p.name, bio: p.bio, image: p.image ?? '', style: p.style, strategy: p.strategy, assets: [...p.assets], publicSeats: p.publicSeats ?? 20, privateSeats: p.privateSeats ?? 0 });
 
 const DRAFT_KEY = 'swipr.bot-draft.v1';
 export function loadLocalDraft(): ProfileDraft | null {

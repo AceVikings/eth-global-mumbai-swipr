@@ -1,3 +1,4 @@
+import { profileImage } from '../contracts/profile-image';
 import {
   BOT_ACTIONS, BOT_ASSETS, BOT_CHAIN_ID, BOT_LIMITS, BOT_MAX_TTL_SECONDS, BOT_STRATEGIES, BOT_STYLES,
   type BotAction, type BotAsset, type ProfileHaltData, type ProfileUpsertData, type SignalPublishData, type SignedBotAction,
@@ -79,11 +80,15 @@ export function assets(value: unknown): BotAsset[] {
 /** Normalized profile data. `profileId` is required here (store resolves creates first). */
 export function profileUpsert(raw: unknown): ProfileUpsertData & { profileId: string } {
   check(isRecord(raw), 'data must be an object');
-  onlyKeys(raw, ['profileId', 'operator', 'name', 'bio', 'style', 'strategy', 'assets', 'publicSeats', 'privateSeats'], 'profile');
+  onlyKeys(raw, ['profileId', 'operator', 'name', 'bio', 'style', 'strategy', 'assets', 'publicSeats', 'privateSeats', 'image'], 'profile');
   const publicSeats = raw.publicSeats === undefined ? 20 : raw.publicSeats, privateSeats = raw.privateSeats === undefined ? 0 : raw.privateSeats;
   check(Number.isSafeInteger(publicSeats) && Number(publicSeats) >= 0 && Number(publicSeats) <= 100, 'Public seats must be 0-100');
   check(Number.isSafeInteger(privateSeats) && Number(privateSeats) >= 0 && Number(privateSeats) <= 100, 'Private seats must be 0-100');
+  let image: string | undefined;
+  try { image = raw.image === undefined ? undefined : profileImage(raw.image); }
+  catch (error) { throw new BotError('invalid', (error as Error).message); }
   return {
+    ...(image === undefined ? {} : { image }),
     ...(raw.publicSeats === undefined ? {} : { publicSeats: Number(publicSeats) }),
     ...(raw.privateSeats === undefined ? {} : { privateSeats: Number(privateSeats) }),
     profileId: uuid(raw.profileId, 'profileId'), operator: address(raw.operator, 'operator'),
@@ -120,7 +125,8 @@ export function signalPublish(raw: unknown): SignalPublishData {
 export function parseEnvelope(raw: unknown, audience: string): SignedBotAction {
   let size = Infinity;
   try { size = Buffer.byteLength(JSON.stringify(raw) ?? ''); } catch { /* cyclic or bigint */ }
-  check(size <= BOT_LIMITS.envelopeBytes, `envelope must be at most ${BOT_LIMITS.envelopeBytes} bytes of JSON`);
+  const maxBytes = isRecord(raw) && isRecord(raw.payload) && raw.payload.action === 'profile.upsert' ? 24576 : BOT_LIMITS.envelopeBytes;
+  check(size <= maxBytes, `envelope must be at most ${maxBytes} bytes of JSON`);
   check(isRecord(raw), 'envelope must be an object');
   onlyKeys(raw, ['payload', 'signature'], 'envelope');
   check(typeof raw.signature === 'string' && /^0x[0-9a-fA-F]{130}$/.test(raw.signature), 'signature must be 65-byte hex');

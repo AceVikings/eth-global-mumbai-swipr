@@ -1,3 +1,4 @@
+import { botPortrait } from './lib/profile-images';
 import Matches from './components/Matches';
 import { useEffect, useState } from "react";
 import type { Trader } from "./contracts/types";
@@ -69,7 +70,7 @@ export default function App() {
       if (controller.signal.aborted) return;
       setRegisteredTraders(value.profiles.filter(p => p.status === "active").map(p => ({
         id: p.id, profileId: p.id, name: p.name, ens: "",
-        bio: p.bio, style: p.style, avatar: "", kind: "agent" as const, owner: p.owner,
+        bio: p.bio, style: p.style, avatar: botPortrait(p), kind: "agent" as const, owner: p.owner,
         operator: p.operator, source: "registered" as const,
       })));
     }).catch(() => { if (!controller.signal.aborted) { setRegisteredTraders([]);  } });

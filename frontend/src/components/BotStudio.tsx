@@ -1,3 +1,4 @@
+import { botPortrait, prepareProfileImage } from '../lib/profile-images';
 import { saveWalletProfile, haltWalletProfile } from '../lib/arkiv';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -65,6 +66,8 @@ export default function BotStudio({ onChanged }: Props = {}) {
   const [integration, setIntegration] = useState<Integration | null>(null);
   const [integrationError, setIntegrationError] = useState('');
   const [draft, setDraft] = useState<ProfileDraft | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const imageEpoch = useRef(0);
   const [draftSource, setDraftSource] = useState<'new' | 'edit' | 'local'>('new');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -122,16 +125,21 @@ export default function BotStudio({ onChanged }: Props = {}) {
     } finally { setBusy(null); }
   };
 
+  useEffect(() => { imageEpoch.current++; setImageBusy(false); }, [draft?.profileId, account]);
+
   const update = (patch: Partial<ProfileDraft>) => {
-    if (!draft) return;
-    const next = { ...draft, ...patch };
-    setDraft(next);
-    if (draftSource !== 'edit') { saveLocalDraft(next); setDraftSource('local'); }
+    setDraft(current => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      if (draftSource !== 'edit') saveLocalDraft(next);
+      return next;
+    });
+    if (draftSource !== 'edit') setDraftSource('local');
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!draft) return;
+    if (!draft || imageBusy || busy) return;
     const found = validateDraft(draft);
     setErrors(found);
     if (Object.keys(found).length) { setNotice({ tone: 'error', text: 'Fix the highlighted fields.' }); return; }
@@ -144,7 +152,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
   const names = new Map(profiles.map(p => [p.id, p.name]));
   const isOwner = (p: BotProfile) => !!account && p.owner.toLowerCase() === account;
   const snip = snippets(integration);
-  const locked = !!busy;
+  const locked = !!busy || imageBusy;
 
   return (
     <section className="bs" aria-labelledby="bs-title" aria-busy={load.kind === 'loading' || !!busy}>
@@ -173,7 +181,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
         <section className="bs-panel" aria-labelledby="bs-list">
           <div className="bs-panel-head">
             <h2 id="bs-list">Registered bots</h2>
-            <button type="button" className="bs-btn" onClick={() => { setDraft(emptyDraft(account ?? '')); setDraftSource('new'); setErrors({}); }}>
+            <button type="button" className="bs-btn" disabled={locked} onClick={() => { imageEpoch.current++; setDraft(emptyDraft(account ?? '')); setDraftSource('new'); setErrors({}); }}>
               New bot
             </button>
           </div>
@@ -190,7 +198,7 @@ export default function BotStudio({ onChanged }: Props = {}) {
               {profiles.map(p => (
                 <li key={p.id} className={`bs-row${p.status === 'halted' ? ' is-halted' : ''}`}>
                   <div className="bs-row-head">
-                    <h3>{p.name}</h3>
+                    <img className="bs-bot-avatar" src={botPortrait(p)} width={52} height={52} alt="" /><h3>{p.name}</h3>
                     <span className={`bs-status bs-status-${p.status}`}>{p.status === 'halted' ? 'Halted' : 'Active'}</span>
                     {isOwner(p) && <span className="bs-pill">Yours</span>}
                   </div>
@@ -205,8 +213,8 @@ export default function BotStudio({ onChanged }: Props = {}) {
                   </dl>
                   {isOwner(p) && p.status === 'active' && (
                     <div className="bs-row-actions">
-                      <button type="button" className="bs-btn bs-btn-quiet" disabled={!!busy}
-                        onClick={() => { setDraft(draftFrom(p)); setDraftSource('edit'); setErrors({}); }} aria-label={`Edit ${p.name}`}>Edit</button>
+                      <button type="button" className="bs-btn bs-btn-quiet" disabled={locked}
+                        onClick={() => { imageEpoch.current++; setDraft(draftFrom(p)); setDraftSource('edit'); setErrors({}); }} aria-label={`Edit ${p.name}`}>Edit</button>
                       <button type="button" className="bs-btn bs-btn-danger" disabled={locked || !online} aria-label={`Halt ${p.name}`}
                         onClick={() => {
                           if (window.confirm(`Halt ${p.name}? New signals will no longer appear in Swipr.`)) {
@@ -231,6 +239,28 @@ export default function BotStudio({ onChanged }: Props = {}) {
               {draftSource === 'local' && <span className="bs-pill bs-pill-quiet">Local draft — not stored</span>}
             </div>
             <form className="bs-form" onSubmit={submit} noValidate>
+              <div className="bs-image-field">
+                <img className="bs-image-preview" src={botPortrait({ id: draft.profileId, name: draft.name, image: draft.image })} width={88} height={88} alt="Bot image preview" />
+                <div className="bs-field">
+                  <label htmlFor={`${formTitle}-image`}>Bot image</label>
+                  <input id={`${formTitle}-image`} type="file" accept="image/png,image/jpeg,image/webp" disabled={locked}
+                    aria-invalid={!!errors.image} aria-describedby={`${formTitle}-image-help`}
+                    onChange={async e => {
+                      const file = e.target.files?.[0]; e.target.value = ''; if (!file) return;
+                      const version = ++imageEpoch.current; setImageBusy(true); setErrors(v => ({ ...v, image: undefined }));
+                      try {
+                        const image = await prepareProfileImage(file);
+                        if (version === imageEpoch.current) update({ image });
+                      } catch (error) {
+                        if (version === imageEpoch.current) setErrors(v => ({ ...v, image: error instanceof Error ? error.message : 'Choose another image.' }));
+                      } finally { if (version === imageEpoch.current) setImageBusy(false); }
+                    }} />
+                  <small id={`${formTitle}-image-help`} className={errors.image ? 'bs-error' : 'bs-hint'} role={errors.image ? 'alert' : undefined}>
+                    {errors.image || (imageBusy ? 'Preparing image…' : 'PNG, JPG or WebP · up to 5 MB')}
+                  </small>
+                  {draft.image && <button type="button" className="bs-btn bs-btn-quiet" disabled={locked} onClick={() => update({ image: '' })}>Remove image</button>}
+                </div>
+              </div>
               <label className="bs-field">
                 <span>Name</span>
                 <input value={draft.name} maxLength={LIMITS.nameMax} onChange={e => update({ name: e.target.value })}
@@ -290,8 +320,8 @@ export default function BotStudio({ onChanged }: Props = {}) {
                 <button type="submit" className="bs-btn" disabled={locked || !online || !account}>
                   {busy === 'save' ? 'Saving…' : account ? 'Save profile' : 'Sign in to save'}
                 </button>
-                <button type="button" className="bs-btn bs-btn-quiet" disabled={!!busy}
-                  onClick={() => { if (draftSource !== 'edit') saveLocalDraft(null); setDraft(null); setErrors({}); }}>
+                <button type="button" className="bs-btn bs-btn-quiet" disabled={locked}
+                  onClick={() => { imageEpoch.current++; if (draftSource !== 'edit') saveLocalDraft(null); setDraft(null); setErrors({}); }}>
                   {draftSource === 'edit' ? 'Cancel' : 'Discard draft'}
                 </button>
               </div>

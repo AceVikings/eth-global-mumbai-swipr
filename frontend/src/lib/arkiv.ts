@@ -1,3 +1,4 @@
+import { profileImage } from '../contracts/profile-image';
 import { clearWalletRecords } from './account-deletion';
 import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';
 import { custom, defineChain, type EIP1193Provider, type Hex } from 'viem';
@@ -36,6 +37,7 @@ export async function fundArkivWrite(session: Session, wallet: string) {
   await accountRequest(session, '/api/arkiv/gas', { wallet });
 }
 export async function saveWalletProfile(session: Session, data: ProfileUpsertData) {
+  if (data.image !== undefined) profileImage(data.image);
   const { client, reader, address } = await arkivConnection(session);
   const { profileId, ...profile } = data;
   if (profileId && !/^0x[0-9a-f]{64}$/i.test(profileId)) throw new Error('Create a wallet-owned profile to replace this older registration.');
