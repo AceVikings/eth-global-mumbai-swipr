@@ -102,15 +102,22 @@ export const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase(
 const fx = (address: string, name: string, kind: Role, netProfitUsd: string, returnPct: string | null, closedPositions: number) =>
   ({ address, name, kind, netProfitUsd, returnPct, closedPositions }) as LeaderboardRow;
 export const PREVIEW_ROWS: LeaderboardRow[] = [
-  fx('0x1111111111111111111111111111111111111111', 'Sample · Mira', 'trader', '4210.50', '18.40', 42),
-  fx('0x2222222222222222222222222222222222222222', 'Sample · Okon', 'trader', '980.00', '61.25', 9),
-  fx('0x3333333333333333333333333333333333333333', 'Sample · Tanvi', 'trader', '12650.00', '7.10', 118),
-  fx('0x4444444444444444444444444444444444444444', 'Sample · Lars', 'trader', '-340.75', '-4.80', 15),
-  fx('0x5555555555555555555555555555555555555555', 'Sample · Ade', 'copier', '612.30', '24.90', 11),
-  fx('0x6666666666666666666666666666666666666666', 'Sample · Rui', 'copier', '2890.00', '9.60', 37),
-  fx('0x7777777777777777777777777777777777777777', 'Sample · Noor', 'copier', '-128.40', '-12.30', 6),
-  fx('0x8888888888888888888888888888888888888888', 'Sample · Iko', 'copier', '75.00', '31.00', 3),
+  fx('0x1111111111111111111111111111111111111111', 'Alice', 'trader', '1240.00', '24.80', 42),
+  fx('0x2222222222222222222222222222222222222222', 'Priya', 'trader', '860.50', '18.60', 18),
+  fx('0x3333333333333333333333333333333333333333', 'Dan', 'trader', '2680.00', '12.40', 31),
+  fx('0x4444444444444444444444444444444444444444', 'Sam', 'trader', '420.00', '9.20', 15),
+  fx('0x9999999999999999999999999999999999999999', 'Charlie', 'trader', '-105.00', '-2.10', 6),
+  fx('0x5555555555555555555555555555555555555555', 'Ade', 'copier', '612.30', '24.90', 11),
+  fx('0x6666666666666666666666666666666666666666', 'Rui', 'copier', '2890.00', '9.60', 37),
+  fx('0x7777777777777777777777777777777777777777', 'Noor', 'copier', '-128.40', '-12.30', 6),
+  fx('0x8888888888888888888888888888888888888888', 'Iko', 'copier', '75.00', '31.00', 3),
 ];
+// Existing fictional preview portraits only; never assign these to live wallets.
+export const PREVIEW_AVATARS: Record<string, string> = {
+  [PREVIEW_ROWS[0].address]: '/assets/alice.jpg',
+  [PREVIEW_ROWS[1].address]: '/assets/priya.jpg',
+  [PREVIEW_ROWS[2].address]: '/assets/dan.jpg',
+};
 
 const PREVIEW_FOLLOWS_KEY = 'swipr.preview-follows.v1';
 export function loadPreviewFollows(): string[] {
