@@ -7,7 +7,9 @@ accepted on 6 November 2026.
 ## Stack
 React + TypeScript + Tailwind + Vite PWA; separate Node/TypeScript API and worker.
 Privy email/embedded EOA, wagmi/viem, Flash Base mainnet, ENSv2/ERC-8004 Sepolia,
-Arkiv Rabdi and Swarm remain the intended integrations. Secrets stay server-side.
+Arkiv Rabdi is the sole project database (user decision, 6 November 2026), including
+pass budgets and worker coordination. No PostgreSQL or Cloud SQL. Swarm holds large
+artifacts and archives; secrets stay server-side in Privy/Secret Manager.
 
 ## Product decisions
 - Right swipe starts a free local ghost. Left skips. Star opens pass setup.

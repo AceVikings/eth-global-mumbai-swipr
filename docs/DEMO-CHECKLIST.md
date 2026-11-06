@@ -19,12 +19,17 @@ camera is mocked, hard-coded or pre-recorded; ⏩ marks cut waits with real time
 
 | Item | Evidence | Status |
 |---|---|---|
-| CI green on Node 22 (install, typecheck, test, build, doctor, image build) | Actions run URL | PENDING (workflow written, never run) |
-| Local stack: PostgreSQL + API `/ready` + worker `/health` | Local PostgreSQL 17, API8787/worker8788 readiness responses | LOCAL ✓; Docker composition/image unverified (daemon stopped) |
-| Durable reservations and worker leases survive restart | Real PostgreSQL concurrency/restart/partial-fill/lease tests | LOCAL ✓; external side effects still require idempotent reconciliation |
-| Cloud Run API + worker deployed to the confirmed project | Revision ids, `/health` + `/ready` responses | PENDING; ethonline-476311 inspected, us-central1 selected; Cloud SQL API disabled |
+| CI green on Node 22 (install, typecheck, in-memory Arkiv adapter tests, build, doctor, image build) | Actions run URL | PENDING (workflow written, never run) |
+| Arkiv is the sole store; no SQL instance | No PostgreSQL/Cloud SQL in infra, CI or compose | ✓ config; no SQL resource was ever created |
+| Arkiv journal, nonce fence, single-flight writer | Host tests (in-memory adapter) | LOCAL ✓ unit/contract tests with doubles; funded chain acceptance pending |
+| Arkiv confirmed read | Configured writer query, anchor confirmation, stable nonce/hash and contiguous history checks | PENDING |
+| Arkiv confirmed write | Worker tx hash, then that entity in a confirmed read | BLOCKED (project writer key/address/funding not configured or verified) |
+| Arkiv renewal, expired-history recovery | Separate maintenance account; verified extension tx; archive restore drill | Renewal LOCAL ✓ with doubles; funded renewal and recovery BLOCKED |
+| Execution time and receipt gates | Fresh pass/lease checks before signing; terminal receipt verification before hold release | BLOCKED; financial routes remain 503 |
+| Local stack: API `/ready` + worker `/health` (8787/8788) | Responses | Unconfigured API verified: /health 200, /ready 503; funded runtime and Docker pending |
+| Cloud Run API + worker deployed to the confirmed project | Revision ids, `/health` + `/ready` responses | PENDING; ethonline-476311, us-central1; separate swipr-api/swipr-worker SAs planned |
 | Render static site serving the deck with `VITE_API_URL` | Public URL, commit sha | PENDING |
-| `npm run doctor -- --role stack` clean in `live` mode | Doctor output (configured/missing only) | BLOCKED; local preview doctor verified; cloud probes use /health and /ready |
+| `npm run doctor -- --role stack` clean in `live` mode | Doctor output (configured/missing only) | BLOCKED; cloud probes use /health and /ready |
 | Auth and wallet ownership boundary | Signed ES256 JWT expiry/audience/signature tests; private routes fail closed | LOCAL ✓; actual Privy login not verified |
 | Flash quote and transport | Live quote id 289d8fb0-264b-4405-85c3-4104a9fbb82c, 2026-11-06T06:53:03Z; no signature/order | Read-only quote LIVE ✓; fills BLOCKED |
 | Base receipt/notary decoder; Bee archive transport | Adapter boundary tests | LOCAL ✓; sealed notary/BMT/gateways BLOCKED |
