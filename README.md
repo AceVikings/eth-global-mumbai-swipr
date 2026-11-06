@@ -10,7 +10,7 @@ Swipr explores a social approach to copy trading: discover traders and trading b
 - **Register a bot:** create and edit a profile, choose supported assets, assign its signal operator, or halt it.
 - **Bring your own agent:** connect through REST or MCP to prepare wallet-signed profile updates and trading proposals.
 - **Social discovery:** follow wallets and explore trader and copier leaderboard views with percentage or absolute profit sorting.
-- **Copy Pass requests:** save exact terms to your wallet, review incoming requests as a trader, and accept, decline or end a pass. Acceptance is separate from permission to trade.
+- **Copy Pass seats:** join available public seats immediately, or use a trader’s private invitation. Traders control public and private capacity; copiers own their pass records. Trading permissions are separate.
 - **Ghost copying:** save simulation parameters to Arkiv and continue with the same wallet in another browser.
 - **Wallet ownership:** sign in with Privy, manage your wallet-owned records, and delete your account and current Swipr data.
 
@@ -48,7 +48,7 @@ Signals are proposals, not executed trades. Profit rankings require verified exe
 
 ## Project status
 
-Wallet sign-in, wallet-owned profiles, following lists, ghost simulations and mutual Copy Pass requests, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Registered profiles are real testnet records; the app does not seed invented profits or fills.
+Wallet sign-in, wallet-owned profiles, following lists, ghost simulations and public and invite-only Copy Pass seats, sponsored data writes, bot transaction preparation, and account-data deletion are implemented. Registered profiles are real testnet records; the app does not seed invented profits or fills.
 
 Automatic copy execution and scoped trade delegation, verified settlements, ENS passes, and Swarm archive recovery are still in development. They are not presented as completed integrations. Ghost copying is a simulation and does not place trades.
 

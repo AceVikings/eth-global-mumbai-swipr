@@ -1,3 +1,4 @@
+import { short as shortWallet } from '../lib/bots';
 import type { Ghost, Trader } from '../contracts/types';
 import { isGhostExpired } from '../lib/ghosts';
 import '../ghosts.css';
@@ -47,7 +48,7 @@ function Row({ ghost, trader, now, onReal, onRemove, busy }: {
           <p className="gh-name">{name}</p>
           <p className="gh-meta">
             {trader ? trader.ens : `Profile ${ghost.traderId} is not loaded`}
-            {trader?.kind === 'agent' && trader.owner ? ` · agent by ${trader.owner}` : ''}
+            {trader?.kind === 'agent' && trader.owner ? ` · agent by ${trader.owner ? shortWallet(trader.owner) : 'Owner'}` : ''}
           </p>
           <div className="gh-tags">
             <span className="gh-pill">{expired ? 'Expired' : 'Simulated'}</span>

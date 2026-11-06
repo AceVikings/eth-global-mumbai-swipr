@@ -1,5 +1,7 @@
+import { short as shortWallet } from '../lib/bots';
 import { useSession } from '../auth/Session';
-import { requestWalletPass } from '../lib/wallet-passes';
+import { joinSeat, readSeats } from '../lib/wallet-seats';
+import type { SeatAvailability, SeatType } from '../contracts/seats';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_TERMS, type Mode, type Terms, type Trader } from '../contracts/types';
 import '../pass-setup.css';
@@ -110,6 +112,16 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
   const session = useSession();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [pool, setPool] = useState<SeatAvailability | null>(null);
+  const [seatType, setSeatType] = useState<SeatType>('public');
+  useEffect(() => {
+    let active = true; setPool(null); setSeatType('public');
+    if (session.address) void readSeats(session).then(value => {
+      if (!active) return; const next = value.availability.find(p => p.traderId === trader.id);
+      setPool(next ?? null); if (next?.invited) setSeatType('private');
+    }).catch(() => { if (active) setStatus('Seats could not be loaded. Try again shortly.'); });
+    return () => { active = false; };
+  }, [session.address, trader.id]);
   const [stored] = useState(() => loadDraft(trader.id));
   const [d, setD] = useState<Draft>(() => stored?.draft ?? freshDraft(initialPerTradeUsd));
   const [step, setStep] = useState<Step>('edit');
@@ -135,7 +147,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
   function saveDraft() {
     try {
       localStorage.setItem(draftKey(trader.id), JSON.stringify({ ...d, savedAt: Date.now() }));
-      setStatus('Draft saved on this device only. No request was sent.');
+      setStatus('Draft saved on this device only. No seat was joined.');
     } catch {
       setStatus('Couldn’t save: local storage is unavailable in this browser.');
     }
@@ -162,7 +174,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
   }
 
   const back = step === 'edit' ? onClose : step === 'review' ? editTerms : () => setStep('review');
-  const title = step === 'edit' ? 'Your Copy Pass' : step === 'review' ? 'Review before requesting' : 'Request your pass';
+  const title = step === 'edit' ? 'Your Copy Pass' : step === 'review' ? 'Review your Copy Pass' : 'Join your seat';
 
   return (
     <div className="ps">
@@ -185,7 +197,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
           : <img className="ps-avatar" src={trader.avatar} alt={`${trader.name}, profile photo`} />}
         <div>
           <b>{trader.name}</b>
-          <small>{trader.ens && `${trader.ens} · `}{trader.kind === 'agent' ? `${trader.owner ?? 'Owner'}’s agent` : `${trader.style} style`}</small>
+          <small>{trader.ens && `${trader.ens} · `}{trader.kind === 'agent' ? `${trader.owner ? shortWallet(trader.owner) : 'Owner'}’s agent` : `${trader.style} style`}</small>
         </div>
         <span className="ps-pill ps-pill-preview">Registered profile · history unverified</span>
       </div>
@@ -195,7 +207,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
 
         {step === 'edit' && (
           <form className="ps-form" onSubmit={(e) => { e.preventDefault(); review(); }} noValidate>
-            <p className="ps-lede">Set your limits with {first}. Nothing is requested until you review, and no money moves on this page.</p>
+            <p className="ps-lede">Set your limits with {first}. Nothing is saved until you review, and no money moves on this page.</p>
             <Stepper id="ps-amount" label="Per copied trade" big prefix="$" value={d.amount} min={5} max={50}
               hint="Whole dollars, $5–$50 of USDC per copy."
               error={amount === null ? 'Enter a whole number from 5 to 50.' : null} onChange={(v) => set('amount', v)} />
@@ -210,13 +222,13 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
             <Choice legend="Pass length" name="ps-dur" value={d.durationDays}
               options={DURATIONS.map((n) => ({ value: n, label: n === 1 ? '1 day' : `${n} days` }))}
               onChange={(v) => set('durationDays', v)} />
-            <p className="ps-hint ps-hint-tight">Requested duration: {d.durationDays} {d.durationDays === 1 ? 'day' : 'days'} after acceptance.</p>
+            <p className="ps-hint ps-hint-tight">Requested duration: {d.durationDays} {d.durationDays === 1 ? 'day' : 'days'} from joining.</p>
             <Stepper id="ps-breakup" label="Breakup threshold" prefix="−$" value={d.breakup} min={1} max={breakupMax}
               hint={`Pause new entries if the pass falls this far below its best marked P&L. Not a guaranteed loss limit.`}
               error={breakup === null ? `Enter a whole number from 1 to ${breakupMax}.` : null} onChange={(v) => set('breakup', v)} />
             <label className="ps-check">
               <input type="checkbox" checked={d.liquidateOnBreakup} onChange={(e) => set('liquidateOnBreakup', e.target.checked)} />
-              <span>Also sell my copied holdings if the threshold is hit<small>Requested behavior only. No trades or permissions are created with this request.</small></span>
+              <span>Also sell my copied holdings if the threshold is hit<small>Requested behavior only. Joining does not create trades or grant permissions.</small></span>
             </label>
             <Choice legend="Safety-net stop per copy" name="ps-net" value={d.safetyNetBps}
               options={SAFETY_NETS.map((b) => ({ value: b, label: `−${b / 100}%` }))}
@@ -251,17 +263,17 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
               </div>
               <dl className="ps-panel">
                 <Row label="Requested budget">{usd(t.perTradeUsd * t.tradeCount)}</Row>
-                <Row label="Pass length">{t.durationDays} {t.durationDays === 1 ? 'day' : 'days'} after trader acceptance</Row>
+                <Row label="Pass length">{t.durationDays} {t.durationDays === 1 ? 'day' : 'days'} from joining</Row>
                 <Row label="Breakup threshold">−{usd(t.breakupUsd)} from best · {t.liquidateOnBreakup ? 'request an exit' : 'pause new entries'}</Row>
                 <Row label="Requested stop">−{t.safetyNetBps / 100}% per copy</Row>
                 <Row label="Requested profit share">{t.profitShareBps / 100}% of new realized net profit</Row>
               </dl>
 
-              <p>Sending a request saves these proposed terms for the trader to review. It does not grant wallet permissions, approve token spending or place an order.</p>
+              <p>Joining saves your chosen limits and takes an available seat automatically. Trading permissions and orders are separate.</p>
 
               <label className="ps-check">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-                <span>I’m ready to send these terms to the trader</span>
+                <span>I’m ready to join with these limits</span>
               </label>
               <div className="ps-actions">
                 <button type="button" className="ps-primary" disabled={!ack} onClick={() => setStep('wallet')}>Continue<span aria-hidden="true">→</span></button>
@@ -273,18 +285,23 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
 
         {step === 'wallet' && (
           <section className="ps-wallet">
-            <h2 className="ps-h2">{sent ? 'Request sent' : `Request a seat with ${first}`}</h2>
-            <p>{sent ? 'Your trader can now review your terms. Find the response under Matches.' : 'Save these terms to your wallet for the trader to review.'}</p>
+            <h2 className="ps-h2">{sent ? 'You’re in' : `Join ${first}`}</h2>
+            <p>{sent ? 'Your Copy Pass is saved under Matches.' : 'Take an available seat. No trader approval is needed.'}</p>
+            {!sent && session.authenticated && <fieldset className="ps-fieldset"><legend className="ps-label">Choose your seat</legend>
+              <div className="ps-segmented">{(['public', 'private'] as const).map(kind => <label className="ps-option" key={kind}>
+                <input type="radio" name="seat-type" checked={seatType === kind} onChange={() => setSeatType(kind)} disabled={!pool || (kind === 'private' && !pool.invited)} />
+                <span className="ps-option-body"><b>{kind === 'public' ? 'Public seat' : 'Private seat'}</b><small>{pool ? (kind === 'public' ? `${pool.publicSeats - pool.publicUsed} available` : pool.invited ? `${pool.privateSeats - pool.privateUsed} available · invited` : 'Invitation required') : 'Loading seats…'}</small></span>
+              </label>)}</div></fieldset>}
             <div className="ps-actions">
               {sent ? <button type="button" className="ps-primary" onClick={onClose}>Done</button>
                 : !session.authenticated ? <button type="button" className="ps-primary" onClick={session.login}>Sign in to continue</button>
-                : <button type="button" className="ps-primary" disabled={busy || !frozen} onClick={async () => {
+                : <button type="button" className="ps-primary" disabled={busy || !frozen || !pool || (seatType === 'public' ? pool.publicUsed >= pool.publicSeats : !pool.invited || pool.privateUsed >= pool.privateSeats)} onClick={async () => {
                   if (!frozen) return;
-                  setBusy(true); setStatus('Saving your request…');
-                  try { await requestWalletPass(session, trader, frozen.terms); setSent(true); setStatus(''); }
-                  catch (e) { setStatus(e instanceof Error ? e.message : 'Your request could not be saved.'); }
+                  setBusy(true); setStatus('Joining your seat…');
+                  try { await joinSeat(session, trader.id, frozen.terms, seatType); setSent(true); setStatus(''); }
+                  catch (e) { setStatus(e instanceof Error ? e.message : 'Your seat could not be saved.'); }
                   finally { setBusy(false); }
-                }}>{busy ? 'Saving…' : 'Send request'}</button>}
+                }}>{busy ? 'Joining…' : 'Join seat'}</button>}
               {!sent && <button type="button" className="ps-secondary" disabled={busy} onClick={editTerms}>Edit terms</button>}
             </div>
           </section>

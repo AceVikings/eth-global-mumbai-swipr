@@ -8,3 +8,7 @@
 .match-card dd { margin: 0; font-size: 21px; font-weight: 600; }
 .match-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 @media (max-width: 600px) { .match-card { padding: 20px; } .match-card dl { grid-template-columns: repeat(2, 1fr); } }
+.match-wallet { display: block; width: min(380px, 100%); margin-top: 8px; padding: 12px; border: 1px solid #d9d1e5; border-radius: 8px; }
+.match-invites { list-style: none; padding: 0; }
+.match-invites li { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 12px 0; }
+.matches-page > .match-card { margin-top: 28px; }

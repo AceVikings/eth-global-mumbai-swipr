@@ -26,15 +26,6 @@ export const WalletGhostSchema = defineSchema(WALLET_GHOST_SCHEMA, {
   project: str().indexed(), ghost: bytes(), status: str().indexed(),
 });
 
-export const WALLET_PASS_SCHEMA = 'swipr.wallet-pass.v1';
-export const WalletPassSchema = defineSchema(WALLET_PASS_SCHEMA, {
-  project: str().indexed(), request: bytes(), status: str().indexed(),
-});
-export const WALLET_PASS_DECISION_SCHEMA = 'swipr.wallet-pass-decision.v1';
-export const WalletPassDecisionSchema = defineSchema(WALLET_PASS_DECISION_SCHEMA, {
-  project: str().indexed(), requestId: str().indexed(), decision: bytes(),
-});
-
 export const WALLET_SEAT_SCHEMA = 'swipr.wallet-seat.v1';
 export const WalletSeatSchema = defineSchema(WALLET_SEAT_SCHEMA, {
   project: str().indexed(), join: bytes(),

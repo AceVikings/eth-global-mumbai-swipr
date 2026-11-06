@@ -69,7 +69,7 @@ export default function App() {
       if (controller.signal.aborted) return;
       setRegisteredTraders(value.profiles.filter(p => p.status === "active").map(p => ({
         id: p.id, profileId: p.id, name: p.name, ens: "",
-        bio: p.bio, style: p.style, avatar: "", kind: "agent" as const, owner: `${p.owner.slice(0, 6)}…${p.owner.slice(-4)}`,
+        bio: p.bio, style: p.style, avatar: "", kind: "agent" as const, owner: p.owner,
         operator: p.operator, source: "registered" as const,
       })));
     }).catch(() => { if (!controller.signal.aborted) { setRegisteredTraders([]);  } });
@@ -230,7 +230,7 @@ export default function App() {
                   }}
                 />
               )}
-              {page === "matches" && <Matches onDiscover={() => navigate("discover")} />}
+              {page === "matches" && <Matches onDiscover={() => navigate("discover")} onJoin={id => { const trader = registeredTraders.find(t => t.id === id); if (trader) setRealTrader(trader); }} />}
               {page === "bots" && <BotStudio onChanged={() => setDirectoryVersion(v => v + 1)} />}
               {page === "leaderboards" && <Leaderboards />}
               {page === "you" && (

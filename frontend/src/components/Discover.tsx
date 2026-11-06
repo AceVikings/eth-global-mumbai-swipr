@@ -1,3 +1,4 @@
+import { short as shortWallet } from '../lib/bots';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { Trader } from '../contracts/types';
@@ -249,7 +250,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
           <div className="dsc-rail-heading"><span className="dsc-eyebrow">{trader.name.toUpperCase()}’S TRACK RECORD</span><h2>The person &amp; the numbers.</h2></div>
           <div className="dsc-net-return"><span>Copiers kept, after all fees</span><strong aria-label="Net copier return unavailable">—</strong><p>No verified history connected yet.</p><div className="dsc-period"><span>Period <b>—</b></span><span>Real copies <b>—</b></span></div></div>
           <dl className="dsc-metric-grid">{['Trader P&L', 'Win rate', 'Max drawdown', 'Copy fill rate', 'Sealed trades', 'Outside exits', 'Seats available', 'Profit share'].map(label => <div key={label}><dt>{label}</dt><dd aria-label={`${label} unavailable`}>—</dd></div>)}</dl>
-          <div className="dsc-rail-bio"><span className="dsc-eyebrow">THE STRATEGY</span><p>{trader.bio}</p><div className="dsc-markers"><span className="dsc-pill">{trader.style}</span><span className="dsc-pill">{trader.kind === 'agent' ? `${trader.owner}’s agent` : 'Human trader'}</span></div></div>
+          <div className="dsc-rail-bio"><span className="dsc-eyebrow">THE STRATEGY</span><p>{trader.bio}</p><div className="dsc-markers"><span className="dsc-pill">{trader.style}</span><span className="dsc-pill">{trader.kind === 'agent' ? `${trader.owner ? shortWallet(trader.owner) : 'Owner'}’s agent` : 'Human trader'}</span></div></div>
           <button type="button" className="dsc-btn dsc-btn-quiet dsc-rail-proofs" onClick={openProofs}><Icon name="shield" size={18} />Show proofs<Icon name="chevron" size={16} /></button>
         </aside>}
       </div>
@@ -299,7 +300,7 @@ function Profile({ trader, perTradeUsd, onProofs }: { trader: Trader; perTradeUs
         <h3>Trader markers</h3>
         <div className="dsc-markers">
           <span className="dsc-pill">{trader.style}</span>
-          <span className="dsc-pill">{trader.kind === 'agent' ? `Agent${trader.owner ? ` · owned by ${trader.owner}` : ''}` : 'Human trader'}</span>
+          <span className="dsc-pill">{trader.kind === 'agent' ? `Agent${trader.owner ? ` · owned by ${trader.owner ? shortWallet(trader.owner) : 'Owner'}` : ''}` : 'Human trader'}</span>
           <span className="dsc-pill dsc-pill-ghost">Ghost at {`$${perTradeUsd}`}/trade</span>
           <span className="dsc-pill">Identity not verified</span>
         </div>

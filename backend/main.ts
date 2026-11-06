@@ -1,5 +1,4 @@
 import { createSeatDirectory } from './passes/seats';
-import { createWalletPasses } from './passes/wallet';
 import { createWalletGhosts } from './ghosts/wallet';
 import { createWalletSignals } from './bots/wallet-signals';
 import { createWalletDirectory } from './bots/wallet-directory';
@@ -23,7 +22,6 @@ const server = createApi({ config, ledger, projects, social,
   account: config.arkiv.accessKey ? createAccountService(config) : undefined,
   arkivRpc: config.arkiv.accessKey ? createArkivRpc(config.arkiv) : undefined,
   seatDirectory: config.arkiv.accessKey ? createSeatDirectory(config.arkiv) : undefined,
-  walletPasses: config.arkiv.accessKey ? createWalletPasses(config.arkiv) : undefined,
   walletGhosts: config.arkiv.accessKey ? createWalletGhosts(config.arkiv) : undefined,
   walletSocial: config.arkiv.accessKey ? createWalletSocial(config.arkiv) : undefined,
   walletSignals: config.arkiv.accessKey ? createWalletSignals(config.arkiv) : undefined,
