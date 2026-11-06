@@ -544,3 +544,7 @@ main {
   .mobile-header { padding: 12px 0; }
   .notice-host { bottom: 188px; }
 }
+.service-list { list-style: none; padding: 0; display: grid; gap: 14px; }
+.service-list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 12px; }
+.service-list small { grid-column: 1 / -1; color: var(--muted); }
+@media (max-width: 440px) { .service-list li { grid-template-columns: 1fr; } }

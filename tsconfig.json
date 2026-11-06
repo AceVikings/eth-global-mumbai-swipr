@@ -6,5 +6,5 @@
     "esModuleInterop": true, "allowImportingTsExtensions": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "shared", "server", "vite.config.ts", "vitest.config.ts", "build"]
+  "include": ["scripts", "src", "shared", "server", "vite.config.ts", "vitest.config.ts", "build"]
 }

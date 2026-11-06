@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Trader } from "../shared/types";
+import type { RuntimeStatus, Trader } from "../shared/types";
 import Discover from "./components/Discover";
 import Ghosts from "./components/Ghosts";
 import PassSetup from "./components/PassSetup";
@@ -12,6 +12,7 @@ import {
   type GhostChange,
 } from "./lib/ghosts";
 import { previewTraders } from "./fixtures";
+import { getRuntime } from "./lib/api";
 
 type Page = "discover" | "ghosts" | "matches" | "you";
 const pages: Page[] = ["discover", "ghosts", "matches", "you"];
@@ -53,7 +54,21 @@ export default function App() {
   const [realTrader, setRealTrader] = useState<Trader | null>(null);
   const [notice, setNotice] = useState("");
   const [online, setOnline] = useState(navigator.onLine);
+  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
+  const [serviceState, setServiceState] = useState("Not checked");
   const [mode, setMode] = useState<"preview" | "live">("preview");
+  useEffect(() => {
+    if (page !== "you" && mode !== "live") return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => { setRuntime(null); setServiceState("Live service unavailable"); controller.abort(); }, 8000);
+    setServiceState("Checking service…");
+    void getRuntime(controller.signal).then(value => {
+      if (controller.signal.aborted) return;
+      setRuntime(value); setServiceState("API connected · trading gates pending");
+    }).catch(() => { if (!controller.signal.aborted) { setRuntime(null); setServiceState("Live service unavailable"); } })
+      .finally(() => clearTimeout(timer));
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [page, mode]);
   useEffect(() => {
     const onHash = () => {
       setPage(currentPage());
@@ -384,6 +399,17 @@ export default function App() {
                         Live directory
                       </button>
                     </div>
+                  </div>
+                  <div className="settings-group">
+                    <h2>Service connections</h2>
+                    <p role="status">{serviceState}</p>
+                    {runtime && <ul className="service-list">{runtime.integrations.map(integration => (
+                      <li key={integration.name}>
+                        <strong>{integration.name}</strong>
+                        <span>{integration.verified ? "Verified" : integration.configured ? "Configured · verification pending" : "Not configured"}</span>
+                        <small>{integration.detail}</small>
+                      </li>
+                    ))}</ul>}
                   </div>
                   <div className="settings-group">
                     <h2>Take Swipr with you</h2>
