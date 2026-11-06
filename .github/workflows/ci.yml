@@ -32,6 +32,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run check:bundle
       - name: Doctor (backend config, preview mode)
         run: npm run doctor -- --role api,worker
 

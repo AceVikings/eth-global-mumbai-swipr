@@ -11,7 +11,9 @@
     "api": "node --env-file-if-exists=.env --import tsx server/main.ts",
     "worker": "node --env-file-if-exists=.env --import tsx server/worker.ts",
     "doctor": "node --env-file-if-exists=.env --import tsx scripts/doctor.ts",
-    "dev:stack": "node scripts/dev-stack.mjs"
+    "dev:stack": "node scripts/dev-stack.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "demo:check": "node scripts/demo-check.mjs"
   },
   "dependencies": {
     "@arkiv-network/sdk": "1.0.1",
