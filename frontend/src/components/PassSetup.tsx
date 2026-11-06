@@ -12,7 +12,6 @@ type Draft = {
 };
 type Frozen = { terms: Terms; frozenAt: number };
 
-const DAY = 86_400_000;
 const DURATIONS = [1, 7, 30] as const;
 const SAFETY_NETS = [300, 500, 800];
 const draftKey = (id: string) => `swipr.passDraft.v1.${id}`;
@@ -118,7 +117,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
   const [ack, setAck] = useState(false);
   const [status, setStatus] = useState(stored ? `Loaded your local draft from ${when(stored.savedAt)}.` : '');
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const first = trader.name.split(' ')[0];
+  const first = trader.name;
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
 
   const amount = parseInt_(d.amount, 5, 50);
@@ -211,25 +210,25 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
             <Choice legend="Pass length" name="ps-dur" value={d.durationDays}
               options={DURATIONS.map((n) => ({ value: n, label: n === 1 ? '1 day' : `${n} days` }))}
               onChange={(v) => set('durationDays', v)} />
-            <p className="ps-hint ps-hint-tight">New entries stop after {d.durationDays} {d.durationDays === 1 ? 'day' : 'days'}. Exit protection runs 7 days longer.</p>
+            <p className="ps-hint ps-hint-tight">Requested duration: {d.durationDays} {d.durationDays === 1 ? 'day' : 'days'} after acceptance.</p>
             <Stepper id="ps-breakup" label="Breakup threshold" prefix="−$" value={d.breakup} min={1} max={breakupMax}
               hint={`Pause new entries if the pass falls this far below its best marked P&L. Not a guaranteed loss limit.`}
               error={breakup === null ? `Enter a whole number from 1 to ${breakupMax}.` : null} onChange={(v) => set('breakup', v)} />
             <label className="ps-check">
               <input type="checkbox" checked={d.liquidateOnBreakup} onChange={(e) => set('liquidateOnBreakup', e.target.checked)} />
-              <span>Also sell my copied holdings if the threshold is hit<small>Off by default. Without this, positions stay open and still exit with {first}.</small></span>
+              <span>Also sell my copied holdings if the threshold is hit<small>Requested behavior only. No trades or permissions are created with this request.</small></span>
             </label>
             <Choice legend="Safety-net stop per copy" name="ps-net" value={d.safetyNetBps}
               options={SAFETY_NETS.map((b) => ({ value: b, label: `−${b / 100}%` }))}
               onChange={(v) => set('safetyNetBps', v)} />
-            <p className="ps-hint ps-hint-tight">Used when {first}’s own stop is missing or wider. A tighter trigger can exit earlier. Actual fill timing and price can differ.</p>
+            <p className="ps-hint ps-hint-tight">Requested stop level. A stop trigger does not guarantee a fill price.</p>
             <div className="ps-fixed">
-              <span>Profit share to {first}</span><b>{DEFAULT_TERMS.profitShareBps / 100}% · fixed</b>
+              <span>Requested profit share to {first}</span><b>{DEFAULT_TERMS.profitShareBps / 100}% · fixed</b>
             </div>
             <Choice legend="How you copy" name="ps-mode" value={d.mode} wide onChange={(v) => set('mode', v)}
               options={[
                 { value: 'tap', label: 'Tap to copy', sub: 'Default · you approve each new trade before entry' },
-                { value: 'auto', label: 'Auto-copy', sub: 'Optional · entries signed for you within these limits' },
+                { value: 'auto', label: 'Auto-copy', sub: 'Requires separate trading permissions' },
               ]} />
             {d.mode === 'auto' && (
               <p className="ps-note ps-note-warn">Auto-copy needs a verified policy signer. It isn’t verified in this build, so an auto pass can’t activate yet.</p>
@@ -243,44 +242,29 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
 
         {step === 'review' && frozen && (() => {
           const t = frozen.terms;
-          const entryEnd = frozen.frozenAt + t.durationDays * DAY;
-          return (
+              return (
             <section className="ps-review" aria-describedby="ps-frozen">
-              <p id="ps-frozen" className="ps-pill ps-pill-frozen">Terms frozen at {when(frozen.frozenAt)} · edit to change</p>
+              <p id="ps-frozen" className="ps-hint">Terms frozen at {when(frozen.frozenAt)} · edit to change</p>
               <div className="ps-hero">
                 <span className="ps-hero-amt">{usd(t.perTradeUsd)}</span>
                 <span>per copied trade · {t.tradeCount} {t.tradeCount === 1 ? 'trade' : 'trades'} · {t.mode === 'tap' ? 'tap to copy' : 'auto-copy'}</span>
               </div>
               <dl className="ps-panel">
-                <Row label="Entry budget (pass ledger)">{usd(t.perTradeUsd * t.tradeCount)}</Row>
-                <Row label="USDC wallet allowance">Separate approval · amount and spender shown by your wallet</Row>
-                <Row label="New entries end">{t.durationDays} {t.durationDays === 1 ? 'day' : 'days'} after activation{' '}
-                  <small>(≈ {when(entryEnd)} if activated now)</small></Row>
-                <Row label="Exit protection ends">Entry end + 7 days <small>(≈ {when(entryEnd + 7 * DAY)})</small></Row>
-                <Row label="Breakup threshold">−{usd(t.breakupUsd)} from best · {t.liquidateOnBreakup ? 'then sell holdings' : 'pause only'}</Row>
-                <Row label="Safety-net stop">−{t.safetyNetBps / 100}% per copy</Row>
-                <Row label="Profit share">{t.profitShareBps / 100}% of new realized net profit</Row>
-                <Row label="Round-trip cost quote"><span className="ps-unavail">Unavailable</span></Row>
-                <Row label="Downside estimate"><span className="ps-unavail">Unavailable</span></Row>
+                <Row label="Requested budget">{usd(t.perTradeUsd * t.tradeCount)}</Row>
+                <Row label="Pass length">{t.durationDays} {t.durationDays === 1 ? 'day' : 'days'} after trader acceptance</Row>
+                <Row label="Breakup threshold">−{usd(t.breakupUsd)} from best · {t.liquidateOnBreakup ? 'request an exit' : 'pause new entries'}</Row>
+                <Row label="Requested stop">−{t.safetyNetBps / 100}% per copy</Row>
+                <Row label="Requested profit share">{t.profitShareBps / 100}% of new realized net profit</Row>
               </dl>
 
-              <h2 className="ps-h2">Read before you continue</h2>
-              <ul className="ps-points">
-                <li><b>Budget vs. allowance.</b> The {usd(t.perTradeUsd * t.tradeCount)} entry budget is tracked per pass and includes partial fills. Your USDC allowance is a separate wallet approval that may differ; changing it never resets this pass’s ledger.</li>
-                <li><b>Two end dates.</b> New entries stop at pass expiry. Stops and shared exits keep covering open copies for 7 more days; after that, renew protection or manage the assets yourself.</li>
-                <li><b>The threshold isn’t a loss cap.</b> It pauses new entries at −{usd(t.breakupUsd)} from the pass’s best marked P&L. Slippage, price gaps and timing can make losses larger.</li>
-                <li><b>Profit share.</b> {t.profitShareBps / 100}% applies only to realized net profit above what you’ve already settled with {first}. That baseline carries across renewals. It is charged only at settlement, never on unrealized gains, and amounts under $0.05 are waived.</li>
-                <li><b>Actual signer scope.</b> The exit signer’s rules allow selling <em>any</em> WETH or cbBTC in your wallet to USDC, not only units copied from {first}. Swipr’s engine sells only attributed units, bounded by your balance, but that is software, not an onchain limit.{t.mode === 'auto' && ' Auto-copy adds a USDC entry rule capped per trade.'}</li>
-                <li><b>Shared exits aren’t identical.</b> Exits are submitted together with {first}’s. Fills can differ, partially fail or arrive late, and you may need to exit manually.</li>
-                <li><b>No live quote yet.</b> Costs and the downside estimate are shown with each live quote before you approve a trade.</li>
-              </ul>
+              <p>Sending a request saves these proposed terms for the trader to review. It does not grant wallet permissions, approve token spending or place an order.</p>
 
               <label className="ps-check">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-                <span>I’ve read these terms and the actual permission scope</span>
+                <span>I’m ready to send these terms to the trader</span>
               </label>
               <div className="ps-actions">
-                <button type="button" className="ps-primary" disabled={!ack} onClick={() => setStep('wallet')}>Continue to wallet<span aria-hidden="true">→</span></button>
+                <button type="button" className="ps-primary" disabled={!ack} onClick={() => setStep('wallet')}>Continue<span aria-hidden="true">→</span></button>
                 <button type="button" className="ps-secondary" onClick={editTerms}>Edit terms</button>
               </div>
             </section>
@@ -290,7 +274,7 @@ export default function PassSetup({ trader, onClose, initialPerTradeUsd }: Props
         {step === 'wallet' && (
           <section className="ps-wallet">
             <h2 className="ps-h2">{sent ? 'Request sent' : `Request a seat with ${first}`}</h2>
-            <p>{sent ? 'Your trader can now review your terms. Find the response under Matches.' : 'Your terms are saved to your wallet. The trader must accept before you can continue.'}</p>
+            <p>{sent ? 'Your trader can now review your terms. Find the response under Matches.' : 'Save these terms to your wallet for the trader to review.'}</p>
             <div className="ps-actions">
               {sent ? <button type="button" className="ps-primary" onClick={onClose}>Done</button>
                 : !session.authenticated ? <button type="button" className="ps-primary" onClick={session.login}>Sign in to continue</button>
