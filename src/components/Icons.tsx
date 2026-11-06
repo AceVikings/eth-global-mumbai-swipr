@@ -16,7 +16,7 @@ const PATHS: Record<string, string[]> = {
 };
 
 export function Icon({ name, size = 24 }: { name: string; size?: number }) {
-  const paths = PATHS[name];
+  const paths = PATHS[name === 'ghosts' ? 'ghost' : name];
   if (!paths) return null;
   return (
     <svg

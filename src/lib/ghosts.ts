@@ -25,9 +25,9 @@ const isGhost = (value: unknown, now: number): value is Ghost => {
   const g = value as Record<string, unknown>;
   return typeof g.traderId === 'string' && g.traderId.trim() !== ''
     && isAmount(g.perTradeUsd)
-    && typeof g.startedAt === 'number' && Number.isFinite(g.startedAt)
+    && typeof g.startedAt === 'number' && Number.isSafeInteger(g.startedAt) && g.startedAt >= 0
     && g.startedAt <= now + FUTURE_SKEW_MS
-    && typeof g.expiresAt === 'number' && Number.isFinite(g.expiresAt)
+    && typeof g.expiresAt === 'number' && Number.isSafeInteger(g.expiresAt) && g.expiresAt <= 8_640_000_000_000_000
     && g.expiresAt > g.startedAt && g.expiresAt - g.startedAt <= GHOST_DURATION_MS
     && (g.includedSignalId === null || typeof g.includedSignalId === 'string');
 };

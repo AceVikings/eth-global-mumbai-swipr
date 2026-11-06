@@ -189,7 +189,7 @@
   .dsc { padding: 32px 24px 48px; }
   .dsc-head h1 { font-size: 36px; line-height: 42px; }
   .dsc-deck { max-width: 420px; margin: 0 auto; }
-  .dsc-stack { height: clamp(500px, calc(100dvh - 300px), 660px); }
+  .dsc-stack { height: clamp(360px, calc(100dvh - 440px), 600px); }
   .dsc-controls { position: static; background: none; border: 0; padding: 24px 0 0; }
   .dsc-toast-slot { position: static; margin-top: 16px; min-height: 40px; }
   .dsc-scrim { align-items: center; }
@@ -207,4 +207,19 @@
   .dsc-ctl button, .dsc-toast, .dsc-sheet { transition: none; animation: none; }
   .dsc-ctl button:hover:not(:disabled), .dsc-ctl button:active:not(:disabled) { transform: none; }
   .dsc-scrim { animation: none; }
+}
+
+/* Keep the whole portrait and name above the mobile action bar. */
+@media (max-width: 767px) {
+  .dsc { padding: 8px 0 196px; }
+  .dsc-head { margin-bottom: 16px; }
+  .dsc-head .dsc-chip { display: none; }
+  .dsc-stack { height: max(240px, calc(100dvh - 415px)); }
+  .dsc-photo { min-height: 220px; }
+  .dsc-photo-info { bottom: 34px; }
+  .dsc-toast-slot { bottom: calc(184px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 359px) {
+  .dsc-stack { height: max(210px, calc(100dvh - 450px)); }
+  .dsc-photo { min-height: 190px; }
 }

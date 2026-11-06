@@ -214,6 +214,7 @@ export default function App() {
                     </label>
                   </div>
                   <Discover
+              key={`${mode}:${prefs.vibe}`}
                     traders={traders}
                     onGhost={ghost}
                     onReal={setRealTrader}
