@@ -175,7 +175,7 @@ function useBaseBalance(enabled: boolean, address: Address | null, getAccessToke
   useEffect(() => {
     if (!enabled || !address) { setBalance({ state: 'idle' }); return; }
     const controller = new AbortController();
-    setBalance({ state: 'loading' });
+    setBalance(previous => previous.state === 'done' && previous.address.toLowerCase() === address.toLowerCase() ? previous : { state: 'loading' });
     (async () => {
       const token = await getAccessToken();
       if (!token) throw new Error('signed out');

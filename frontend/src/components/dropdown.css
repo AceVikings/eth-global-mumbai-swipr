@@ -3,7 +3,7 @@
 .dropdown-trigger svg { flex: none; transition: transform 120ms; }
 .dropdown-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
 .dropdown-trigger:hover { border-color: #c6bfb5; }
-.dropdown .dropdown-trigger:focus-visible, .dropdown-menu:focus-visible { outline: 1px solid var(--muted); outline-offset: 2px; }
+.dropdown .dropdown-trigger:focus-visible { outline: 1px solid var(--muted); outline-offset: 2px; }
 .dropdown-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; min-width: max(170px, 100%); padding: 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 8px 24px #24232214; }
 .dropdown-option { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 40px; padding: 9px 12px; border-radius: 5px; color: var(--muted); cursor: pointer; }
 .dropdown-option[aria-selected="true"] { color: var(--ink); font-weight: 600; }
@@ -12,3 +12,6 @@
 
 .dropdown-icon-trigger { width: 44px; height: 44px; padding: 0; justify-content: center; border-color: transparent; background: transparent; }
 .dropdown-icon-trigger[aria-expanded="true"] svg { transform: none; }
+
+/* Keyboard position is shown by the active option, without a ring around the popup. */
+.dropdown .dropdown-menu:focus-visible { outline: none; }
