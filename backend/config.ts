@@ -18,7 +18,11 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
   const publicApiUrl = env.PUBLIC_API_URL || (env.NODE_ENV === 'production' ? '' : 'http://localhost:8787');
   const apiOrigin = publicApiUrl ? new URL(publicApiUrl) : null;
   if (apiOrigin && (apiOrigin.origin !== publicApiUrl || (apiOrigin.protocol !== 'https:' && !(env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1'].includes(apiOrigin.hostname) && apiOrigin.protocol === 'http:')))) throw new Error('Invalid PUBLIC_API_URL');
+  const fundingEnabled = env.ARKIV_FUNDING_ENABLED === 'true';
+  const fundingStartNonce = Number(env.ARKIV_FUNDING_START_NONCE);
+  if (fundingEnabled && (!Number.isSafeInteger(fundingStartNonce) || fundingStartNonce < 0 || !env.ARKIV_MAINTAINER_PK)) throw new Error('Gas funding requires its signer and starting nonce');
   return { port, origins, mode, botAudience, publicApiUrl,
+    funding: { enabled: fundingEnabled, startNonce: fundingStartNonce },
     workerUrl: env.WORKER_URL || (env.NODE_ENV === 'production' ? undefined : 'http://127.0.0.1:8788'),
     arkiv: { rpcUrl: env.ARKIV_RPC_URL, accessKey: env.ARKIV_ACCESS_KEY,
       writerAddress: env.ARKIV_WRITER_ADDRESS || '', privateKey: env.ARKIV_RELAYER_PK,

@@ -1,4 +1,5 @@
 import { createWorkerServer } from './worker-http';
+import { createGasFunder } from './gas-funding';
 import { SocialStore } from './social/store';
 import { ProjectStore } from './bots/store';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -18,7 +19,10 @@ export async function runJob(job: Job, baseRpc?: string, fetcher: typeof fetch =
 }
 async function main() {
   const config = readConfig();
-  const renew = config.arkiv.writerAddress && config.arkivMaintainerKey ? createArkivMaintainer(config.arkiv, config.arkivMaintainerKey) : null;
+  // The funding signer has a durable nonce stream and cannot also send retention transactions.
+  const renew = !config.funding.enabled && config.arkiv.writerAddress && config.arkivMaintainerKey ? createArkivMaintainer(config.arkiv, config.arkivMaintainerKey) : null;
+  const funding = config.funding.enabled && config.arkivMaintainerKey
+    ? createGasFunder({ ...config.arkiv, key: config.arkivMaintainerKey, startNonce: config.funding.startNonce }) : null;
   if (renew) await renew();
   const journal = config.arkiv.writerAddress ? createArkivJournal(config.arkiv) : null;
   const ledger = journal ? await Ledger.open(journal) : null;
@@ -26,7 +30,7 @@ async function main() {
   const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
   // Missing credentials keeps liveness available, but readiness and all writes fail closed.
-  const server = createWorkerServer({ social, projects, stopping: () => stopping,
+  const server = createWorkerServer({ social, projects, funding, stopping: () => stopping,
     lastHealthyAt: () => lastHealthy, canWrite: () => journal?.canWrite === true });
   await new Promise<void>(resolve => server.listen(config.port, '0.0.0.0', resolve));
   const shutdown = () => { stopping = true; };

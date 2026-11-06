@@ -1,4 +1,5 @@
 import express from 'express';
+import { deleteAccountMessage } from './account';
 import { verifySocialAction, type SocialStore } from './social/store';
 import { rankClosedPositions, type VerifiedClosedPosition } from './social/rankings';
 import { requestLimiter } from './rate-limit';
@@ -21,6 +22,9 @@ export type ApiDependencies = {
   executeSocial?: (input: unknown) => Promise<unknown>;
   verifiedPositions?: () => Promise<{ positions: VerifiedClosedPosition[]; asOf: string }>;
   executeBot?: (input: unknown) => Promise<unknown>;
+  fundGas?: (input: unknown) => Promise<unknown>;
+  account?: { list(wallet: string): Promise<{ key: string; schema: string }[]>; remove(identity: import('./auth').Identity, wallet: string, input: Record<string, unknown>): Promise<unknown> };
+  arkivRpc?: (input: Record<string, unknown>) => Promise<unknown>;
   authenticate?: ReturnType<typeof createAuthenticator>;
   fetcher?: typeof fetch;
 };
@@ -31,7 +35,7 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ApiError(400, 'invalid_json', 'Expected a JSON object.');
   return value as Record<string, unknown>;
 }
-export function createApi({ config, ledger, projects = null, social = null, walletProfiles, executeBot, executeSocial, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
+export function createApi({ config, ledger, projects = null, social = null, walletProfiles, executeBot, executeSocial, fundGas, account, arkivRpc, verifiedPositions, authenticate = createAuthenticator(config), fetcher = fetch }: ApiDependencies) {
   const allowRequest = requestLimiter();
   const flash = config.flashKey ? createFlashClient({ apiKey: config.flashKey, fetch: fetcher }) : null;
   const listBots = async () => {
@@ -42,6 +46,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
   };
   const writeSocial = executeSocial ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher, path: '/internal/social' });
   const writeBot = executeBot ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher });
+  const fundWrite = fundGas ?? createWorkerBridge({ url: config.workerUrl, production: process.env.NODE_ENV === 'production', fetcher, path: '/internal/gas' });
   const forwardBot = async (input: unknown, authorization?: string) => {
     try {
       const verified = await verifyBotAction(input, config.botAudience);
@@ -99,6 +104,30 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       const path = url.pathname;
       if (req.method === 'POST' && !allowRequest(req.socket.remoteAddress ?? 'unknown')) throw new ApiError(429, 'rate_limited', 'Too many requests. Try again shortly.');
       const gateway = makeGateway(req.headers.authorization);
+      if (path === '/api/arkiv/rpc' && req.method === 'POST') {
+        await authenticate(req.headers.authorization);
+        if (!arkivRpc) throw new ApiError(503, 'rpc_unavailable', 'Account storage is unavailable.');
+        return send(200, await arkivRpc(await body(req)));
+      }
+      if (path === '/api/account/data' || path === '/api/account/delete') {
+        const identity = await authenticate(req.headers.authorization);
+        if (!account) throw new ApiError(503, 'account_unavailable', 'Account storage is unavailable.');
+        const input = req.method === 'POST' ? await body(req) : {};
+        const wallet = requireWallet(identity, input.wallet || url.searchParams.get('wallet'));
+        if (path === '/api/account/data' && req.method === 'GET') {
+          const expires = Math.floor(Date.now() / 1000) + 300;
+          return send(200, { wallet, entities: await account.list(wallet), expires,
+            deletionMessage: deleteAccountMessage(config.botAudience, identity.userId, wallet, expires) });
+        }
+        if (path === '/api/account/delete' && req.method === 'POST') return send(200, await account.remove(identity, wallet, input));
+        throw new ApiError(405, 'method_not_allowed', 'Method not allowed.');
+      }
+      if (path === '/api/arkiv/gas' && req.method === 'POST') {
+        const identity = await authenticate(req.headers.authorization);
+        const input = await body(req);
+        const wallet = requireWallet(identity, input.wallet);
+        return send(200, await fundWrite({ wallet, subject: identity.userId }));
+      }
       if (req.method === 'GET' && ['/healthz', '/health'].includes(path)) return send(200, { ok: true, service: 'api' });
       if (req.method === 'GET' && ['/readyz', '/ready'].includes(path)) {
         const database = ledger ? await ledger.health() : { ok: false };

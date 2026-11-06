@@ -7,6 +7,7 @@ import { BotError } from './bots/validation';
 type Executor = { execute(input: unknown): Promise<unknown> };
 export function createWorkerServer(options: {
   social: Executor | null; projects: Executor | null;
+  funding?: Executor | null;
   stopping: () => boolean; lastHealthyAt: () => number; canWrite: () => boolean;
 }) {
   const app = express();
@@ -16,11 +17,11 @@ export function createWorkerServer(options: {
     res.setHeader('cache-control', 'no-store');
     const path = req.url?.split('?')[0];
     const send = (status: number, value: unknown) => { res.writeHead(status); res.end(JSON.stringify(value)); };
-    if (path === '/internal/bots' || path === '/internal/social') {
+    if (path === '/internal/bots' || path === '/internal/social' || path === '/internal/gas') {
       if (options.stopping()) return send(503, { error: { code: 'unavailable', message: 'Worker is stopping.' } });
       if (req.method !== 'POST') return send(405, { error: { code: 'method_not_allowed', message: 'Use POST.' } });
-      const target = path === '/internal/social' ? options.social : options.projects;
-      if (!target || !options.canWrite()) return send(503, { error: { code: 'unavailable', message: 'Arkiv writer is not configured. No command was accepted.' } });
+      const target = path === '/internal/gas' ? options.funding : path === '/internal/social' ? options.social : options.projects;
+      if (!target || (path !== '/internal/gas' && !options.canWrite())) return send(503, { error: { code: 'unavailable', message: 'The requested writer is not configured. No command was accepted.' } });
       try {
         return send(200, await target.execute(await jsonBody(req)));
       } catch (error) {
