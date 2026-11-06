@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RuntimeStatus, Trader } from "./contracts/types";
+import type { Trader } from "./contracts/types";
 import { SessionPanel, useSession } from './auth/Session';
 import Dropdown from './components/Dropdown';
 import Leaderboards from './components/Leaderboards';
@@ -16,7 +16,6 @@ import {
   type GhostChange,
 } from "./lib/ghosts";
 import { getBots } from "./lib/bots";
-import { getRuntime } from "./lib/api";
 
 type Page = "discover" | "ghosts" | "matches" | "bots" | "leaderboards" | "you";
 const pages: Page[] = ["discover", "ghosts", "matches", "leaderboards", "bots", "you"];
@@ -70,12 +69,8 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [registeredTraders, setRegisteredTraders] = useState<Trader[]>([]);
   const [directoryVersion, setDirectoryVersion] = useState(0);
-  const [directoryState, setDirectoryState] = useState("Loading registered traders…");
-  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
-  const [serviceState, setServiceState] = useState("Not checked");
   useEffect(() => {
     const controller = new AbortController();
-    setDirectoryState("Loading registered traders…");
     void getBots(controller.signal).then(value => {
       if (controller.signal.aborted) return;
       setRegisteredTraders(value.profiles.filter(p => p.status === "active").map(p => ({
@@ -83,22 +78,9 @@ export default function App() {
         bio: p.bio, style: p.style, avatar: "", kind: "agent" as const, owner: `${p.owner.slice(0, 6)}…${p.owner.slice(-4)}`,
         operator: p.operator, source: "registered" as const,
       })));
-      setDirectoryState(value.state === "ready" ? "Registered bot profiles · execution history unverified" : value.detail);
-    }).catch(() => { if (!controller.signal.aborted) { setRegisteredTraders([]); setDirectoryState("Trader directory unavailable. Try again from Bots."); } });
+    }).catch(() => { if (!controller.signal.aborted) { setRegisteredTraders([]);  } });
     return () => controller.abort();
   }, [directoryVersion]);
-  useEffect(() => {
-    if (page !== "you") return;
-    const controller = new AbortController();
-    const timer = setTimeout(() => { setRuntime(null); setServiceState("Live service unavailable"); controller.abort(); }, 8000);
-    setServiceState("Checking service…");
-    void getRuntime(controller.signal).then(value => {
-      if (controller.signal.aborted) return;
-      setRuntime(value); setServiceState("API connected · trading gates pending");
-    }).catch(() => { if (!controller.signal.aborted) { setRuntime(null); setServiceState("Live service unavailable"); } })
-      .finally(() => clearTimeout(timer));
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [page]);
   useEffect(() => {
     const onHash = () => {
       setPage(currentPage());
@@ -367,18 +349,6 @@ export default function App() {
                     </p>
                   </div>
                   <SessionPanel />
-                  <div className="settings-group">
-                    <h2>Service connections</h2>
-                    <p>{directoryState}</p>
-                    <p role="status">{serviceState}</p>
-                    {runtime && <ul className="service-list">{runtime.integrations.map(integration => (
-                      <li key={integration.name}>
-                        <strong>{integration.name}</strong>
-                        <span>{integration.verified ? "Verified" : integration.configured ? "Configured · verification pending" : "Not configured"}</span>
-                        <small>{integration.detail}</small>
-                      </li>
-                    ))}</ul>}
-                  </div>
                   <div className="settings-group">
                     <h2>Take Swipr with you</h2>
                     <p>
