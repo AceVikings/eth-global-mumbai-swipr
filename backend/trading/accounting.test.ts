@@ -40,3 +40,17 @@ it('refuses legacy passes whose earlier fills were never journaled',async()=>{
  const store=new CopyAccounting(new TestJournal());
  await expect(store.reserve({...seat,budgetVersion:undefined},'s','q',5000000n)).rejects.toThrow('Rejoin');
 });
+
+it('restores known unsettled orders for background reconciliation while retaining unknown holds',async()=>{
+ const journal=new TestJournal(),store=new CopyAccounting(journal);
+ await store.reserve(seat,'source','quote',5000000n);
+ expect(await store.pendingOrders()).toEqual([]);
+ await store.submitted('quote','order');
+ const restored=new CopyAccounting(journal);
+ expect(await restored.pendingOrders()).toEqual([{wallet:seat.owner,orderId:'order'}]);
+ await restored.reconcile('order',false,0n);
+ expect(await restored.pendingOrders()).toHaveLength(1);
+ await restored.reconcile('order',true,5000000n);
+ expect(await restored.pendingOrders()).toEqual([]);
+ expect(await restored.available(seat)).toBe(false);
+});
