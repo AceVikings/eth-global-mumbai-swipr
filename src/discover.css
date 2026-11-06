@@ -20,8 +20,7 @@
 .dsc-head h1 em { font-style: normal; color: var(--coral); }
 .dsc-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 18px; }
 .dsc-chip {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px;
-  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: var(--muted);
   font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 
@@ -96,8 +95,8 @@
 .dsc-stats dt { color: var(--muted); }
 .dsc-stats dd { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .dsc-markers { display: flex; flex-wrap: wrap; gap: 6px; }
-.dsc-pill { display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 600; }
-.dsc-pill-ghost { background: var(--ghost-soft); border-color: transparent; color: var(--ghost); }
+.dsc-pill { display: inline-flex; align-items: center; min-height: 28px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.dsc-pill-ghost { color: var(--ghost); }
 
 .dsc-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px;
@@ -249,7 +248,7 @@
 .dsc-metric-grid dt { font-size: 12px; color: var(--muted); }
 .dsc-metric-grid dd { margin: 0; font: 700 18px/24px Manrope, sans-serif; font-variant-numeric: tabular-nums; }
 .dsc-rail-bio p { font-size: 13px; line-height: 20px; margin: 6px 0 10px; }
-.dsc-rail-bio .dsc-pill { min-height: 24px; padding-inline: 8px; font-size: 11px; }
+.dsc-rail-bio .dsc-pill { min-height: 24px; font-size: 11px; }
 .dsc-rail-proofs { width: 100%; margin-top: 16px; background: transparent; }
 .dsc-rail-proofs .icon:last-child { margin-left: auto; }
 @media (min-width: 1024px) {

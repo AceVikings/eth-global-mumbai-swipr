@@ -179,14 +179,20 @@ export default function Leaderboards() {
         </details>
       </header>
 
-      <div className="lb-roles"><Tabs label="Leaderboard" value={role} options={ROLES} onChange={setRole} /></div>
       <div className="lb-toolbar">
-        <Tabs label="Show" value={scope} options={SCOPES} onChange={setScope} />
-        <label className="lb-sort">Sort:
-          <select aria-label="Sort leaderboard" value={sort} onChange={e => setSort(e.target.value as Sort)}>
-            {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </label>
+        <Tabs label="Leaderboard" value={role} options={ROLES} onChange={setRole} />
+        <div className="lb-filters">
+          <label className="lb-filter"><span className="lb-sr">Audience</span>
+            <select aria-label="Leaderboard audience" value={scope} onChange={e => setScope(e.target.value as Scope)}>
+              {SCOPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="lb-filter">Sort:
+            <select aria-label="Sort leaderboard" value={sort} onChange={e => setSort(e.target.value as Sort)}>
+              {SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
 
       {notice && <p className={`lb-banner lb-banner-${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>}

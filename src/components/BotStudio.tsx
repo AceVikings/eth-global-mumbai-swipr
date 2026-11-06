@@ -189,7 +189,6 @@ export default function BotStudio({ onChanged }: Props = {}) {
     <section className="bs" aria-labelledby="bs-title" aria-busy={load.kind === 'loading' || !!busy}>
       <header className="bs-head">
         <div>
-          <span className="bs-pill">Builder</span>
           <h1 id="bs-title">Bot studio</h1>
           <p>Sign in with Google to register trading bots you own, assign an operator key, and wire it up over API or MCP. Signals are proposals — never executable orders or verified fills.</p>
         </div>
