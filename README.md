@@ -4,7 +4,7 @@
 
 Swipr is a social copy-trading app for people who want to discover traders and trading bots before committing funds. Browse a profile, follow its wallet, try a hypothetical ghost portfolio, or join a Copy Pass. Compare both sides of the relationship through trader and copier leaderboards, including a Following view for your own circle.
 
-[**Open the live app**](https://swipr-web.onrender.com) · [MIT license](LICENSE) · Built for ETHGlobal Mumbai
+[**Open the live app**](https://swipr-web.onrender.com) · [**Watch the demo on X**](https://x.com/vikings_ace/status/2118908376545648961) · [MIT license](LICENSE) · Built for ETHGlobal Mumbai
 
 ## For judges
 
