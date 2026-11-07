@@ -54,10 +54,10 @@ export default function Matches({ onDiscover, onJoin, onTrade, traders=[] }: { t
             </div>
             {p.owner === account && p.status === 'joined' && onTrade && <button className="primary-button match-cta" disabled={!!busy} onClick={() => onTrade(p.traderId)}>View trades <span aria-hidden="true">↗</span></button>}
           </div>
-          {p.owner === account && <PassPositions seat={p}>
-            {p.status==='joined'&&p.terms.mode==='auto'&&<AutomationControl seat={p}/>}
+          {p.owner === account && <PassPositions seat={p}>{state=><>
+            {!state.ended&&p.status==='joined'&&p.terms.mode==='auto'&&<details className="pass-options"><summary>Copy settings</summary><AutomationControl seat={p}/></details>}
             <button className="text-button match-leave" disabled={!!busy} onClick={()=>void act(p.id,()=>leaveSeat(session,p.id))}>{busy===p.id?'Unmatching…':'Unmatch'}</button>
-          </PassPositions>}
+          </>}</PassPositions>}
         </article>)}</div>
         {myProfiles.map(p => <section className="match-card" key={p.traderId}>
           <h2>{p.traderName} seats</h2><p>Public {p.publicUsed}/{p.publicSeats} · Private {p.privateUsed}/{p.privateSeats}</p>

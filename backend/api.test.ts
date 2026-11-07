@@ -36,3 +36,16 @@ describe('HTTP service gates', () => {
     expect(await response.json()).toMatchObject({ error: { code: 'execution_unavailable' } });
   });
 });
+
+it('routes authenticated preflight to the worker that owns durable pass accounting',async()=>{
+ const wallet=`0x${'a'.repeat(40)}`,forwarded:unknown[]=[];
+ const server=createApi({config:readConfig({FLASH_KEY_EXEC:'test',PRIVY_APP_SECRET:'test',WORKER_URL:'http://127.0.0.1:8788'}),ledger:null,
+  walletProfiles:async()=>[],seatDirectory:async()=>({passes:[],availability:[],invitations:[]}),
+  authenticate:async()=>({userId:'test',wallets:[wallet]}),
+  fetcher:async(url,init)=>{expect(String(url)).toBe('http://127.0.0.1:8788/internal/trading');forwarded.push(JSON.parse(String(init?.body)));return new Response(JSON.stringify({ready:true}));}});
+ running.push(server);await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+ const address=server.address();if(!address||typeof address==='string')throw Error('no listener');
+ const response=await fetch(`http://127.0.0.1:${address.port}/api/trades/preflight`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({wallet,ticket:'reviewed-ticket'})});
+ expect(response.status).toBe(200);expect(await response.json()).toEqual({ready:true});
+ expect(forwarded).toEqual([{action:'preflight',wallet,ticket:'reviewed-ticket'}]);
+});

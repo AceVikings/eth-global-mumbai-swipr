@@ -53,6 +53,7 @@ async function main() {
   // Missing credentials keeps liveness available, but readiness and all writes fail closed.
   const server = createWorkerServer({ social, projects, funding, ens, trading:trades ? {execute:async(raw:unknown)=>{
       const input=raw as {action?:string;wallet:string;ticket:unknown;signature:unknown;orderId?:string;seatId?:string;asset?:'WETH'|'cbBTC';reason?:string;txHash?:unknown};
+      if(input.action==='preflight')return trades.preflight(input.wallet,input.ticket);
       if(input.action==='pass-state')return trades.passState(input.wallet,String(input.seatId||''));
       if(input.action==='pass-exit')return trades.passExit(input.wallet,String(input.seatId||''),input.asset!,String(input.reason||''));
       if(input.action==='pass-settlement')return trades.passSettlement(input.wallet,String(input.seatId||''),input.txHash);
