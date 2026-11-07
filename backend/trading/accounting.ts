@@ -1,3 +1,4 @@
+import {passRecords} from './pass-book';
 import {randomUUID} from 'node:crypto';
 import {withJournalWrite,type Journal,type JournalEvent} from '../arkiv-journal';
 import type {SeatPass} from '../contracts/seats';
@@ -45,10 +46,12 @@ export class CopyAccounting {
   return withJournalWrite(this.journal,async()=>{
    if(!this.journal.canWrite)fail('Copy accounting is unavailable.');
    const snapshot=await this.journal.read(),rows=replay(snapshot.events),step=plan(rows,snapshot.timestampMs);
+   if(step.command?.type==='project.copy.reserve'&&passRecords(snapshot.events).get(step.command.seatId)?.paused)fail('This pass has paused new entries.');
    if(step.command)await this.journal.append({revision:snapshot.nonce+1,id:randomUUID(),at:snapshot.timestampMs,command:validateCopyCommand(step.command)},snapshot.nonce);
    return step.result;
   });
  }
+ async entries(){return [...replay((await this.journal.read()).events).values()];}
  async hasSource(seatId:string,sourceOrderId:string){return [...replay((await this.journal.read()).events).values()].some(r=>r.seatId===seatId&&r.sourceOrderId===sourceOrderId);}
  async pendingOrders(){
   return [...replay((await this.journal.read()).events).values()]
@@ -56,7 +59,7 @@ export class CopyAccounting {
    .map(r=>({wallet:r.wallet,orderId:r.orderId}));
  }
  async available(seat:SeatPass){
-  const snapshot=await this.journal.read(),rows=[...replay(snapshot.events).values()].filter(r=>r.seatId===seat.id&&r.settled!=='0');
+  const snapshot=await this.journal.read();if(passRecords(snapshot.events).get(seat.id)?.paused)return false;const rows=[...replay(snapshot.events).values()].filter(r=>r.seatId===seat.id&&r.settled!=='0');
   return seat.budgetVersion===1&&snapshot.timestampMs<seat.expiresAt&&rows.length<seat.terms.tradeCount&&rows.reduce((n,r)=>n+BigInt(r.settled??r.amount),0n)+5000000n<=BigInt(seat.terms.perTradeUsd*seat.terms.tradeCount)*1000000n;
  }
  reserve(seat:SeatPass,sourceOrderId:string,quoteId:string,value:bigint){

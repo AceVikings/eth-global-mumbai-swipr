@@ -1,3 +1,4 @@
+import {isPassCommand, validatePassCommand, passRecords} from './trading/pass-book';
 import { isCopyCommand, validateCopyCommand } from './trading/accounting';
 import { isSocialCommand, replaySocial, validateSocialCommand } from './social/store';
 import { isProjectCommand, replayProject, validateProjectCommand } from './bots/store';
@@ -128,6 +129,7 @@ function replay(snapshot: JournalSnapshot): State {
   const state = emptyState();
   const ids = new Set<string>();
   if (snapshot.events.length !== snapshot.nonce) throw new Error('ledger_journal_incomplete');
+  passRecords(snapshot.events);
   replaySocial(snapshot.events);
   replayProject(snapshot.events); // validate bot ownership and replay constraints too
   snapshot.events.forEach((event, index) => {
@@ -135,6 +137,9 @@ function replay(snapshot: JournalSnapshot): State {
       throw new Error(`ledger_journal_invalid at revision ${index + 1}`);
     }
     ids.add(event.id);
+    if (isPassCommand(event.command)) {
+      validatePassCommand(event.command); state.revision = event.revision; state.at = event.at; return;
+    }
     if (isCopyCommand(event.command)) {
       validateCopyCommand(event.command); state.revision = event.revision; state.at = event.at; return;
     }
