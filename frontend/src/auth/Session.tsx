@@ -16,6 +16,8 @@ export type Session = {
   /** False when VITE_PRIVY_APP_ID is absent. Nothing can sign in; there is no fake session. */
   configured: boolean;
   ready: boolean;
+  initializationFailed?: boolean;
+  retryLogin?: () => void;
   authenticated: boolean;
   /** Linked EVM wallet used for signing, or null until one is ready. */
   address: Address | null;
@@ -65,6 +67,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Privy needs its remote configuration before rendering children. A cold offline
   // launch must still show the cached shell, without inventing an authenticated user.
   // Once mounted online, retain Privy across connectivity changes and pending writes.
+  const [attempt,setAttempt]=useState(0),[autoLogin,setAutoLogin]=useState(false);
+  const retryLogin=useCallback(()=>{setAutoLogin(true);setAttempt(n=>n+1);setWaitingForNetwork(!navigator.onLine);},[]);
   const [waitingForNetwork, setWaitingForNetwork] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
   useEffect(() => {
     const online = () => setWaitingForNetwork(false);
@@ -72,8 +76,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('online', online);
   }, []);
   if (!appId) return <SessionContext.Provider value={unconfigured}>{children}</SessionContext.Provider>;
-  if (waitingForNetwork) return <SessionContext.Provider value={{...unconfigured, configured:true, ready:false}}>{children}</SessionContext.Provider>;
-  return <PrivyProvider appId={appId} config={config}><PrivySession>{children}</PrivySession></PrivyProvider>;
+  if (waitingForNetwork) return <SessionContext.Provider value={{...unconfigured, configured:true, ready:false,initializationFailed:true,retryLogin}}>{children}</SessionContext.Provider>;
+  return <PrivyProvider key={attempt} appId={appId} config={config}><PrivySession retryLogin={retryLogin} autoLogin={autoLogin}>{children}</PrivySession></PrivyProvider>;
 }
 
 export function useSession(): Session {
@@ -90,14 +94,19 @@ const message = (e: unknown, fallback: string) => {
 };
 
 /** Rendered only inside PrivyProvider, so every Privy hook has its context. */
-function PrivySession({ children }: { children: ReactNode }) {
+function PrivySession({ children,retryLogin,autoLogin }: { children: ReactNode;retryLogin:()=>void;autoLogin:boolean }) {
   const { ready, authenticated, user, getAccessToken } = usePrivy();
   const { wallets, ready: walletsReady } = useWallets();
+  const sessionReady=ready&&(!authenticated||walletsReady);
+  const [initializationFailed,setInitializationFailed]=useState(false);
+  useEffect(()=>{setInitializationFailed(false);if(sessionReady)return;const timer=setTimeout(()=>setInitializationFailed(true),8000);return()=>clearTimeout(timer);},[sessionReady]);
   const [error, setError] = useState<string | null>(null);
   const { login: openLogin } = useLogin({
     onComplete: () => setError(null),
     onError: code => { if (code !== 'exited_auth_flow') setError('Sign-in did not complete. Try again.'); },
   });
+  const loginOpened=useRef(false);
+  useEffect(()=>{if(autoLogin&&ready&&!authenticated&&!loginOpened.current){loginOpened.current=true;openLogin();}},[autoLogin,ready,authenticated,openLogin]);
   const { logout: privyLogout } = useLogout();
   const { exportWallet: openExport } = useExportWallet();
   const { sendTransaction } = useSendTransaction();
@@ -191,7 +200,7 @@ function PrivySession({ children }: { children: ReactNode }) {
   const google = user?.google;
   const email = user?.email?.address;
   const value = useMemo<Session>(() => ({
-    configured: true, ready, authenticated, error, login, logout, signMessage,
+    configured: true, ready:sessionReady, initializationFailed,retryLogin, authenticated, error, login, logout, signMessage,
     address: authenticated ? address : null,
     userLabel: authenticated ? google?.name || google?.email || email || null : null,
     getAccessToken: accessToken, getBaseWallet, getArkivWallet, exportWallet,
@@ -208,8 +217,18 @@ function PrivySession({ children }: { children: ReactNode }) {
       await updateWallet(state.walletId,{additional_signers:state.signers.filter(s=>s.signer_id!==signerId)});
       if(current.current.address!==owner)throw Error('Your account changed.');
     },
-  }), [ready, authenticated, address, google, email, error, login, logout, signMessage, accessToken, getBaseWallet, getArkivWallet, exportWallet, addSigners, updateWallet]);
+  }), [sessionReady, initializationFailed,retryLogin,authenticated, address, google, email, error, login, logout, signMessage, accessToken, getBaseWallet, getArkivWallet, exportWallet, addSigners, updateWallet]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+}
+
+export function SignInButton({className='primary-button'}:{className?:string}){
+ const session=useSession();
+ const label=!session.configured?'Sign-in unavailable':!session.ready?session.initializationFailed?'Retry sign in':'Connecting…':'Sign in';
+ return <button type="button" className={className} disabled={!session.configured||!session.ready&&!session.initializationFailed}
+  onClick={session.ready?session.login:session.retryLogin}>{label}</button>;
+}
+export function SessionPending(){
+ return <section className="content-page"><h1>Your account<span>.</span></h1><p>{useSession().initializationFailed?'Sign-in could not connect. Try again.':'Connecting to your account…'}</p><SignInButton /></section>;
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

@@ -1,3 +1,4 @@
+import {SignInButton,SessionPending} from './auth/Session';
 import { useGhostResults } from './auth/useGhostResults';
 import TradeDesk from './components/TradeDesk';
 import { botPortrait } from './lib/profile-images';
@@ -49,11 +50,8 @@ function readPrefs(): { amount: number; vibe: string } {
 }
 function AccountButton({ onAccount }: { onAccount: () => void }) {
   const session = useSession();
-  return <button type="button" className="account-button"
-    onClick={session.authenticated ? onAccount : session.login}
-    disabled={!session.ready || !session.configured}>
-    {!session.ready ? 'Loading…' : session.authenticated ? 'Your account' : 'Sign in'}
-  </button>;
+  if(!session.ready||!session.authenticated)return <SignInButton className="account-button" />;
+  return <button type="button" className="account-button" onClick={onAccount}>Your account</button>;
 }
 
 export default function App() {
@@ -222,8 +220,9 @@ export default function App() {
                   />
                 </>
               )}
-              {page === "trades" && <TradeDesk initialProfileId={tradeProfileId} />}
-              {page === "ghosts" && (
+              {!session.ready && ["trades","matches","ghosts","bots","you"].includes(page) && <SessionPending />}
+              {session.ready && page === "trades" && <TradeDesk initialProfileId={tradeProfileId} />}
+              {session.ready && page === "ghosts" && (
                 <Ghosts results={ghostResults}
                   ghosts={ghosts}
                   traders={registeredTraders}
@@ -241,10 +240,10 @@ export default function App() {
                   }}
                 />
               )}
-              {page === "matches" && <Matches onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onDiscover={() => navigate("discover")} onJoin={id => { const trader = registeredTraders.find(t => t.id === id); if (trader) setRealTrader(trader); }} />}
-              {page === "bots" && <BotStudio onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onChanged={() => setDirectoryVersion(v => v + 1)} />}
+              {session.ready && page === "matches" && <Matches onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onDiscover={() => navigate("discover")} onJoin={id => { const trader = registeredTraders.find(t => t.id === id); if (trader) setRealTrader(trader); }} />}
+              {session.ready && page === "bots" && <BotStudio onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onChanged={() => setDirectoryVersion(v => v + 1)} />}
               {page === "leaderboards" && <Leaderboards />}
-              {page === "you" && (
+              {session.ready && page === "you" && (
                 <section className="content-page">
                   <span className="eyebrow">MAKE YOURSELF AT HOME</span>
                   <h1>
