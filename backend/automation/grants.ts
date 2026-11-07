@@ -1,15 +1,18 @@
+import type {ExitLimits} from './policy';
 import {createPublicClient}from'@arkiv-network/sdk';
 import {rabdi}from'@arkiv-network/sdk/chains';
 import {and,eq,asc}from'@arkiv-network/sdk/query';
 import {str}from'@arkiv-network/sdk/schema';
 import{http,hexToString,type Hex}from'viem';
 import{WALLET_PROFILE_PROJECT,WALLET_AUTOMATION_SCHEMA}from'../contracts/wallet-profile';
-export type Grant={entityKey?:string;wallet:string;walletId:string;seatId:string;policyId:string;signerId:string;vault:string;expiresAt:number};
+export type Grant={entityKey?:string;wallet:string;walletId:string;seatId:string;policyId:string;signerId:string;vault:string;expiresAt:number;exitLimits?:ExitLimits;entries?:boolean};
 export function parseGrant(raw:unknown):Grant{
  const g=raw as Grant;
  if(!g||!/^0x[0-9a-f]{40}$/i.test(g.wallet)||!/^0x[0-9a-f]{64}$/i.test(g.seatId)||!/^0x[0-9a-f]{40}$/i.test(g.vault)
  ||![g.walletId,g.policyId,g.signerId].every(s=>typeof s==='string'&&/^[a-z0-9]{10,64}$/.test(s))||!Number.isSafeInteger(g.expiresAt))throw Error('Invalid automation permission.');
- return {wallet:g.wallet.toLowerCase(),walletId:g.walletId,seatId:g.seatId.toLowerCase(),policyId:g.policyId,signerId:g.signerId,vault:g.vault,expiresAt:g.expiresAt};
+ if(g.entries!==undefined&&typeof g.entries!=='boolean')throw Error('Invalid entry scope.');
+ if(g.exitLimits&&(!Object.keys(g.exitLimits).length||Object.entries(g.exitLimits).some(([a,v])=>!['WETH','cbBTC'].includes(a)||typeof v!=='string'||!/^[1-9]\d{0,29}$/.test(v))))throw Error('Invalid exit limits.');
+ return {wallet:g.wallet.toLowerCase(),walletId:g.walletId,seatId:g.seatId.toLowerCase(),policyId:g.policyId,signerId:g.signerId,vault:g.vault,expiresAt:g.expiresAt,...(g.exitLimits?{exitLimits:g.exitLimits,entries:g.entries===true}:{})};
 }
 export function createGrants(options:{accessKey?:string;rpcUrl?:string}){
  const client=createPublicClient({chain:rabdi({accessKey:options.accessKey||''}),transport:http(options.rpcUrl,{retryCount:0,timeout:10000})});

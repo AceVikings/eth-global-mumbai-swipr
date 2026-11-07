@@ -46,6 +46,7 @@ async function main() {
   const automation = config.automation.signerId && config.automation.key && config.privyAppId && config.privySecret && directory && trades && config.flashKey
     ? createAutomation({control:createPrivyControl({appId:config.privyAppId,appSecret:config.privySecret,authorizationKey:config.automation.key}),signerId:config.automation.signerId,trades,flash:createFlashClient({apiKey:config.flashKey,fetch}),profiles:directory,seats:createSeatDirectory(config.arkiv),grants:createGrants(config.arkiv)}) : null;
   let lastAutomation = 0;
+  let automationTask:Promise<void>|null=null;
   const names = directory ? createEnsService({rpcUrl:config.sepoliaRpc,rootName:config.ensRootName,profiles:directory,stats:trades&&config.flashKey?createEnsStats(createFlashClient({apiKey:config.flashKey,fetch}),trades):undefined}) : null;
   const ens = directory && names && config.ensRegistrarKey ? createEnsRegistrar({key:config.ensRegistrarKey as `0x${string}`,rootName:config.ensRootName,rpcUrl:config.sepoliaRpc,profiles:directory,snapshot:names.snapshot}) : null;
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
@@ -89,21 +90,22 @@ async function main() {
             await ledger.failJob(job.id, job.leaseToken!, 'provider_probe_failed', 10000);
           }
         }
-        if(Date.now()-lastAutomation>30000){
-          lastAutomation=Date.now();
-          // Settle known copy holds even after logout, permission revocation or pass expiry.
-          // Unknown submissions retain their hold; checking status never resubmits an order.
-          if(accounting&&trades)for(const pending of (await accounting.pendingOrders()).slice(0,20)){
-            try{await trades.status(pending.wallet,pending.orderId);}catch{/* Retry verification next cycle. */}
-          }
-          if(accounting&&trades){
-            const entries=await accounting.entries();
-            const seats=new Map(entries.map(e=>[e.seatId,e.wallet]));
-            for(const [seatId,wallet] of seats){try{await trades.passState(wallet,seatId);}catch{/* Missing marks never trigger an unpriced exit. */}}
-          }
-          if(automation){const result=await automation.tick();if(result.failed||result.submitted)console.log(JSON.stringify({service:'worker',code:'automation_cycle',...result}));}
-        }
         lastHealthy = Date.now();
+        // Slow provider/receipt reads must not prevent independent journal health probes.
+        // Only one automation cycle runs per process; durable holds fence other replicas.
+        if(!automationTask&&Date.now()-lastAutomation>30000){
+          lastAutomation=Date.now();
+          automationTask=(async()=>{
+            if(accounting&&trades)for(const pending of (await accounting.pendingOrders()).slice(0,20)){
+              try{await trades.status(pending.wallet,pending.orderId);}catch{/* Reconcile next cycle; never resubmit. */}
+            }
+            if(accounting&&trades){
+              const seats=new Map((await accounting.entries()).map(e=>[e.seatId,e.wallet]));
+              for(const [seatId,wallet] of seats){try{await trades.passState(wallet,seatId);}catch{/* Missing marks block exits. */}}
+            }
+            if(automation){const result=await automation.tick();if(result.failed||result.submitted)console.log(JSON.stringify({service:'worker',code:'automation_cycle',...result}));}
+          })().catch(()=>console.error(JSON.stringify({service:'worker',code:'automation_cycle_failed'}))).finally(()=>{automationTask=null;});
+        }
       } catch { console.error(JSON.stringify({ severity: 'ERROR', service: 'worker', code: 'worker_cycle_failed' })); }
       if (!stopping) await delay(2000);
     }

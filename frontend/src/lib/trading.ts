@@ -3,7 +3,7 @@ import type { Session } from '../auth/Session';
 import { apiBase } from './bots';
 export type TradeQuote = {
   ticket: string; quoteId: string; integratorFeeBps: string; expiresAt: number; estimatedFeeNotional: string | null;
-  intent: { side: 'buy' | 'sell'; funder: string; asset: 'WETH' | 'cbBTC'; qty: string; sharedPrice: string };
+  intent: { side: 'buy' | 'sell'; orderType?:'market'|'limit'; funder: string; asset: 'WETH' | 'cbBTC'; qty: string; sharedPrice: string };
   typedData: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, unknown> };
   approval: null | { to: string; data: string; value: string; chainId: number };
 };
@@ -52,7 +52,7 @@ export async function sendReviewedTrade(session: Session, quote: TradeQuote, pro
     if (!confirmed) throw new TradeError('Approval is still pending. No order was submitted; check your wallet before continuing.');
   }
   valid();
-  progress(`Review and sign your limit ${quote.intent.side} in your wallet.`);
+  progress(`Review and sign your ${quote.intent.orderType ?? 'limit'} ${quote.intent.side} in your wallet.`);
   const signature = await provider.request({ method: 'eth_signTypedData_v4', params: [address, JSON.stringify(quote.typedData)] });
   valid();
   progress('Submitting your signed order once…');

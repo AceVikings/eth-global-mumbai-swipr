@@ -50,3 +50,11 @@ it('reuses the exact existing pass allowance without another approval transactio
  expect(provider.request.mock.calls.some(([args])=>args.method==='eth_sendTransaction')).toBe(false);
  expect(addSigner).toHaveBeenCalledOnce();
 });
+it('requires explicit exit scope and approves only its bounded current holdings',async()=>{
+ const scoped={...grant,expiresAt:seat.expiresAt+7*86400000,exitLimits:{WETH:'2000000000000000'}};
+ f.request.mockImplementation(async(_s,path)=>path.endsWith('/prepare')?scoped:{grants:[{...scoped,active:true}],configured:true});
+ await enableAutomation(session,{...seat,terms:{...seat.terms,mode:'tap'}},()=>{},true);
+ const calls=provider.request.mock.calls.filter(([a])=>a.method==='eth_sendTransaction');
+ expect(calls).toHaveLength(1);expect(calls[0][0].params[0].to).toBe('0x4200000000000000000000000000000000000006');
+ expect(f.request.mock.calls[0][2]).toMatchObject({exits:true});
+});

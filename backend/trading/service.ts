@@ -1,3 +1,4 @@
+import {createHistorySource} from './history-source';
 import {PassBook} from './pass-book';
 import {createPassManager} from './pass-manager';
 import type { CopyAccounting } from './accounting';
@@ -86,7 +87,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     const seat = directory.passes.find(p => p.id === input.seatId && p.owner === wallet.toLowerCase() && p.traderId === profile!.id && p.status === 'joined');
     if (!seat || seat.terms.perTradeUsd < 5) fail('Join an available seat before copying this trader.');
     if ((seat!.terms.mode === 'auto' && !options.allowAuto) || (!passes && (seat!.terms.safetyNetBps > 0 || seat!.terms.liquidateOnBreakup))) fail('This pass requires protected or automatic execution. Those permissions are not ready; no order was submitted.');
-    if(passes && (await passes.snapshot(wallet,seat!.id)).paused)fail('This pass has paused new entries.');
+    if(passes){const state=await passes.snapshot(wallet,seat!.id);if(state.paused||state.pending)fail('This pass is paused or waiting for its previous order.');}
     if (!input.sourceOrderId) fail('Choose a confirmed trader order to copy.');
     const source = await order(input.sourceOrderId!, profile!.owner);
     const token = source.row.targetAsset as { address?: unknown } | undefined;
@@ -226,14 +227,19 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       let cursor: string | undefined;
       for (let page = 0; page < 50; page++) {
         const history = await flash.listOrders(wallet, cursor);
+        const ids:string[]=[];
         for (const row of history.orders) {
           if (!same(row.funderAddress, wallet)) fail('Order history contains another wallet.');
           const orderId = id(row.orderId ?? row.id);
-          if (seenOrders.has(orderId)) continue; seenOrders.add(orderId);
-          const { result } = await order(orderId, wallet);
-          const verified = await verifyFills(result, wallet);
-          if (verified.length !== result.fills.length) fail('History still has unverified settlements.');
-          fills.push(...verified);
+          if (seenOrders.has(orderId)) continue; seenOrders.add(orderId);ids.push(orderId);
+        }
+        for(let start=0;start<ids.length;start+=4){
+          const batch=await Promise.all(ids.slice(start,start+4).map(async(orderId)=>{
+            const {result}=await order(orderId,wallet),verified=await verifyFills(result,wallet);
+            if(verified.length!==result.fills.length)fail('History still has unverified settlements.');
+            return verified;
+          }));
+          fills.push(...batch.flat());
         }
         if (!history.hasMore) return fills;
         if (!history.nextPageToken || seenPages.has(history.nextPageToken)) fail('Order history pagination could not be verified.');
@@ -267,7 +273,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
   };
   if(options.passBook && options.accounting)passes=createPassManager({book:options.passBook,accounting:options.accounting,
     seat:async(wallet,id)=>{const directory=await options.seats(wallet,await options.profiles());const seat=directory.passes.find(p=>p.id===id && p.owner===wallet);if(!seat)fail('This pass belongs to another wallet or was deleted.');return seat!;},
-    status:service.status,history:service.completeHistory,quote:flash.quote,
+    status:service.status,history:createHistorySource(service),quote:flash.quote,
     chain:{balance:(wallet,asset)=>chain.readContract({address:TOKENS[asset].address,abi:erc20Abi,functionName:'balanceOf',args:[wallet as Address]}),
       transfer:async(hash)=>{const [tx,receipt,head]=await Promise.all([chain.getTransaction({hash:hash as Hex}),chain.getTransactionReceipt({hash:hash as Hex}),chain.getBlockNumber({cacheTime:0})]);return {from:tx.from,to:tx.to??'',input:tx.input,value:tx.value,success:receipt.status==='success',confirmations:Number(head-receipt.blockNumber+1n),timestamp:Number((await chain.getBlock({blockNumber:receipt.blockNumber})).timestamp)*1000};}}});
   return {...service,

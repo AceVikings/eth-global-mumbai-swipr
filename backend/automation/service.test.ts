@@ -9,8 +9,8 @@ const seat={id:`0x${'11'.repeat(32)}`,owner:wallet,traderId:`0x${'33'.repeat(32)
 const grant={wallet,walletId:'wallet123456',seatId:seat.id,policyId:'policy123456',signerId:'signer123456',vault:`0x${'55'.repeat(20)}`,expiresAt:seat.expiresAt};
 const td={domain:FLASH_DOMAIN,types:{EIP712Domain:FLASH_DOMAIN_TYPES,FlashOrder:FLASH_ORDER_TYPES},primaryType:'FlashOrder',message:{vault:grant.vault,swapper:wallet,recipient:wallet,fromToken:TOKENS.USDC.address,toToken:TOKENS.WETH.address,fromAmount:'5000000',salt:'1',deadline:String(Math.floor(seat.expiresAt/1000))}};
 let currentSeat:any,currentGrant:any,policy:any,signers:any,quote:any;
-const submit=vi.fn(),preflight=vi.fn(),quoteFn=vi.fn(),request=vi.fn();
-const build=()=>createAutomation({control:{request,publicKey:null},signerId:grant.signerId,trades:{quote:quoteFn,preflight,submit} as any,
+const passState=vi.fn(),passExit=vi.fn(),submit=vi.fn(),preflight=vi.fn(),quoteFn=vi.fn(),request=vi.fn();
+const build=()=>createAutomation({control:{request,publicKey:null},signerId:grant.signerId,trades:{quote:quoteFn,preflight,submit,passState,passExit} as any,
  flash:{quote:async()=>({...quote,typedData:{...td,message:{...td.message,fromToken:TOKENS.WETH.address,toToken:TOKENS.USDC.address,fromAmount:'2000000000000000'}}}),listOrders:async()=>({orders:[{orderId:'source'}]}),getOrder:async()=>({raw:{order:{side:'buy',orderType:'limit',expiresAt:new Date(Date.now()+60000).toISOString(),targetAsset:{address:TOKENS.WETH.address}}}})} as any,
  profiles:async()=>[],seats:async()=>({passes:currentSeat?[currentSeat]:[],invitations:[],availability:[]}),grants:async()=>currentGrant?[currentGrant]:[]});
 beforeEach(()=>{
@@ -69,4 +69,28 @@ it('can prepare permissions before a fresh trader order without signing or submi
  quoteFn.mockRejectedValue(Error('no trader fill'));
  expect(await build().prepare({userId:'did:privy:test',wallets:[wallet]},wallet,seat.id)).toMatchObject(grant);
  expect(submit).not.toHaveBeenCalled();expect(preflight).not.toHaveBeenCalled();expect(request.mock.calls.some(([p])=>p.endsWith('/rpc'))).toBe(false);
+});
+
+it('uses an explicitly approved exit scope after entry expiry without opening a new buy',async()=>{
+ currentSeat.expiresAt=Date.now()-60000;currentSeat.status='expired';
+ currentGrant={...grant,expiresAt:currentSeat.expiresAt+7*86400000,exitLimits:{WETH:'2000000000000000'}};
+ policy=copyPolicy(currentSeat,grant.vault,currentGrant.exitLimits,currentGrant.entries===true);
+ const sell={...td,message:{...td.message,fromToken:TOKENS.WETH.address,toToken:TOKENS.USDC.address,fromAmount:'1000000000000000',deadline:String(Math.floor(Date.now()/1000)+600)}};
+ passState.mockResolvedValue({plans:[{asset:'WETH',units:'1000000000000000',reason:'cashout'}]});
+ passExit.mockResolvedValue({...quote,typedData:sell});
+ request.mockImplementation(async(path:string)=>{
+  if(path===`/wallets/${grant.walletId}`)return {address:wallet,additional_signers:signers};
+  if(path===`/policies/${grant.policyId}`)return policy;
+  if(path.endsWith('/rpc'))return {data:{signature:await account.signTypedData(sell as never)}};
+  throw Error('Unexpected request');
+ });
+ expect(await build().tick()).toEqual({checked:1,submitted:1,failed:0});
+ expect(passExit).toHaveBeenCalledWith(wallet,seat.id,'WETH','cashout');expect(quoteFn).not.toHaveBeenCalled();
+});
+it('does not sign an exit larger than the owner-approved holdings',async()=>{
+ currentGrant={...grant,expiresAt:currentSeat.expiresAt+7*86400000,exitLimits:{WETH:'1'}};
+ policy=copyPolicy(currentSeat,grant.vault,currentGrant.exitLimits,currentGrant.entries===true);
+ currentSeat.status='expired';
+ passState.mockResolvedValue({plans:[{asset:'WETH',units:'2',reason:'stop'}]});
+ await build().tick();expect(passExit).not.toHaveBeenCalled();expect(submit).not.toHaveBeenCalled();
 });

@@ -66,7 +66,7 @@ export function createPassManager(o: { book: PassBook; accounting: CopyAccountin
    const value = toUnits(output as string,6); pnl += value-position.cost;
    positions.push({asset,units:position.units.toString(),cost:position.cost.toString(),value:value.toString(),stop:seat.terms.safetyNetBps>0 && value*10000n<=position.cost*BigInt(10000-seat.terms.safetyNetBps)});
   }
-  await o.book.mark(seatId,pnl,BigInt(seat.terms.breakupUsd)*1000000n,end || Date.now()>=seat.expiresAt);
+  await o.book.mark(seatId,pnl,BigInt(seat.terms.breakupUsd)*1000000n,end || Date.now()>=seat.expiresAt,row.fills.length);
   row = await o.book.state(seatId);
   const plans: ExitPlan[] = row.ended || row.paused && seat.terms.liquidateOnBreakup
    ? positions.map(p=>({asset:p.asset,units:p.units,reason:'cashout'}))
@@ -92,6 +92,9 @@ export function createPassManager(o: { book: PassBook; accounting: CopyAccountin
     data:encodeFunctionData({abi:erc20Abi,functionName:'transfer',args:[s.seat.traderOwner as Address,amount]}),value:'0x0'};
   },
   async settle(wallet: string,seatId: string,hash: unknown) {
+   await o.seat(wallet,seatId);
+   const existing=(await o.book.state(seatId)).settlement;
+   if(existing){if(existing.txHash!==(hash?String(hash).toLowerCase():null))return fail('This pass already has another settlement.');return {seatId,amount:existing.amount,txHash:existing.txHash,settled:true};}
    const prepared = await this.prepareSettlement(wallet,seatId),amount = BigInt(prepared.amount),row=await o.book.state(seatId);
    if (amount>0n) {
     if (typeof hash!=='string'||!/^0x[0-9a-f]{64}$/i.test(hash)) return fail('Provide your confirmed USDC settlement transaction.');

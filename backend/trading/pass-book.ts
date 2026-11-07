@@ -120,9 +120,11 @@ export class PassBook {
    return { command: { type: 'project.lifecycle.fill', seatId, orderId, fill }, result: undefined };
   });
  }
- mark(seatId: string, pnl: bigint, threshold: bigint, end = false) {
+ mark(seatId: string, pnl: bigint, threshold: bigint, end = false, expectedFills?:number) {
   return this.write<void>(rows => {
-   const row = rows.get(seatId) ?? empty(), high = pnl > row.highWater ? pnl : row.highWater;
+   const row = rows.get(seatId) ?? empty();
+   if(expectedFills!==undefined&&row.fills.length!==expectedFills)fail('Pass fills changed while valuing holdings.');
+   const high = pnl > row.highWater ? pnl : row.highWater;
    const paused = row.paused || end || pnl <= high - threshold;
    if (high === row.highWater && paused === row.paused && (!end || row.ended)) return { result: undefined };
    return { command: { type: 'project.lifecycle.mark', seatId, pnl: pnl.toString(), paused, ended: row.ended || end }, result: undefined };

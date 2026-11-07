@@ -10,7 +10,7 @@ import '../pass-setup.css';
 type Props = { trader: Trader; onClose: () => void };
 type Step = 'edit' | 'review' | 'wallet';
 type Draft = {
-  count: string; durationDays: Terms['durationDays']; mode: Mode;
+  count: string; breakup: string; stopBps: number; liquidate: boolean; durationDays: Terms['durationDays']; mode: Mode;
 };
 type Frozen = { terms: Terms; frozenAt: number };
 
@@ -26,7 +26,7 @@ const when = (ms: number) =>
 
 function freshDraft(): Draft {
   return {
-    count: String(DEFAULT_TERMS.tradeCount), durationDays: DEFAULT_TERMS.durationDays, mode: 'tap',
+    count: String(DEFAULT_TERMS.tradeCount), breakup:String(DEFAULT_TERMS.breakupUsd),stopBps:0,liquidate:false,durationDays: DEFAULT_TERMS.durationDays, mode: 'tap',
   };
 }
 
@@ -39,7 +39,7 @@ function loadDraft(traderId: string): { draft: Draft; savedAt: number } | null {
     return {
       savedAt: d.savedAt,
       draft: {
-        count: String(d.count), durationDays: d.durationDays, mode: d.mode === 'auto' ? 'auto' : 'tap',
+        count: String(d.count),breakup:String(d.breakup??DEFAULT_TERMS.breakupUsd),stopBps:[0,500,1000,2000].includes(d.stopBps)?d.stopBps:0,liquidate:d.liquidate===true,durationDays: d.durationDays, mode: d.mode === 'auto' ? 'auto' : 'tap',
       },
     };
   } catch {
@@ -128,7 +128,8 @@ export default function PassSetup({ trader, onClose }: Props) {
   const amount = 5;
   const count = parseInt_(d.count, 1, 20);
   const cap = amount && count ? amount * count : null;
-  const breakup = Math.min(DEFAULT_TERMS.breakupUsd, cap ?? DEFAULT_TERMS.breakupUsd);
+  const breakup = parseInt_(d.breakup,1,cap??100);
+  const drawdown=breakup??Math.min(DEFAULT_TERMS.breakupUsd,cap??DEFAULT_TERMS.breakupUsd);
   const valid = amount === 5 && count !== null;
 
   useEffect(() => {
@@ -151,8 +152,8 @@ export default function PassSetup({ trader, onClose }: Props) {
       frozenAt: Date.now(),
       terms: {
         perTradeUsd: amount, tradeCount: count, durationDays: d.durationDays, mode: d.mode,
-        breakupUsd: breakup, safetyNetBps: 0,
-        profitShareBps: DEFAULT_TERMS.profitShareBps, liquidateOnBreakup: false,
+        breakupUsd: drawdown, safetyNetBps: d.stopBps,
+        profitShareBps: DEFAULT_TERMS.profitShareBps, liquidateOnBreakup: d.liquidate,
       },
     });
     setAck(false);
@@ -219,8 +220,14 @@ export default function PassSetup({ trader, onClose }: Props) {
                 { value: 'auto', label: 'Auto-copy', sub: 'Requires separate trading permissions' },
               ]} />
             {d.mode === 'auto' && (
-              <p className="ps-note ps-note-warn">After joining, enable automatic entries with a bounded wallet permission in Matches. Exits remain separately reviewed.</p>
+              <p className="ps-note ps-note-warn">After joining, enable automatic entries with a bounded wallet permission in Matches. Enable exits for current holdings after your first fill.</p>
             )}
+            <details><summary>Risk &amp; trader share</summary>
+              <Stepper id="ps-breakup" label="Pause after drawdown" prefix="$" value={String(drawdown)} min={1} max={cap??100} hint="From this pass’s best P&L, including open holdings." error={null} onChange={v=>set('breakup',v)} />
+              <Choice legend="Protective exit" name="ps-stop" value={d.stopBps} options={[{value:0,label:'Off'},{value:500,label:'5%'},{value:1000,label:'10%'},{value:2000,label:'20%'}]} onChange={v=>set('stopBps',v)} />
+              <label className="ps-check"><input type="checkbox" checked={d.liquidate} onChange={e=>set('liquidate',e.target.checked)} /><span>Cash out when drawdown is reached</span></label>
+              <p className="ps-hint">Exits require review until you enable the separate permission for your holdings. Trader share: 5% of positive realized pass profit, paid once at the end; totals below $0.05 are waived.</p>
+            </details>
             <div className="ps-actions">
               <button type="submit" className="ps-primary" disabled={!valid}>Review Copy Pass<span aria-hidden="true">→</span></button>
               <button type="button" className="ps-secondary" onClick={saveDraft}>Save local draft</button>
@@ -238,6 +245,9 @@ export default function PassSetup({ trader, onClose }: Props) {
                 <span>per copied trade · {t.tradeCount} {t.tradeCount === 1 ? 'trade' : 'trades'} · {t.mode === 'tap' ? 'tap to copy' : 'auto-copy'}</span>
               </div>
               <dl className="ps-panel">
+                <Row label="Pause drawdown">{usd(t.breakupUsd)}</Row>
+                <Row label="Protective exit">{t.safetyNetBps?`${t.safetyNetBps/100}% · separate exit permission`:'Off'}</Row>
+                <Row label="Trader share">5% of positive realized profit</Row>
                 <Row label="Requested budget">{usd(t.perTradeUsd * t.tradeCount)}</Row>
                 <Row label="Pass length">{t.durationDays} {t.durationDays === 1 ? 'day' : 'days'} from joining</Row>
               </dl>

@@ -39,3 +39,7 @@ export const WALLET_AUTOMATION_SCHEMA = 'swipr.wallet-automation.v1';
 export const WalletAutomationSchema = defineSchema(WALLET_AUTOMATION_SCHEMA, {
   project: str().indexed(), grant: bytes(),
 });
+
+export const WalletSettlementSchema = defineSchema('swipr.wallet-settlement.v1', {
+  project: str().indexed(), seatId: str().indexed(), receipt: bytes(),
+});

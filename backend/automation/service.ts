@@ -5,7 +5,7 @@ import type{BotProfile}from'../contracts/bots';
 import type{SeatPass,SeatDirectory}from'../contracts/seats';
 import type{TradingService}from'../trading/service';
 import{createFlashClient,TOKENS,validateTypedData,SWIPR_INTEGRATOR_FEE_BPS}from'../providers/flash';
-import{copyPolicy,canonical,comparableRules}from'./policy';
+import{copyPolicy,canonical,comparableRules,EXIT_GRACE_MS,type ExitLimits}from'./policy';
 import{parseGrant,type Grant}from'./grants';
 import{createPrivyControl}from'./privy';
 export function createAutomation(options:{control:ReturnType<typeof createPrivyControl>;signerId:string;trades:TradingService;flash:ReturnType<typeof createFlashClient>;
@@ -25,10 +25,10 @@ export function createAutomation(options:{control:ReturnType<typeof createPrivyC
  };
  const check=async(g:Grant,seat:SeatPass)=>{
   const wallet=await control.request(`/wallets/${g.walletId}`);
-  if(wallet.address?.toLowerCase()!==seat.owner||g.wallet!==seat.owner||g.seatId!==seat.id||g.expiresAt!==seat.expiresAt||g.signerId!==options.signerId)throw Error('Wallet permission mismatch.');
+  if(wallet.address?.toLowerCase()!==seat.owner||g.wallet!==seat.owner||g.seatId!==seat.id||g.expiresAt!==seat.expiresAt+(g.exitLimits?EXIT_GRACE_MS:0)||g.signerId!==options.signerId)throw Error('Wallet permission mismatch.');
   const signer=wallet.additional_signers?.find((s:any)=>s.signer_id===g.signerId);
   if(!signer||canonical(signer.override_policy_ids??[])!==canonical([g.policyId]))throw Error('This signer is not enabled.');
-  const policy=await control.request(`/policies/${g.policyId}`),expected=copyPolicy(seat,g.vault);
+  const policy=await control.request(`/policies/${g.policyId}`),expected=copyPolicy(seat,g.vault,g.exitLimits,g.exitLimits?g.entries===true:true);
   if(policy.version!==expected.version||policy.chain_type!==expected.chain_type||canonical(comparableRules(policy.rules))!==canonical(comparableRules(expected.rules)))throw Error('Wallet policy does not match this pass.');
  };
  return{
@@ -43,18 +43,21 @@ export function createAutomation(options:{control:ReturnType<typeof createPrivyC
   async state(wallet:string){
    const profiles=await options.profiles(),directory=await options.seats(wallet,profiles),rows=[];
    for(const grant of (await options.grants()).filter(g=>g.wallet===wallet)){
-    const seat=directory.passes.find(p=>p.id===grant.seatId&&p.owner===wallet&&p.status==='joined');
+    const seat=directory.passes.find(p=>p.id===grant.seatId&&p.owner===wallet&&(p.status==='joined'||!!grant.exitLimits));
     let active=false;try{if(seat&&grant.expiresAt>Date.now()){await check(grant,seat);active=true;}}catch{}
     rows.push({...grant,active});
    }
    return {grants:rows};
   },
-  async prepare(identity:Identity,wallet:string,seatId:string){
+  async prepare(identity:Identity,wallet:string,seatId:string,withExits=false){
    const profiles=await options.profiles(),directory=await options.seats(wallet,profiles);
-   const seat=directory.passes.find(p=>p.id===seatId&&p.owner===wallet&&p.status==='joined');
-   if(!seat||seat.terms.mode!=='auto'||seat.budgetVersion!==1)throw new ApiError(409,'permission_required','Join a current auto-copy pass first.');
+   const seat=directory.passes.find(p=>p.id===seatId&&p.owner===wallet&&(p.status==='joined'||withExits));
+   if(!seat||(!withExits&&seat.terms.mode!=='auto')||seat.budgetVersion!==1||seat.expiresAt+EXIT_GRACE_MS<=Date.now())throw new ApiError(409,'permission_required','Join a current auto-copy pass first.');
    const existing=(await options.grants()).filter(g=>g.wallet===wallet&&g.expiresAt>Date.now());
    if(existing.some(g=>g.seatId!==seatId))throw new ApiError(409,'permission_required','Stop your other automatic pass before enabling this one.');
+   const active:Grant[]=[];
+   for(const g of existing.filter(g=>g.seatId===seatId)){try{await check(g,seat);active.push(g);}catch{/* A revoked record cannot restore authority. */}}
+   if(!withExits&&active.some(g=>g.exitLimits))throw new ApiError(409,'permission_required','Stop the current exit permission before changing entry permissions.');
    // Permission setup is independent of a trader's short copy window. This unsigned
    // authenticated sell quote only discovers Flash's vault. It is never signed;
    // the resulting policy permits only buys and the worker still requires a fill.
@@ -64,10 +67,13 @@ export function createAutomation(options:{control:ReturnType<typeof createPrivyC
    const user=await control.request(`/users/${encodeURIComponent(identity.userId)}`);
    const linked=user.linked_accounts?.find((a:any)=>a.type==='wallet'&&a.wallet_client_type==='privy'&&a.address?.toLowerCase()===wallet&&a.id);
    if(!linked)throw new ApiError(409,'embedded_wallet_required','Automatic copying needs your embedded wallet.');
-   const vault=String(quote.typedData.message.vault),policy=copyPolicy(seat,vault);
+   let exitLimits:ExitLimits|undefined;
+   if(withExits){const state=await trades.passState(wallet,seatId);exitLimits=Object.fromEntries(state.positions.map(p=>[p.asset,p.units]));if(!Object.keys(exitLimits).length)throw new ApiError(409,'no_positions','There are no current pass holdings to authorize.');}
+   const entries=withExits?active.some(g=>!g.exitLimits||g.entries===true):true;
+   const vault=String(quote.typedData.message.vault),policy=copyPolicy(seat,vault,exitLimits,entries);
    const key=createHash('sha256').update(`${wallet}:${seatId}:${canonical(policy)}`).digest('hex');
    const created=await control.request('/policies',{...policy,owner:{user_id:identity.userId}},key);
-   return parseGrant({wallet,walletId:linked.id,seatId,policyId:created.id,signerId:options.signerId,vault,expiresAt:seat.expiresAt});
+   return parseGrant({wallet,walletId:linked.id,seatId,policyId:created.id,signerId:options.signerId,vault,expiresAt:seat.expiresAt+(exitLimits?EXIT_GRACE_MS:0),...(exitLimits?{exitLimits,entries}:{})});
   },
   async tick(){
    const profiles=await options.profiles(),grants=await options.grants();
@@ -76,10 +82,17 @@ export function createAutomation(options:{control:ReturnType<typeof createPrivyC
     result.checked++;
     try{
      if(g.expiresAt<=Date.now())continue;
-     const seat=(await options.seats(g.wallet,profiles)).passes.find(p=>p.id===g.seatId&&p.owner===g.wallet&&p.status==='joined');
-     if(!seat||seat.terms.mode!=='auto')continue;
+     const seat=(await options.seats(g.wallet,profiles)).passes.find(p=>p.id===g.seatId&&p.owner===g.wallet&&(p.status==='joined'||!!g.exitLimits));
+     if(!seat)continue;
      await check(g,seat);
-     const quote=await source(seat);if(!quote||String(quote.typedData.message.vault).toLowerCase()!==g.vault.toLowerCase())continue;
+     let quote;
+     if(g.exitLimits){
+       const state=await trades.passState(g.wallet,seat.id);
+       const plan=state.plans.find(p=>BigInt(p.units)<=BigInt(g.exitLimits?.[p.asset]??'0'));
+       if(plan)quote=await trades.passExit(g.wallet,seat.id,plan.asset,plan.reason);
+     }
+     if(!quote&&(!g.exitLimits||g.entries===true)&&seat.status==='joined'&&seat.terms.mode==='auto'&&seat.expiresAt>Date.now())quote=await source(seat);
+     if(!quote||String(quote.typedData.message.vault).toLowerCase()!==g.vault.toLowerCase())continue;
      await trades.preflight(g.wallet,quote.ticket);
      const td=quote.typedData;
      const signed=await control.request(`/wallets/${g.walletId}/rpc`,{method:'eth_signTypedData_v4',params:{typed_data:{domain:td.domain,types:td.types,primary_type:td.primaryType,message:td.message}}},quote.quoteId,true);

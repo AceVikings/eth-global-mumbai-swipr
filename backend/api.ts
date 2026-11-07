@@ -191,7 +191,7 @@ export function createApi({ config, ledger, projects = null, social = null, wall
       if (req.method === 'POST' && path === '/api/automation/prepare') {
         const identity=await authenticate(req.headers.authorization),input=await body(req),wallet=requireWallet(identity,input.wallet);
         if(!automation)throw new ApiError(503,'permissions_unavailable','Automatic copying is not configured.');
-        return send(200,await automation.prepare(identity,wallet,String(input.seatId||'')));
+        return send(200,await automation.prepare(identity,wallet,String(input.seatId||''),input.exits===true));
       }
       if (path.startsWith('/api/trades/')) {
         const identity = await authenticate(req.headers.authorization);

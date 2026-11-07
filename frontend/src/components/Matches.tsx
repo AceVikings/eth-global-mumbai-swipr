@@ -1,3 +1,4 @@
+import PassPositions from './PassPositions';
 import AutomationControl from './AutomationControl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from '../auth/Session';
@@ -45,6 +46,7 @@ export default function Matches({ onDiscover, onJoin, onTrade }: { onDiscover: (
           <dl><div><dt>Per trade</dt><dd>${p.terms.perTradeUsd}</dd></div><div><dt>Trades</dt><dd>{p.terms.tradeCount}</dd></div><div><dt>Budget</dt><dd>${p.terms.perTradeUsd * p.terms.tradeCount}</dd></div><div><dt>Ends</dt><dd>{new Date(p.expiresAt).toLocaleDateString()}</dd></div></dl>
           {p.owner === account && p.status === 'joined' && p.terms.mode === 'auto' && <AutomationControl seat={p} />}
           {p.owner === account && p.status === 'joined' && onTrade && <button className="primary-button" disabled={!!busy} onClick={() => onTrade(p.traderId)}>Copy a trade</button>}
+          {p.owner === account && <PassPositions seat={p} />}
           {p.owner === account && <button className="secondary-button" disabled={!!busy} onClick={() => void act(p.id, () => leaveSeat(session, p.id))}>{busy === p.id ? 'Leaving…' : 'Leave seat'}</button>}
         </article>)}</div>
         {myProfiles.map(p => <section className="match-card" key={p.traderId}>

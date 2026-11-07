@@ -15,3 +15,9 @@
 
 .match-automation { display: grid; justify-items: start; gap: 12px; margin-top: 16px; }
 .match-automation p { margin: 0; }
+
+.pass-positions { margin: 20px 0; border-top: 1px solid var(--border, #e2dfda); padding-top: 16px; }
+.pass-positions summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.pass-positions > p { margin: 12px 0; }
+.pass-position { margin: 18px 0; }
+.pass-positions .match-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
