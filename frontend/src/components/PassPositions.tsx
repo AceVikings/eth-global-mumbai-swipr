@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatUnits } from 'viem';
 import { useSession } from '../auth/Session';
 import type { SeatPass } from '../contracts/seats';
@@ -6,7 +6,7 @@ import { tradeRequest, sendReviewedTrade, type TradeQuote } from '../lib/trading
 import { settlePass, saveSettlementReceipt, type PassState, type SettlementQuote } from '../lib/pass-management';
 import { enableAutomation, readAutomation, stopAutomation } from '../lib/automation';
 const usd=(v:string)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(v)/1e6);
-export default function PassPositions({seat}:{seat:SeatPass}){
+export default function PassPositions({seat,children}:{seat:SeatPass;children?:ReactNode}){
  const session=useSession(),[state,setState]=useState<PassState|null>(null),[quote,setQuote]=useState<TradeQuote|null>(null),[settlement,setSettlement]=useState<SettlementQuote|null>(null);
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[exits,setExits]=useState(false),[uncertain,setUncertain]=useState(false);
  const abort=useRef(new AbortController()),generation=useRef(0);
@@ -23,7 +23,7 @@ export default function PassPositions({seat}:{seat:SeatPass}){
  },[session.address,seat.id]);
  const act=async(fn:()=>Promise<void>)=>{const g=generation.current;setBusy(true);setError('');try{await fn();}catch(e){if(g===generation.current)setError(e instanceof Error?e.message:'Request failed.');}finally{if(g===generation.current)setBusy(false);}};
  const review=(asset:'WETH'|'cbBTC',reason:string)=>void act(async()=>{setQuote(await tradeRequest<TradeQuote>(session,'pass-exit',{seatId:seat.id,asset,reason},abort.current.signal));setSettlement(null);await refresh();});
- return <details className="pass-positions"><summary>Positions &amp; exits</summary>
+ return <details className="pass-positions"><summary>Your connection <span aria-hidden="true">⌄</span></summary>
   {!state?<p>{error||'Loading verified holdings…'}</p>:<>
    <dl><div><dt>Pass P&amp;L</dt><dd>{usd(state.pnl)}</dd></div><div><dt>Best P&amp;L</dt><dd>{usd(state.highWater)}</dd></div><div><dt>Realized</dt><dd>{usd(state.realized)}</dd></div></dl>
    {state.paused&&<p>{state.ended?'This pass has ended.':'Drawdown reached. New entries are paused.'} You can close positions or keep them for the trader’s next exit.</p>}
@@ -43,6 +43,7 @@ export default function PassPositions({seat}:{seat:SeatPass}){
     catch(e){if(e instanceof Error&&'uncertain' in e&&e.uncertain)setUncertain(true);throw e;}
    })}>Approve and sign exit</button></section>}
   {settlement&&<section className="trade-review"><h3>Trader share: {usd(settlement.amount)}</h3><p>5% of positive realized pass profit. Totals below $0.05 are waived.</p><button className="primary-button" disabled={busy} onClick={()=>void act(async()=>{await settlePass(session,settlement,setMessage);setSettlement(null);setMessage('Pass settled.');await refresh();})}>{settlement.amount==='0'?'Finish with no payment':'Pay trader and finish'}</button></section>}
+  {children}
   {message&&<p role="status">{message}</p>}{state&&error&&<p role="alert">{error}</p>}
  </details>;
 }

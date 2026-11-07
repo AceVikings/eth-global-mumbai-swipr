@@ -1,23 +1,44 @@
 .matches-page { max-width: 980px; }
-.match-list { display: grid; gap: 24px; margin-top: 32px; }
-.match-card { padding: 28px; border: 1px solid var(--line, #e8e4ef); border-radius: 18px; background: var(--paper, #fff); }
-.match-card h2 { font-size: 22px; margin: 0 0 8px; }
-.match-card p { color: var(--muted, #77717f); }
-.match-card dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin: 28px 0; }
-.match-card dt { font-size: 13px; color: var(--muted, #77717f); margin-bottom: 8px; }
-.match-card dd { margin: 0; font-size: 21px; font-weight: 600; }
-.match-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
-@media (max-width: 600px) { .match-card { padding: 20px; } .match-card dl { grid-template-columns: repeat(2, 1fr); } }
-.match-wallet { display: block; width: min(380px, 100%); margin-top: 8px; padding: 12px; border: 1px solid #d9d1e5; border-radius: 8px; }
+.match-list { display: grid; gap: 14px; margin-top: 24px; }
+.match-card { padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.match-card h2 { font-size: 20px; line-height: 1.3; margin: 0 0 6px; letter-spacing: -.5px; }
+.match-card p { color: var(--muted); }
+.match-overview { display: flex; align-items: center; gap: 18px; }
+.match-portrait { width: 76px; height: 88px; flex: 0 0 auto; object-fit: cover; border-radius: 12px; background: var(--coral-soft); }
+.match-copy { flex: 1; min-width: 0; }
+.match-kicker { display: flex; align-items: center; gap: 5px; color: var(--coral-dark); font-size: 10px; font-weight: 650; margin-bottom: 5px; letter-spacing: .6px; text-transform: uppercase; }
+.match-meta { margin: 0; font-size: 12px; line-height: 1.5; }
+.match-kind { margin: 3px 0 0; font-size: 11px; }
+.match-cta { display: flex; align-items: center; gap: 16px; width: auto; white-space: nowrap; padding: 11px 15px; font-size: 12px; border-radius: 9px; background: var(--coral); }
+.match-cta:hover { background: var(--coral-dark); }
+.match-card dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 18px 0; }
+.match-card dt { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.match-card dd { margin: 0; font-size: 18px; font-weight: 600; }
+.match-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.match-wallet { display: block; width: min(380px, 100%); margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
 .match-invites { list-style: none; padding: 0; }
 .match-invites li { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 12px 0; }
-.matches-page > .match-card { margin-top: 28px; }
-
-.match-automation { display: grid; justify-items: start; gap: 12px; margin-top: 16px; }
-.match-automation p { margin: 0; }
-
-.pass-positions { margin: 20px 0; border-top: 1px solid var(--border, #e2dfda); padding-top: 16px; }
-.pass-positions summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
-.pass-positions > p { margin: 12px 0; }
-.pass-position { margin: 18px 0; }
-.pass-positions .match-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.matches-page > .match-card { margin-top: 20px; }
+.match-automation { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.match-automation p { flex-basis: 100%; margin: 0; font-size: 12px; }
+.match-automation button, .pass-positions .secondary-button { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+.pass-positions { margin: 14px 0 0; border-top: 1px solid var(--line); padding-top: 10px; }
+.pass-positions summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; font-size: 11px; font-weight: 500; color: var(--muted); padding: 3px 2px; }
+.pass-positions summary::-webkit-details-marker { display: none; }
+.pass-positions[open] > summary { color: var(--coral-dark); }
+.pass-positions[open] > summary > span { transform: rotate(180deg); }
+.pass-positions > p { margin: 12px 0; font-size: 12px; }
+.pass-position { margin: 14px 0; font-size: 12px; }
+.pass-positions .match-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.pass-positions .primary-button { width: auto; padding: 9px 12px; font-size: 12px; }
+.pass-positions small { display: block; color: var(--muted); font-size: 11px; }
+.match-leave { margin-top: 16px; font-size: 11px; color: var(--muted); }
+@media (max-width: 600px) {
+ .match-card { padding: 16px; }
+ .match-overview { gap: 12px; flex-wrap: wrap; }
+ .match-portrait { width: 60px; height: 72px; border-radius: 10px; }
+ .match-card h2 { font-size: 17px; }
+ .match-meta { font-size: 11px; }
+ .match-cta { margin: 2px 0 0 72px; padding: 8px 13px; }
+ .match-card dl { gap: 10px; }
+}

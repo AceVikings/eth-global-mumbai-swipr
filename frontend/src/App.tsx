@@ -240,7 +240,7 @@ export default function App() {
                   }}
                 />
               )}
-              {session.ready && page === "matches" && <Matches onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onDiscover={() => navigate("discover")} onJoin={id => { const trader = registeredTraders.find(t => t.id === id); if (trader) setRealTrader(trader); }} />}
+              {session.ready && page === "matches" && <Matches traders={registeredTraders} onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onDiscover={() => navigate("discover")} onJoin={id => { const trader = registeredTraders.find(t => t.id === id); if (trader) setRealTrader(trader); }} />}
               {session.ready && page === "bots" && <BotStudio onTrade={id => { setTradeProfileId(id); navigate("trades"); }} onChanged={() => setDirectoryVersion(v => v + 1)} />}
               {page === "leaderboards" && <Leaderboards />}
               {session.ready && page === "you" && (
