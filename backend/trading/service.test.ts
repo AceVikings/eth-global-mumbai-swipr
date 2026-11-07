@@ -2,6 +2,9 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { encodeFunctionData, erc20Abi } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createTradingService } from './service';
+import { PassBook } from './pass-book';
+import { CopyAccounting } from './accounting';
+import type { Journal, JournalEvent } from '../arkiv-journal';
 import { FLASH_DOMAIN, FLASH_ORDER_TYPES, FLASH_DOMAIN_TYPES, TOKENS } from '../providers/flash';
 import type { BotProfile } from '../contracts/bots';
 import {DEFAULT_TERMS} from '../contracts/types';
@@ -12,20 +15,20 @@ const trader = privateKeyToAccount(`0x${'11'.repeat(32)}`), copier = privateKeyT
 const profile = { id: `0x${'ab'.repeat(32)}`, owner: trader.address, operator: trader.address, status: 'active', assets: ['WETH'], name: 'Trader' } as BotProfile;
 const vault = `0x${'33'.repeat(20)}`;
 let posts: { path: string; body: any }[], sent: number;
-const setup = (overrides: Record<string, unknown> = {}, directory: SeatDirectory = { passes: [], availability: [], invitations: [] }) => {
+const setup = (overrides: Record<string, unknown> = {}, directory: SeatDirectory = { passes: [], availability: [], invitations: [] }, dependencies: Partial<Parameters<typeof createTradingService>[0]> = {}) => {
  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
   const body = init?.body ? JSON.parse(String(init.body)) : null;
   posts.push({ path: url, body });
   if (url.endsWith('/quote')) return new Response(JSON.stringify({ quoteId: 'quote-1', evm: {
    orderTypedData: JSON.stringify({ domain: FLASH_DOMAIN, types: { FlashOrder: FLASH_ORDER_TYPES, EIP712Domain: FLASH_DOMAIN_TYPES }, primaryType: 'FlashOrder',
     message: { swapper: body.funderAddress, vault, recipient: body.funderAddress, fromToken: body.side === 'sell' ? TOKENS.WETH.address : TOKENS.USDC.address, toToken: body.side === 'sell' ? TOKENS.USDC.address : TOKENS.WETH.address,
-    fromAmount: body.side === 'sell' ? '2000000000000000' : '5000000', salt: '1', deadline: String(Math.floor(Date.parse(body.expireTime) / 1000)), ...overrides } }),
+    fromAmount: body.side === 'sell' ? '2000000000000000' : '5000000', salt: '1', deadline: String(Math.floor(body.expireTime ? Date.parse(body.expireTime) / 1000 : Date.now() / 1000 + 600)), ...overrides } }),
    approveTx: { to: body.side === 'sell' ? TOKENS.WETH.address : TOKENS.USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [FLASH_DOMAIN.verifyingContract, body.side === 'sell' ? 2000000000000000n : 5000000n] }) } }, fees: { estimatedFeeNotional: '0.02' } }));
   if (url.endsWith('/order')) { sent++; return new Response(JSON.stringify({ orderId: 'order-1' })); }
   return new Response(JSON.stringify({ order: { orderId: 'order-1', funderAddress: trader.address, recipientAddress: trader.address, status: 'ACCEPTED' }, fills: [] }));
  });
  return { fetcher, service: createTradingService({ apiKey: 'private-test', ticketSecret: 'test-secret', rpcUrl: 'https://rpc.example.com', profiles: async () => [profile],
-  seats: async () => directory, fetcher: fetcher as typeof fetch }) };
+  seats: async () => directory, fetcher: fetcher as typeof fetch, ...dependencies }) };
 };
 const input = { profileId: profile.id, asset: 'WETH', qty: '5', sharedPrice: '2500' };
 beforeEach(() => {
@@ -202,4 +205,28 @@ it('does not require an Arkiv accounting read for a nonterminal order',async()=>
  const reconcile=vi.fn().mockRejectedValue(Error('unavailable'));
  const service=createTradingService({apiKey:'private-test',ticketSecret:'test-secret',rpcUrl:'https://rpc.example.com',profiles:async()=>[],seats:async()=>({passes:[],availability:[],invitations:[]}),accounting:{reconcile} as any,fetcher:(async()=>new Response(JSON.stringify({order:{funderAddress:trader.address,status:'ACCEPTED'},fills:[]}))) as typeof fetch});
  expect(await service.status(trader.address,'order-1')).toMatchObject({status:'ACCEPTED'});expect(reconcile).not.toHaveBeenCalled();
+});
+
+it('prepares a pass cashout once and rechecks inventory before signing',async()=>{
+ const events:JournalEvent[]=[];
+ const journal:Journal={canWrite:true,read:async()=>({events:structuredClone(events),nonce:events.length,timestampMs:Date.now(),blockNumber:1n}),append:async(e,n)=>{if(n!==events.length)throw Error('conflict');events.push(e);},close:async()=>{}};
+ const book=new PassBook(journal),accounting=new CopyAccounting(journal),seatId=`0x${'44'.repeat(32)}`;
+ await book.fill(seatId,'buy',{txHash:`0x${'55'.repeat(32)}`,asset:'WETH',side:'buy',units:'2000000000000000',cash:'5000000'});
+ const seat={id:seatId,owner:copier.address.toLowerCase(),traderId:profile.id,traderOwner:trader.address.toLowerCase(),status:'joined',expiresAt:Date.now()+60000,terms:DEFAULT_TERMS};
+ const seats=vi.fn(async()=>({passes:[seat],availability:[],invitations:[]}) as unknown as SeatDirectory);
+ const {service,fetcher}=setup({},undefined,{passBook:book,accounting,seats});
+ const original=fetcher.getMockImplementation()!;
+ fetcher.mockImplementation(async(url:string,init?:RequestInit)=>{
+  const response=await original(url,init),data=await response.json();
+  return new Response(JSON.stringify(url.endsWith('/quote')?{...data,to:{amount:'4.9'}}:data));
+ });
+ chain.readContract.mockResolvedValue(2000000000000000n);
+ const q=await service.passExit(copier.address.toLowerCase(),seatId,'WETH','cashout');
+ expect(seats).toHaveBeenCalledTimes(1);
+ expect(q.intent).toMatchObject({side:'sell',orderType:'market',qty:'0.002000000000000000',maxSlippage:'0.01'});
+ expect(posts.filter(p=>p.path.endsWith('/quote'))).toHaveLength(2); // valuation and final reviewed quote
+ chain.readContract.mockResolvedValue(0n);
+ await expect(service.preflight(copier.address.toLowerCase(),q.ticket)).rejects.toThrow('Wallet inventory changed');
+ expect(seats).toHaveBeenCalledTimes(2);
+ expect(sent).toBe(0);
 });

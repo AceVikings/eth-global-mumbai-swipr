@@ -42,16 +42,20 @@ function replay(events:JournalEvent[]) {
 /** Holds are stored before Flash submission. A lost acknowledgement consumes capacity until reconciled. */
 export class CopyAccounting {
  constructor(private journal:Journal){}
+ private cache:{until:number;value:Promise<Map<string,Row>>}|null=null;
+ private read(){if(this.cache&&this.cache.until>Date.now())return this.cache.value;const value=this.journal.read().then(s=>replay(s.events)).catch(e=>{this.cache=null;throw e;});this.cache={until:Date.now()+5000,value};return value;}
  private async write<T>(plan:(rows:Map<string,Row>,at:number)=>{command?:Command;result:T}):Promise<T>{
   return withJournalWrite(this.journal,async()=>{
    if(!this.journal.canWrite)fail('Copy accounting is unavailable.');
+   this.cache=null;
    const snapshot=await this.journal.read(),rows=replay(snapshot.events),step=plan(rows,snapshot.timestampMs);
    if(step.command?.type==='project.copy.reserve'&&passRecords(snapshot.events).get(step.command.seatId)?.paused)fail('This pass has paused new entries.');
    if(step.command)await this.journal.append({revision:snapshot.nonce+1,id:randomUUID(),at:snapshot.timestampMs,command:validateCopyCommand(step.command)},snapshot.nonce);
+   this.cache=null;
    return step.result;
   });
  }
- async entries(){return [...replay((await this.journal.read()).events).values()];}
+ async entries(){return [...(await this.read()).values()];}
  async hasSource(seatId:string,sourceOrderId:string){return [...replay((await this.journal.read()).events).values()].some(r=>r.seatId===seatId&&r.sourceOrderId===sourceOrderId);}
  async pendingOrders(){
   return [...replay((await this.journal.read()).events).values()]
@@ -81,7 +85,7 @@ export class CopyAccounting {
   if(row!.orderId){if(row!.orderId!==orderId)fail('Copy order conflict.');return {result:undefined};}
   return {command:{type:'project.copy.submit',quoteId,orderId},result:undefined};
  });}
- reconcile(orderId:string,terminal:boolean,filled:bigint){return this.write<void>(rows=>{
+ async reconcile(orderId:string,terminal:boolean,filled:bigint){const prior=(await this.entries()).find(r=>r.orderId===orderId);if(!prior||!terminal||prior.settled!==undefined)return;return this.write<void>(rows=>{
   const row=[...rows.values()].find(r=>r.orderId===orderId);
   if(!row||!terminal||row.settled!==undefined)return {result:undefined};
   if(filled<0n||filled>BigInt(row.amount))fail('Copy settlement exceeds its reservation.');

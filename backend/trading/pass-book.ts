@@ -91,21 +91,31 @@ export const profitShare = (realized: bigint, bps = 500) => {
 };
 export class PassBook {
  constructor(private journal: Journal) {}
- async state(seatId: string) { return passRecords((await this.journal.read()).events).get(seatId) ?? empty(); }
- async all() { return passRecords((await this.journal.read()).events); }
+ private cache: {until:number;value:Promise<Map<string,PassRecord>>}|null=null;
+ private read(){
+  if(this.cache&&this.cache.until>Date.now())return this.cache.value;
+  const value=this.journal.read().then(s=>passRecords(s.events)).catch(e=>{this.cache=null;throw e;});
+  this.cache={until:Date.now()+5000,value};return value;
+ }
+ async state(seatId: string) { return (await this.read()).get(seatId) ?? empty(); }
+ async all() { return this.read(); }
  private async write<T>(plan: (rows: Map<string, PassRecord>) => { command?: Command; result: T }): Promise<T> {
   return withJournalWrite(this.journal, async () => {
-   const snapshot = await this.journal.read(), step = plan(passRecords(snapshot.events));
+   this.cache=null;
+   const snapshot = await this.journal.read(),rows=passRecords(snapshot.events),step = plan(rows);
    if (step.command) {
     if (!this.journal.canWrite) fail('Pass accounting is unavailable.');
     const command = validatePassCommand(step.command), event = { revision: snapshot.nonce + 1, id: randomUUID(), at: snapshot.timestampMs, command };
     passRecords([...snapshot.events, event]);
     await this.journal.append(event, snapshot.nonce);
    }
+   this.cache=step.command?null:{until:Date.now()+5000,value:Promise.resolve(rows)};
    return step.result;
   });
  }
- fill(seatId: string, orderId: string, fill: PassFill) {
+ async fill(seatId: string, orderId: string, fill: PassFill) {
+  const prior=[...(await this.read()).values()].flatMap(r=>r.fills).find(f=>f.fill.txHash.toLowerCase()===fill.txHash.toLowerCase());
+  if(prior){if(prior.seatId!==seatId||prior.orderId!==orderId||JSON.stringify(prior.fill)!==JSON.stringify(fill))fail('Receipt attribution conflict.');return;}
   return this.write<void>(rows => {
    const existing = [...rows.values()].flatMap(r => r.fills).find(f => f.fill.txHash.toLowerCase() === fill.txHash.toLowerCase());
    if (existing) {
@@ -146,7 +156,10 @@ export class PassBook {
   if (exit!.orderId) { if (exit!.orderId !== orderId) fail('Exit order conflict.'); return { result: undefined }; }
   return { command: { type: 'project.lifecycle.submit', quoteId, orderId }, result: undefined };
  }); }
- terminal(orderId: string) { return this.write<void>(rows => {
+ async terminal(orderId: string) {
+  const prior=[...(await this.read()).values()].flatMap(r=>r.exits).find(x=>x.orderId===orderId);
+  if(!prior||prior.terminal)return;
+  return this.write<void>(rows => {
   const exit = [...rows.values()].flatMap(r => r.exits).find(x => x.orderId === orderId);
   return !exit || exit.terminal ? { result: undefined } : { command: { type: 'project.lifecycle.terminal', orderId }, result: undefined };
  }); }

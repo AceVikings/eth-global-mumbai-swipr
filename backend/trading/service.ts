@@ -103,11 +103,11 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
   // A request that may have reached Flash is never relayed again by this instance.
   // Flash's signed salt remains the chain-level replay boundary across service restarts.
   const submitted = new Map<string, { expiresAt: number; orderId?: string }>();
-  const service = {
-    async quote(wallet: string, input: Record<string, unknown>) {
+  const quoteContext = (input: Record<string, unknown>): Context => ({ profileId: String(input.profileId ?? ''), ...(input.seatId ? { seatId: String(input.seatId) } : {}), ...(input.sourceOrderId ? { sourceOrderId: id(input.sourceOrderId) } : {}), ...(input.exitReason ? {exitReason:id(input.exitReason)} : {}) });
+  // Only server-validated plans can enter this helper. Public quote requests always
+  // resolve context, and preflight/submission independently revalidate the plan.
+  const buildQuote = async (wallet: string, input: Record<string, unknown>, ctx: Context, checked: Awaited<ReturnType<typeof context>>) => {
       await network();
-      const ctx: Context = { profileId: String(input.profileId ?? ''), ...(input.seatId ? { seatId: String(input.seatId) } : {}), ...(input.sourceOrderId ? { sourceOrderId: id(input.sourceOrderId) } : {}), ...(input.exitReason ? {exitReason:id(input.exitReason)} : {}) };
-      const checked = await context(wallet, ctx, input.asset, input.qty, input.side ?? 'buy');
       if (checked.seat && options.accounting && (!await options.accounting.available(checked.seat) || await options.accounting.hasSource(checked.seat.id, ctx.sourceOrderId!))) fail('This pass has no available copy budget for this source.');
       const sharedPrice = checked.sharedPrice ?? String(input.sharedPrice ?? '');
       const market = !!checked.exit && !checked.sharedPrice;
@@ -126,6 +126,11 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       const approval = raw.evm?.approveTx ? validateApproval(raw.evm.approveTx, intent, spend(intent).amount) : null;
       return { ticket: encode({ version: 1, expiresAt, intent, quote: { quoteId: quote.quoteId, typedDataRaw: quote.typedDataRaw, integratorFeeBps: quote.integratorFeeBps }, context: ctx, vault }),
         quoteId: quote.quoteId, integratorFeeBps: quote.integratorFeeBps, intent, typedData: quote.typedData, approval, expiresAt, estimatedFeeNotional: raw.fees?.estimatedFeeNotional ?? null };
+  };
+  const service = {
+    async quote(wallet: string, input: Record<string, unknown>) {
+      const ctx = quoteContext(input);
+      return buildQuote(wallet, input, ctx, await context(wallet, ctx, input.asset, input.qty, input.side ?? 'buy'));
     },
     async preflight(wallet: string, token: unknown) {
       const t = decode(token, wallet); await network();
@@ -278,7 +283,11 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       transfer:async(hash)=>{const [tx,receipt,head]=await Promise.all([chain.getTransaction({hash:hash as Hex}),chain.getTransactionReceipt({hash:hash as Hex}),chain.getBlockNumber({cacheTime:0})]);return {from:tx.from,to:tx.to??'',input:tx.input,value:tx.value,success:receipt.status==='success',confirmations:Number(head-receipt.blockNumber+1n),timestamp:Number((await chain.getBlock({blockNumber:receipt.blockNumber})).timestamp)*1000};}}});
   return {...service,
     async passState(wallet:string,seatId:string){if(!passes)fail('Pass accounting is unavailable.');return passes!.snapshot(wallet,seatId);},
-    async passExit(wallet:string,seatId:string,asset:'WETH'|'cbBTC',reason:string){if(!passes)fail('Pass accounting is unavailable.');return service.quote(wallet,await passes!.exit(wallet,seatId,asset,reason));},
+    async passExit(wallet:string,seatId:string,asset:'WETH'|'cbBTC',reason:string){
+      if(!passes)fail('Pass accounting is unavailable.');
+      const planned=await passes!.exit(wallet,seatId,asset,reason);
+      return buildQuote(wallet,planned,quoteContext(planned),{exit:true,sharedPrice:'sharedPrice' in planned?planned.sharedPrice:undefined});
+    },
     async passSettlement(wallet:string,seatId:string,hash?:unknown){if(!passes)fail('Pass accounting is unavailable.');return hash===undefined?passes!.prepareSettlement(wallet,seatId):passes!.settle(wallet,seatId,hash);},
   };
 }
