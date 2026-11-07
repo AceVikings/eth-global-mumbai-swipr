@@ -1,3 +1,4 @@
+import {PassBook} from './trading/pass-book';
 import { createAutomation } from './automation/service';
 import { createPrivyControl } from './automation/privy';
 import { createGrants } from './automation/grants';
@@ -41,7 +42,7 @@ async function main() {
   const projects = journal ? new ProjectStore(journal, config.botAudience) : null;
   const directory = config.arkiv.accessKey ? createWalletDirectory(config.arkiv) : null;
   const accounting = journal ? new CopyAccounting(journal) : undefined;
-  const trades = directory && config.flashKey && config.privySecret ? createTradingService({ allowAuto:!!config.automation.signerId,apiKey:config.flashKey,ticketSecret:config.privySecret,rpcUrl:config.baseRpc,profiles:directory,seats:createSeatDirectory(config.arkiv),accounting }) : null;
+  const trades = directory && config.flashKey && config.privySecret ? createTradingService({ allowAuto:!!config.automation.signerId,apiKey:config.flashKey,ticketSecret:config.privySecret,rpcUrl:config.baseRpc,profiles:directory,seats:createSeatDirectory(config.arkiv),accounting,passBook:journal?new PassBook(journal):undefined }) : null;
   const automation = config.automation.signerId && config.automation.key && config.privyAppId && config.privySecret && directory && trades && config.flashKey
     ? createAutomation({control:createPrivyControl({appId:config.privyAppId,appSecret:config.privySecret,authorizationKey:config.automation.key}),signerId:config.automation.signerId,trades,flash:createFlashClient({apiKey:config.flashKey,fetch}),profiles:directory,seats:createSeatDirectory(config.arkiv),grants:createGrants(config.arkiv)}) : null;
   let lastAutomation = 0;
@@ -50,7 +51,10 @@ async function main() {
   let stopping = false, lastHealthy = 0, lastProbeMinute = -1, lastRenewal = Date.now();
   // Missing credentials keeps liveness available, but readiness and all writes fail closed.
   const server = createWorkerServer({ social, projects, funding, ens, trading:trades ? {execute:async(raw:unknown)=>{
-      const input=raw as {action?:string;wallet:string;ticket:unknown;signature:unknown;orderId?:string};
+      const input=raw as {action?:string;wallet:string;ticket:unknown;signature:unknown;orderId?:string;seatId?:string;asset?:'WETH'|'cbBTC';reason?:string;txHash?:unknown};
+      if(input.action==='pass-state')return trades.passState(input.wallet,String(input.seatId||''));
+      if(input.action==='pass-exit')return trades.passExit(input.wallet,String(input.seatId||''),input.asset!,String(input.reason||''));
+      if(input.action==='pass-settlement')return trades.passSettlement(input.wallet,String(input.seatId||''),input.txHash);
       return input.action==='status' ? trades.status(input.wallet,String(input.orderId||'')) : trades.submit(input.wallet,input.ticket,input.signature);
     }} : null, stopping: () => stopping,
     lastHealthyAt: () => lastHealthy, canWrite: () => journal?.canWrite === true, canFund: () => !!funding });
@@ -91,6 +95,11 @@ async function main() {
           // Unknown submissions retain their hold; checking status never resubmits an order.
           if(accounting&&trades)for(const pending of (await accounting.pendingOrders()).slice(0,20)){
             try{await trades.status(pending.wallet,pending.orderId);}catch{/* Retry verification next cycle. */}
+          }
+          if(accounting&&trades){
+            const entries=await accounting.entries();
+            const seats=new Map(entries.map(e=>[e.seatId,e.wallet]));
+            for(const [seatId,wallet] of seats){try{await trades.passState(wallet,seatId);}catch{/* Missing marks never trigger an unpriced exit. */}}
           }
           if(automation){const result=await automation.tick();if(result.failed||result.submitted)console.log(JSON.stringify({service:'worker',code:'automation_cycle',...result}));}
         }

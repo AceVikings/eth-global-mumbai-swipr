@@ -1,3 +1,5 @@
+import {PassBook} from './pass-book';
+import {createPassManager} from './pass-manager';
 import type { CopyAccounting } from './accounting';
 import type { VerifiedFill } from './performance';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -13,11 +15,11 @@ const id = (v: unknown) => { if (typeof v !== 'string' || !/^[a-z0-9-]{1,128}$/i
 function fail(text: string): never { throw new ApiError(409, 'trade_blocked', text); }
 const spend = (intent: OrderIntent) => ({ token: intent.side === 'sell' ? TOKENS[intent.asset].address : TOKENS.USDC.address, amount: toUnits(intent.qty, intent.side === 'sell' ? TOKENS[intent.asset].decimals : 6) });
 const now = () => Math.floor(Date.now() / 1000);
-type Context = { profileId: string; seatId?: string; sourceOrderId?: string };
+type Context = { profileId: string; seatId?: string; sourceOrderId?: string; exitReason?: string };
 type Ticket = { version: 1; expiresAt: number; intent: OrderIntent; quote: Pick<FlashQuote, 'quoteId' | 'typedDataRaw' | 'integratorFeeBps'>; context: Context; vault: string };
 export type TradingService = ReturnType<typeof createTradingService>;
 export function createTradingService(options: { apiKey: string; ticketSecret: string; rpcUrl: string;
-  allowAuto?: boolean; accounting?: CopyAccounting; profiles: () => Promise<BotProfile[]>; seats: (wallet: string, profiles: BotProfile[]) => Promise<SeatDirectory>; fetcher?: typeof fetch }) {
+  allowAuto?: boolean; accounting?: CopyAccounting; passBook?: PassBook; profiles: () => Promise<BotProfile[]>; seats: (wallet: string, profiles: BotProfile[]) => Promise<SeatDirectory>; fetcher?: typeof fetch }) {
   const flash = createFlashClient({ apiKey: options.apiKey, fetch: options.fetcher ?? fetch });
   const chain = createPublicClient({ chain: base, transport: http(options.rpcUrl, { timeout: 8000, retryCount: 0 }) });
   // Tickets bind every reviewed field; neither intent nor vault can be replaced on submission.
@@ -58,10 +60,17 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     if (raw.order.recipientAddress && !same(raw.order.recipientAddress, wallet)) fail('This order has another recipient.');
     return { result, row: raw.order };
   };
+  let passes: ReturnType<typeof createPassManager> | undefined;
   const context = async (wallet: string, input: Context, asset: unknown, qty: unknown, side: unknown = 'buy') => {
     if (side !== 'buy' && side !== 'sell') fail('Choose buy or sell.');
     if (side === 'sell') {
       if ((asset !== 'WETH' && asset !== 'cbBTC') || typeof qty !== 'string' || toUnits(qty, TOKENS[asset].decimals) <= 0n) fail('Choose a supported asset and a positive sell amount.');
+      if(input.seatId) {
+        if(!passes || !input.exitReason)return fail('Choose a verified pass exit.');
+        const planned=await passes.exit(wallet,input.seatId,asset as 'WETH'|'cbBTC',input.exitReason);
+        if(planned.qty!==qty || planned.profileId!==input.profileId)fail('Pass exit changed. Request a new quote.');
+        return {exit:true,sharedPrice:'sharedPrice' in planned ? planned.sharedPrice : undefined};
+      }
       // Exits remain available after a profile halt, seat revocation or expiry.
       return {};
     }
@@ -76,7 +85,8 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
     const directory = await options.seats(wallet, profiles);
     const seat = directory.passes.find(p => p.id === input.seatId && p.owner === wallet.toLowerCase() && p.traderId === profile!.id && p.status === 'joined');
     if (!seat || seat.terms.perTradeUsd < 5) fail('Join an available seat before copying this trader.');
-    if (seat!.terms.safetyNetBps > 0 || (seat!.terms.mode === 'auto' && !options.allowAuto) || seat!.terms.liquidateOnBreakup) fail('This pass requires protected or automatic execution. Those permissions are not ready; no order was submitted.');
+    if ((seat!.terms.mode === 'auto' && !options.allowAuto) || (!passes && (seat!.terms.safetyNetBps > 0 || seat!.terms.liquidateOnBreakup))) fail('This pass requires protected or automatic execution. Those permissions are not ready; no order was submitted.');
+    if(passes && (await passes.snapshot(wallet,seat!.id)).paused)fail('This pass has paused new entries.');
     if (!input.sourceOrderId) fail('Choose a confirmed trader order to copy.');
     const source = await order(input.sourceOrderId!, profile!.owner);
     const token = source.row.targetAsset as { address?: unknown } | undefined;
@@ -92,16 +102,16 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
   // A request that may have reached Flash is never relayed again by this instance.
   // Flash's signed salt remains the chain-level replay boundary across service restarts.
   const submitted = new Map<string, { expiresAt: number; orderId?: string }>();
-  return {
+  const service = {
     async quote(wallet: string, input: Record<string, unknown>) {
       await network();
-      const ctx: Context = { profileId: String(input.profileId ?? ''), ...(input.seatId ? { seatId: String(input.seatId) } : {}), ...(input.sourceOrderId ? { sourceOrderId: id(input.sourceOrderId) } : {}) };
+      const ctx: Context = { profileId: String(input.profileId ?? ''), ...(input.seatId ? { seatId: String(input.seatId) } : {}), ...(input.sourceOrderId ? { sourceOrderId: id(input.sourceOrderId) } : {}), ...(input.exitReason ? {exitReason:id(input.exitReason)} : {}) };
       const checked = await context(wallet, ctx, input.asset, input.qty, input.side ?? 'buy');
       if (checked.seat && options.accounting && (!await options.accounting.available(checked.seat) || await options.accounting.hasSource(checked.seat.id, ctx.sourceOrderId!))) fail('This pass has no available copy budget for this source.');
       const sharedPrice = checked.sharedPrice ?? String(input.sharedPrice ?? '');
-      const expiresAt = Math.min(now() + 300, checked.expiresAt ?? Infinity);
-      const intent: OrderIntent = { integratorFeeBps: SWIPR_INTEGRATOR_FEE_BPS, side: input.side === 'sell' ? 'sell' : 'buy', asset: input.asset as 'WETH' | 'cbBTC', qty: String(input.qty), funder: wallet, orderType: 'limit', sharedPrice,
-        limitNotionalPrice: sharedPrice, maxPriceImpact: '0.01', expireTime: new Date(expiresAt * 1000).toISOString() };
+      const market = !!checked.exit && !checked.sharedPrice;
+      const expiresAt = Math.min(now() + (market ? 900 : 300), checked.expiresAt ?? Infinity);
+      const intent: OrderIntent = { integratorFeeBps: SWIPR_INTEGRATOR_FEE_BPS, side: input.side === 'sell' ? 'sell' : 'buy', asset: input.asset as 'WETH' | 'cbBTC', qty: String(input.qty), funder: wallet, orderType: market ? 'market' : 'limit', ...(market ? {maxSlippage:'0.01'} : {sharedPrice,limitNotionalPrice:sharedPrice}), maxPriceImpact: '0.01', expireTime: new Date(expiresAt * 1000).toISOString() };
       const quote = await flash.quote(intent);
       const vault = String(quote.typedData.message.vault);
       // Flash supplies and manages the per-chain integrator vault. Its FAQ explicitly
@@ -126,7 +136,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
       if (code && code !== '0x') fail('This rehearsal requires a plain EOA wallet.');
       if (checked.seat?.terms.mode === 'auto' && allowance < spending.amount) fail('Enable the bounded USDC approval for this pass first.');
       if (balance < spending.amount) fail(t.intent.side === 'buy' ? 'Add at least 5 USDC on Base to your wallet before trading. No signature was requested.' : 'Your wallet does not hold enough of this asset.');
-      const boundedAuto = checked.seat?.terms.mode === 'auto' && options.allowAuto && allowance >= spending.amount && allowance <= BigInt(checked.seat.terms.perTradeUsd * checked.seat.terms.tradeCount) * 1000000n;
+      const boundedAuto = checked.exit && options.allowAuto && allowance >= spending.amount || checked.seat?.terms.mode === 'auto' && options.allowAuto && allowance >= spending.amount && allowance <= BigInt(checked.seat.terms.perTradeUsd * checked.seat.terms.tradeCount) * 1000000n;
       if (!boundedAuto && allowance !== spending.amount && await chain.getBalance({ address: wallet as Address }) === 0n)
         fail('Add ETH on Base for the token approval gas. No signature was requested.');
       return { ready: true };
@@ -153,7 +163,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
         chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'allowance', args: [wallet as Address, FLASH_DOMAIN.verifyingContract] }),
         chain.readContract({ address: spending.token, abi: erc20Abi, functionName: 'balanceOf', args: [wallet as Address] })]);
       if (code && code !== '0x') fail('This rehearsal requires a plain EOA wallet.');
-      const boundedAuto = checked.seat?.terms.mode === 'auto' && options.allowAuto && allowance >= spending.amount && allowance <= BigInt(checked.seat.terms.perTradeUsd * checked.seat.terms.tradeCount) * 1000000n;
+      const boundedAuto = checked.exit && options.allowAuto && allowance >= spending.amount || checked.seat?.terms.mode === 'auto' && options.allowAuto && allowance >= spending.amount && allowance <= BigInt(checked.seat.terms.perTradeUsd * checked.seat.terms.tradeCount) * 1000000n;
       if ((!boundedAuto && allowance !== spending.amount) || balance < spending.amount) fail(t.intent.side === 'buy' ? 'This order needs 5 USDC and an exact 5 USDC approval.' : 'This sell needs sufficient asset balance and an exact token approval.');
       for (const [key, attempt] of submitted) if (attempt.expiresAt < now() - 86400) submitted.delete(key);
       const previous = submitted.get(t.quote.quoteId);
@@ -168,6 +178,10 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
           throw new ApiError(409, 'submission_uncertain', 'This source already has a reserved copy. Reconcile its history before continuing.');
         }
       }
+      if(checked.exit) {
+        const reservation=await options.passBook!.reserve(t.context.seatId!,t.quote.quoteId,t.intent.asset,spending.amount,t.context.exitReason!);
+        if(!reservation.created){if(reservation.orderId)return {orderId:reservation.orderId};throw new ApiError(409,'submission_uncertain','An exit is already reserved. Check its order before trying again.');}
+      }
       const attempt: { expiresAt: number; orderId?: string } = { expiresAt: t.expiresAt };
       submitted.set(t.quote.quoteId, attempt);
       try {
@@ -175,6 +189,7 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
           policy: { now: now(), maxDeadline: t.expiresAt, expectedVault: t.vault } });
         attempt.orderId = result.orderId;
         if (checked.seat) await options.accounting!.submitted(t.quote.quoteId, result.orderId);
+        if(checked.exit)await options.passBook!.submitted(t.quote.quoteId,result.orderId);
         return result;
       } catch { throw new ApiError(409, 'submission_uncertain', 'Submission could not be confirmed. Check Flash order history; do not submit again.'); }
     },
@@ -238,7 +253,26 @@ export function createTradingService(options: { apiKey: string; ticketSecret: st
           copyAccountingPending = true;
         }
       }
+      if(options.passBook && options.accounting && fills.length===result.fills.length) {
+        try {
+          const entry=(await options.accounting.entries()).find(e=>e.orderId===orderId && e.wallet===wallet);
+          let seatId=entry?.seatId;
+          if(!seatId)for(const [sid,row] of await options.passBook.all())if(row.exits.some(e=>e.orderId===orderId))seatId=sid;
+          if(seatId)for(const f of fills)await options.passBook.fill(seatId,orderId,{txHash:f.txHash,asset:f.asset,side:f.side,units:f.assetUnits,cash:f.usdcMicros,timestamp:f.timestamp});
+          if(terminal)await options.passBook.terminal(orderId);
+        } catch { copyAccountingPending=true; }
+      }
       return { orderId, status: result.status, fills, unverifiedFills: result.fills.length - fills.length, ...(copyAccountingPending ? {copyAccountingPending:true} : {}) };
     },
+  };
+  if(options.passBook && options.accounting)passes=createPassManager({book:options.passBook,accounting:options.accounting,
+    seat:async(wallet,id)=>{const directory=await options.seats(wallet,await options.profiles());const seat=directory.passes.find(p=>p.id===id && p.owner===wallet);if(!seat)fail('This pass belongs to another wallet or was deleted.');return seat!;},
+    status:service.status,history:service.completeHistory,quote:flash.quote,
+    chain:{balance:(wallet,asset)=>chain.readContract({address:TOKENS[asset].address,abi:erc20Abi,functionName:'balanceOf',args:[wallet as Address]}),
+      transfer:async(hash)=>{const [tx,receipt,head]=await Promise.all([chain.getTransaction({hash:hash as Hex}),chain.getTransactionReceipt({hash:hash as Hex}),chain.getBlockNumber({cacheTime:0})]);return {from:tx.from,to:tx.to??'',input:tx.input,value:tx.value,success:receipt.status==='success',confirmations:Number(head-receipt.blockNumber+1n),timestamp:Number((await chain.getBlock({blockNumber:receipt.blockNumber})).timestamp)*1000};}}});
+  return {...service,
+    async passState(wallet:string,seatId:string){if(!passes)fail('Pass accounting is unavailable.');return passes!.snapshot(wallet,seatId);},
+    async passExit(wallet:string,seatId:string,asset:'WETH'|'cbBTC',reason:string){if(!passes)fail('Pass accounting is unavailable.');return service.quote(wallet,await passes!.exit(wallet,seatId,asset,reason));},
+    async passSettlement(wallet:string,seatId:string,hash?:unknown){if(!passes)fail('Pass accounting is unavailable.');return hash===undefined?passes!.prepareSettlement(wallet,seatId):passes!.settle(wallet,seatId,hash);},
   };
 }

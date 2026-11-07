@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { withJournalWrite, type Journal, type JournalEvent } from '../arkiv-journal';
 import { ApiError } from '../auth';
 import type { Asset } from '../providers/flash';
-export type PassFill = { txHash: string; asset: Asset; side: 'buy' | 'sell'; units: string; cash: string };
+export type PassFill = { txHash: string; asset: Asset; side: 'buy' | 'sell'; units: string; cash: string; timestamp?: number };
 type Fill = { type: 'project.lifecycle.fill'; seatId: string; orderId: string; fill: PassFill };
 type Mark = { type: 'project.lifecycle.mark'; seatId: string; pnl: string; paused: boolean; ended: boolean };
 type Exit = { type: 'project.lifecycle.exit'; seatId: string; quoteId: string; asset: Asset; units: string; reason: string };
@@ -11,7 +11,7 @@ type Terminal = { type: 'project.lifecycle.terminal'; orderId: string };
 type Settlement = { type: 'project.lifecycle.settlement'; seatId: string; amount: string; txHash: string | null };
 type Command = Fill | Mark | Exit | Submit | Terminal | Settlement;
 export type ExitRow = Exit & { orderId?: string; terminal?: boolean };
-export type PassRecord = { fills: (Fill & { at: number })[]; highWater: bigint; paused: boolean; ended: boolean; exits: ExitRow[]; settlement?: Settlement };
+export type PassRecord = { fills: (Fill & { at: number })[]; highWater: bigint; paused: boolean; ended: boolean; endedAt?: number; exits: ExitRow[]; settlement?: Settlement };
 const fail = (message: string): never => { throw new ApiError(409, 'pass_state', message); };
 const uint = (v: unknown): v is string => typeof v === 'string' && /^(0|[1-9]\d{0,29})$/.test(v);
 const hash = (v: unknown) => typeof v === 'string' && /^0x[0-9a-f]{64}$/i.test(v);
@@ -23,7 +23,7 @@ export function validatePassCommand(raw: unknown): Command {
  if ('seatId' in c && !hash(c.seatId)) return fail('Invalid pass ID.');
  switch (c.type) {
   case 'project.lifecycle.fill':
-   if (!key(c.orderId) || !c.fill || !hash(c.fill.txHash) || !['WETH','cbBTC'].includes(c.fill.asset) || !['buy','sell'].includes(c.fill.side) || !uint(c.fill.units) || c.fill.units === '0' || !uint(c.fill.cash) || c.fill.cash === '0') return fail('Invalid pass fill.'); break;
+   if (!key(c.orderId) || !c.fill || !hash(c.fill.txHash) || !['WETH','cbBTC'].includes(c.fill.asset) || !['buy','sell'].includes(c.fill.side) || !uint(c.fill.units) || c.fill.units === '0' || !uint(c.fill.cash) || c.fill.cash === '0') return fail('Invalid pass fill.'); if(c.fill.timestamp!==undefined && (!Number.isSafeInteger(c.fill.timestamp)||c.fill.timestamp<=0))return fail('Invalid fill time.'); break;
   case 'project.lifecycle.mark':
    if (typeof c.pnl !== 'string' || !/^-?(0|[1-9]\d{0,29})$/.test(c.pnl) || typeof c.paused !== 'boolean' || typeof c.ended !== 'boolean') return fail('Invalid pass mark.'); break;
   case 'project.lifecycle.exit':
@@ -46,10 +46,10 @@ export function passRecords(events: JournalEvent[]): Map<string, PassRecord> {
   switch (c.type) {
    case 'project.lifecycle.fill':
     if (receipts.has(c.fill.txHash.toLowerCase())) fail('A receipt was attributed twice.');
-    receipts.add(c.fill.txHash.toLowerCase()); row!.fills.push({ ...c, at: e.at }); break;
+    receipts.add(c.fill.txHash.toLowerCase()); row!.fills.push({ ...c, at: c.fill.timestamp ?? e.at }); break;
    case 'project.lifecycle.mark': {
     const pnl = BigInt(c.pnl); if (pnl > row!.highWater) row!.highWater = pnl;
-    row!.paused ||= c.paused; row!.ended ||= c.ended; break;
+    row!.paused ||= c.paused; if(c.ended && !row!.ended)row!.endedAt=e.at; row!.ended ||= c.ended; break;
    }
    case 'project.lifecycle.exit': {
     if (quotes.has(c.quoteId) || row!.settlement) fail('Invalid exit sequence.');

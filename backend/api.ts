@@ -198,6 +198,9 @@ export function createApi({ config, ledger, projects = null, social = null, wall
         if (!trades) throw new ApiError(503, 'trading_unavailable', 'Trading is not configured.');
         const input = req.method === 'POST' ? await body(req) : {};
         const wallet = requireWallet(identity, input.wallet || url.searchParams.get('wallet'));
+        if(req.method==='GET' && path==='/api/trades/pass')return send(200,await (trading?trades.passState(wallet,url.searchParams.get('seatId')||''):submitTrade({action:'pass-state',wallet,seatId:url.searchParams.get('seatId')||''})));
+        if(req.method==='POST' && path==='/api/trades/pass-exit')return send(200,await (trading?trades.passExit(wallet,String(input.seatId||''),input.asset as 'WETH'|'cbBTC',String(input.reason||'')):submitTrade({action:'pass-exit',wallet,seatId:input.seatId,asset:input.asset,reason:input.reason})));
+        if(req.method==='POST' && path==='/api/trades/pass-settlement')return send(200,await (trading?trades.passSettlement(wallet,String(input.seatId||''),input.txHash):submitTrade({action:'pass-settlement',wallet,seatId:input.seatId,...(Object.hasOwn(input,'txHash')?{txHash:input.txHash}:{})})));
         if (req.method === 'POST' && path === '/api/trades/quote') return send(200, await trades.quote(wallet, input));
         if (req.method === 'POST' && path === '/api/trades/preflight') return send(200, await trades.preflight(wallet, input.ticket));
         if (req.method === 'POST' && path === '/api/trades/approval') return send(200, await trades.approval(wallet, input.ticket, input.txHash));
