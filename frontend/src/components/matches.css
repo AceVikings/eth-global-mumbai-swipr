@@ -1,16 +1,16 @@
-.matches-page { max-width: 980px; }
+.matches-page.content-page { max-width: 980px; }
 .match-list { display: grid; gap: 14px; margin-top: 24px; }
 .match-card { padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
 .match-card h2 { font-size: 20px; line-height: 1.3; margin: 0 0 6px; letter-spacing: -.5px; }
 .match-card p { color: var(--muted); }
-.match-overview { display: flex; align-items: center; gap: 18px; }
+.match-overview { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: center; gap: 18px; }
 .match-portrait { width: 76px; height: 88px; flex: 0 0 auto; object-fit: cover; border-radius: 12px; background: var(--coral-soft); }
 .match-copy { flex: 1; min-width: 0; }
-.match-kicker { display: flex; align-items: center; gap: 5px; color: var(--coral-dark); font-size: 10px; font-weight: 650; margin-bottom: 5px; letter-spacing: .6px; text-transform: uppercase; }
+.match-kicker { white-space: nowrap; display: flex; align-items: center; gap: 5px; color: var(--coral-dark); font-size: 10px; font-weight: 650; margin-bottom: 5px; letter-spacing: .6px; text-transform: uppercase; }
 .match-meta { margin: 0; font-size: 12px; line-height: 1.5; }
 .match-kind { margin: 3px 0 0; font-size: 11px; }
-.match-cta { display: flex; align-items: center; gap: 16px; width: auto; white-space: nowrap; padding: 11px 15px; font-size: 12px; border-radius: 9px; background: var(--coral); }
-.match-cta:hover { background: var(--coral-dark); }
+.match-overview > .match-cta { margin: 0; min-width: 0; min-height: 40px; justify-self: end; display: flex; align-items: center; gap: 16px; width: auto; white-space: nowrap; padding: 11px 15px; font-size: 12px; border-radius: 9px; background: var(--coral); }
+.match-overview > .match-cta:hover { background: var(--coral-dark); }
 .match-card dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 18px 0; }
 .match-card dt { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
 .match-card dd { margin: 0; font-size: 18px; font-weight: 600; }
@@ -35,10 +35,10 @@
 .match-leave { margin-top: 16px; font-size: 11px; color: var(--muted); }
 @media (max-width: 600px) {
  .match-card { padding: 16px; }
- .match-overview { gap: 12px; flex-wrap: wrap; }
+ .match-overview { gap: 12px; grid-template-columns: 60px minmax(0, 1fr); }
  .match-portrait { width: 60px; height: 72px; border-radius: 10px; }
  .match-card h2 { font-size: 17px; }
  .match-meta { font-size: 11px; }
- .match-cta { margin: 2px 0 0 72px; padding: 8px 13px; }
+ .match-overview > .match-cta { grid-column: 2; justify-self: start; margin: 0; padding: 8px 13px; }
  .match-card dl { gap: 10px; }
 }
