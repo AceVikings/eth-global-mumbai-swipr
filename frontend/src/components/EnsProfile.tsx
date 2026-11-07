@@ -6,7 +6,7 @@ import {getEnsProof,sponsorEns} from '../lib/ens';
 import './ens.css';
 const reason=(e:unknown)=>e instanceof Error?e.message:'ENS could not be updated.';
 const explorer=(name:string)=>`https://sepolia.app.ens.domains/${encodeURIComponent(name)}`;
-export function EnsIdentity({profileId,name}:{profileId:string;name?:string}){
+export function EnsIdentity({profileId,name,compact=false}:{profileId:string;name?:string;compact?:boolean}){
  const [proof,setProof]=useState<EnsProof|null>(null),[error,setError]=useState('');
  useEffect(()=>{
   const ctrl=new AbortController();let loading=false;
@@ -16,6 +16,7 @@ export function EnsIdentity({profileId,name}:{profileId:string;name?:string}){
  },[profileId,name]);
  if(!proof&&!name)return null;
  const displayed=proof?.name||name||'';
+ if(compact)return <a className="ens-name" href={explorer(displayed)} target="_blank" rel="noreferrer" aria-label={`ENS identity: ${displayed}`}>{displayed}</a>;
  return <div className="ens-identity"><a href={explorer(displayed)} target="_blank" rel="noreferrer">{displayed}</a>
   <span>{error||(!proof?'Checking ENS…':!proof.identityVerified?'Name does not match the trader wallet.':!proof.profileMatches?'Wallet verified · profile needs updating':!proof.fresh?'Wallet verified · snapshot is stale':proof.statsVerified?'Wallet and recent trade records verified':'Wallet and profile verified · trade stats unavailable')}</span>
   {proof?.identityVerified&&<details><summary>ENS records</summary>{Object.entries(proof.records).map(([key,value])=><div key={key}><b>{key}</b><pre><code>{value||'Not published'}</code></pre></div>)}</details>}
@@ -32,10 +33,9 @@ export default function EnsProfile({profile}:{profile:BotProfile;onChanged?:()=>
    .finally(()=>{if(!abort.signal.aborted)setBusy(false);});
  };
  useEffect(()=>{run();const timer=setInterval(run,300000);return()=>{clearInterval(timer);ctrl.current?.abort();};},[profile.id,profile.updatedAt,session.address]);
- return <details className="ens-profile"><summary>ENS identity</summary>
-  {name&&<EnsIdentity profileId={profile.id} name={name}/>}
+ return <><EnsIdentity profileId={profile.id} name={name||undefined}/><details className="ens-profile"><summary>Manage ENS records</summary>
   {busy&&<p role="status">Setting up your trader name…</p>}
   {error&&<p role="status">{error}</p>}
   <div className="bs-row-actions">{error&&<button type="button" className="bs-btn bs-btn-quiet" disabled={busy} onClick={run}>Try again</button>}</div>
- </details>;
+ </details></>;
 }

@@ -8,3 +8,5 @@
 .ens-identity details { margin-top: 8px; }
 .ens-identity pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 12px; background: #f8f6fa; border-radius: 8px; }
 .ens-identity b { display: block; margin-top: 12px; }
+
+.ens-name { display: block; margin-top: 6px; color: inherit; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 3px; }

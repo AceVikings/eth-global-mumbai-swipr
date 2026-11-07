@@ -274,7 +274,7 @@ function Portrait({ trader }: { trader: Trader }) {
       <span className="dsc-preview-tag">{trader.source === 'registered' ? 'Registered bot · unverified history' : 'Registered profile · unverified history'}</span>
       <div className="dsc-photo-info">
         <h2>{trader.name}</h2>
-        <p>{trader.ens}</p>
+        {trader.profileId ? <EnsIdentity compact profileId={trader.profileId} name={trader.ens || undefined} /> : trader.ens && <p>{trader.ens}</p>}
       </div>
       <span className="dsc-hint" aria-hidden="true">Scroll for profile <Icon name="chevron" size={14} /></span>
     </div>
