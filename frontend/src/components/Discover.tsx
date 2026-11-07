@@ -1,5 +1,6 @@
 import { portraitFallback } from '../lib/profile-images';
 import { EnsIdentity } from './EnsProfile';
+import TraderTrackRecord from './TraderTrackRecord';
 import { short as shortWallet } from '../lib/bots';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
@@ -250,8 +251,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
 
         {trader && <aside className="dsc-rail dsc-stats-rail" aria-label={`${trader.name}'s trader stats`}>
           <div className="dsc-rail-heading"><span className="dsc-eyebrow">{trader.name.toUpperCase()}’S TRACK RECORD</span><h2>The person &amp; the numbers.</h2></div>
-          <div className="dsc-net-return"><span>Copiers kept, after all fees</span><strong aria-label="Net copier return unavailable">—</strong><p>No verified history connected yet.</p><div className="dsc-period"><span>Period <b>—</b></span><span>Real copies <b>—</b></span></div></div>
-          <dl className="dsc-metric-grid">{['Trader P&L', 'Win rate', 'Max drawdown', 'Copy fill rate', 'Sealed trades', 'Outside exits', 'Seats available', 'Profit share'].map(label => <div key={label}><dt>{label}</dt><dd aria-label={`${label} unavailable`}>—</dd></div>)}</dl>
+          <TraderTrackRecord key={trader.owner || trader.id} wallet={trader.owner} />
           <div className="dsc-rail-bio"><span className="dsc-eyebrow">THE STRATEGY</span><p>{trader.bio}</p><div className="dsc-markers"><span className="dsc-pill">{trader.style}</span><span className="dsc-pill">{trader.kind === 'agent' ? `${trader.owner ? shortWallet(trader.owner) : 'Owner'}’s agent` : 'Human trader'}</span></div></div>
           <button type="button" className="dsc-btn dsc-btn-quiet dsc-rail-proofs" onClick={openProofs}><Icon name="shield" size={18} />Show proofs<Icon name="chevron" size={16} /></button>
         </aside>}
@@ -289,14 +289,9 @@ function Profile({ trader, perTradeUsd, onProofs }: { trader: Trader; perTradeUs
         <p>{trader.bio}</p>
       </section>
       <section>
-        <h3>Net copier return</h3>
-        <p className="dsc-unavail">Unavailable</p>
-        <p className="dsc-note">No verified execution history is connected for this profile, so we don’t show a return, win rate or drawdown.</p>
-        <dl className="dsc-stats">
-          <div><dt>Period</dt><dd>— Unavailable</dd></div>
-          <div><dt>Sample</dt><dd>— Unavailable</dd></div>
-          <div><dt>Max drawdown</dt><dd>— Unavailable</dd></div>
-        </dl>
+        <h3>Track record</h3>
+        <p className="dsc-note">Verified results are measured across this trader’s wallet. Open positions are excluded.</p>
+        <a className="text-button" href="#leaderboards">View trader rankings</a>
       </section>
       <section>
         <h3>Trader markers</h3>
@@ -315,12 +310,6 @@ function Profile({ trader, perTradeUsd, onProofs }: { trader: Trader; perTradeUs
     </div>
   );
 }
-
-const PROOFS: [string, string][] = [
-  ['Sealed trade history (Arkiv)', 'No sealed entities read. Nothing to query yet.'],
-  ['Flash orders and receipts', 'No orders or fills recorded for this profile.'],
-  ['Archive (Swarm)', 'No archived receipt available.'],
-];
 
 function ProofSheet({ trader, onClose }: { trader: Trader; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -359,13 +348,8 @@ function ProofSheet({ trader, onClose }: { trader: Trader; onClose: () => void }
           </button>
         </div>}
         <ul className="dsc-proofs">
-          {PROOFS.map(([label, detail]) => (
-            <li key={label}>
-              <b>{label}</b>
-              <span className="dsc-unavail-tag">Unavailable</span>
-              <p>{detail}</p>
-            </li>
-          ))}
+          {trader.owner && <li><b>Wallet activity on Base</b><a href={`https://basescan.org/address/${trader.owner}`} target="_blank" rel="noreferrer">View transactions ↗</a></li>}
+          <li><b>Verified closed positions</b><a href="#leaderboards" onClick={onClose}>View rankings</a><p>Results are measured per wallet, across its profiles.</p></li>
         </ul>
       </div>
     </div>
