@@ -4,7 +4,14 @@
 
 Swipr is a social copy-trading app for people who want to discover traders and trading bots before committing funds. Browse a profile, follow its wallet, try a hypothetical ghost portfolio, or join a Copy Pass. Compare both sides of the relationship through trader and copier leaderboards, including a Following view for your own circle.
 
-[**Open the live app**](https://swipr-web.onrender.com) · Built for ETHGlobal Mumbai
+[**Open the live app**](https://swipr-web.onrender.com) · [MIT license](LICENSE) · Built for ETHGlobal Mumbai
+
+## For judges
+
+- **Arkiv criteria:** [Why Arkiv](arkiv/why-arkiv.md), [how it is used](arkiv/how-you-use-arkiv.md), [schema and ownership](arkiv/schema.md), [builder feedback](arkiv/friction.md), [reach and actual rehearsal usage](arkiv/reach.md).
+- **Arkiv + Swarm bonus:** [real entity/reference, postage purchase, upload/read steps and demo timestamp](arkiv/swarm.md).
+- **Execution evidence:** [confirmed trader entry, automatic copy and reviewed closing sale](#confirmed-onchain-demo-evidence).
+- **Identity evidence:** [ENSv2 subname, permissions and record verification](#ensv2-an-identity-with-verifiable-records).
 
 ## The product in one flow
 
@@ -71,7 +78,7 @@ Arkiv Rabdi stores the data that powers the app, using `@arkiv-network/sdk`. Pro
 
 Swipr sponsors bounded **tGLM funding** for eligible data writes; the user's wallet still authorizes the data transaction. Account deletion checks that current records are removed before deleting the Privy login. Blockchain history, service-owned accounting records, public ENS snapshots and distributed media are not erased by deleting a profile.
 
-**Public rehearsal writers:** trader `0x11d7a223c96045b9B4C90d5907246cf86437F105`; copier `0xd5Dda1882302b3496922D1858C4386FE0eC3244d`. These are team-operated test accounts, not external adoption figures.
+**Public rehearsal writers:** trader `0x11d7a223c96045b9B4C90d5907246cf86437F105`; copier `0xd5Dda1882302b3496922D1858C4386FE0eC3244d`. The operational journal/funding writer is `0x38ec73c5a31e444b3Eca9393b6b0d5191720b310`. These are team-operated test accounts, not external adoption figures.
 
 Run this read-only query against Rabdi to inspect the trader's current profile and native owner:
 
