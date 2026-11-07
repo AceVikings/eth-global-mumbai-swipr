@@ -56,7 +56,7 @@ export default function Matches({ onDiscover, onJoin, onTrade, traders=[] }: { t
           </div>
           {p.owner === account && <PassPositions seat={p}>
             {p.status==='joined'&&p.terms.mode==='auto'&&<AutomationControl seat={p}/>}
-            <button className="text-button match-leave" disabled={!!busy} onClick={()=>void act(p.id,()=>leaveSeat(session,p.id))}>{busy===p.id?'Leaving…':'End this match'}</button>
+            <button className="text-button match-leave" disabled={!!busy} onClick={()=>void act(p.id,()=>leaveSeat(session,p.id))}>{busy===p.id?'Unmatching…':'Unmatch'}</button>
           </PassPositions>}
         </article>)}</div>
         {myProfiles.map(p => <section className="match-card" key={p.traderId}>
