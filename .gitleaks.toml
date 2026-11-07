@@ -1,0 +1,9 @@
+title = "Swipr"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Definitive's published public dev key prefix, used only to reject it in tests and readiness checks."
+regexTarget = "match"
+regexes = ['''dpka_513a2bd7(_x)?''']

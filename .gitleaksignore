@@ -1,9 +1,0 @@
-# Exact historical false positives: provider test uses the synthetic literal test-flash-key.
-# No production credential is allowlisted; fingerprints bind immutable commits and lines.
-061680d5e630220978d3f6e11045419f1d28ac75:server/providers.test.ts:generic-api-key:115
-54c3bc6cd3932dea5b99f623182971ee37a8a6da:server/providers.test.ts:generic-api-key:115
-2b117512f57cb69624b73ce8ffec923ee744b50c:server/providers.test.ts:generic-api-key:115
-a205bb56494267d866396e3fb7aec94617e2cbac:server/providers.test.ts:generic-api-key:115
-9851b7623f73ca110de657b829f5096304fc1fb9:server/providers.test.ts:generic-api-key:115
-60af133ba0c872da2184ae7e4b5698e29d012f88:server/providers.test.ts:generic-api-key:115
-530fe4be71cca6f83847904b5bb5c7ab3aa6facb:server/providers.test.ts:generic-api-key:112
