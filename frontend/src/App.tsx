@@ -211,11 +211,12 @@ export default function App() {
                     </div>
                   </div>
                   <Discover
-                    key={`${prefs.vibe}:${traders.map(t => t.id).join(',')}`}
+                    key={`${session.address?.toLowerCase() ?? 'guest'}:${prefs.vibe}:${traders.map(t => t.id).join(',')}`}
                     traders={traders}
                     onGhost={ghost}
                     onReal={setRealTrader}
                     perTradeUsd={prefs.amount}
+                    savedTraders={registeredTraders.filter(t => ghosts.some(ghost => ghost.traderId === t.id))}
                     vibe={prefs.vibe}
                   />
                 </>

@@ -1,3 +1,4 @@
+import { discoveryDeck, type SwipeFeedback } from '../lib/discovery-ranking';
 import { portraitFallback } from '../lib/profile-images';
 import { EnsIdentity } from './EnsProfile';
 import TraderTrackRecord from './TraderTrackRecord';
@@ -10,13 +11,14 @@ import '../discover.css';
 
 type Props = {
   traders: Trader[];
+  savedTraders?: Trader[];
   onGhost: (t: Trader) => Promise<boolean>;
   onReal: (t: Trader) => void;
   perTradeUsd: number;
   vibe: string;
 };
 type Dir = 'left' | 'right';
-type Toast = { trader: Trader; index: number };
+type Toast = { trader: Trader; previousFeedback: SwipeFeedback[] };
 
 const LOCK_PX = 8;
 const COMMIT_PX = 96;
@@ -31,9 +33,11 @@ const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && !!el.closest('input, textarea, select, [contenteditable="true"]');
 const usd = (n: number) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 
-export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }: Props) {
+export default function Discover({ traders, savedTraders = [], onGhost, onReal, perTradeUsd, vibe }: Props) {
   const [saving, setSaving] = useState(false);
-  const [index, setIndex] = useState(0);
+  const [reviewed, setReviewed] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<SwipeFeedback[]>([]);
+  const [restoredId, setRestoredId] = useState<string | null>(null);
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [exiting, setExiting] = useState<Dir | null>(null);
@@ -45,13 +49,10 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
   const exitTimer = useRef<number | undefined>(undefined);
   const dragged = useRef(false);
 
-  const trader = traders[index] as Trader | undefined;
+  const deck = discoveryDeck(traders, reviewed, feedback, savedTraders, restoredId);
+  const trader = deck[0] as Trader | undefined;
 
   useEffect(() => () => window.clearTimeout(exitTimer.current), []);
-
-  useEffect(() => {
-    if (index > traders.length) setIndex(traders.length);
-  }, [index, traders.length]);
 
   useEffect(() => {
     if (!toast || busy.current) return;
@@ -59,7 +60,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  const act = useCallback(async (dir: Dir, t: Trader, i: number) => {
+  const act = useCallback(async (dir: Dir, t: Trader) => {
     if (dir === 'right') {
       setExiting(null); setDx(0); setSaving(true);
       const saved = await onGhost(t);
@@ -67,26 +68,30 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
       if (!saved) { busy.current = false; return; }
       setToast(null);
     } else {
-      setToast({ trader: t, index: i });
+      setToast({ trader: t, previousFeedback: feedback });
     }
     dragged.current = false;
-    setIndex(i + 1);
+    setFeedback(previous => [...previous.filter(vote => vote.trader.id !== t.id), { trader: t, direction: dir }]);
+    setReviewed(previous => [...previous, t.id]);
+    setRestoredId(null);
     setDx(0);
     setExiting(null);
     busy.current = false;
-  }, [onGhost]);
+  }, [onGhost, feedback]);
 
   const decide = useCallback((dir: Dir) => {
     if (!trader || busy.current) return;
     busy.current = true;
-    if (reducedMotion()) return act(dir, trader, index);
+    if (reducedMotion()) return act(dir, trader);
     setExiting(dir);
-    exitTimer.current = window.setTimeout(() => act(dir, trader, index), EXIT_MS);
-  }, [act, index, trader]);
+    exitTimer.current = window.setTimeout(() => act(dir, trader), EXIT_MS);
+  }, [act, trader]);
 
   const undo = () => {
     if (!toast || busy.current) return;
-    setIndex(toast.index);
+    setReviewed(previous => previous.filter(id => id !== toast.trader.id));
+    setFeedback(toast.previousFeedback);
+    setRestoredId(toast.trader.id);
     setToast(null);
   };
 
@@ -186,11 +191,11 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
           onKeyDown={onKeyDown}
         >
           <div className="dsc-stack">
-            {trader && index + 1 < traders.length && <div className="dsc-edge dsc-edge-1" aria-hidden="true" />}
-            {trader && index + 2 < traders.length && <div className="dsc-edge dsc-edge-2" aria-hidden="true" />}
+            {trader && deck.length > 1 && <div className="dsc-edge dsc-edge-1" aria-hidden="true" />}
+            {trader && deck.length > 2 && <div className="dsc-edge dsc-edge-2" aria-hidden="true" />}
             {trader ? (
               <div
-                key={trader.id + index}
+                key={trader.id}
                 className={`dsc-card${dragging ? ' is-dragging' : ''}${exiting ? ' is-exiting' : ''}`}
                 style={cardStyle}
                 onPointerDown={onPointerDown}
@@ -210,7 +215,7 @@ export default function Discover({ traders, onGhost, onReal, perTradeUsd, vibe }
               <div className="dsc-empty">
                 <h2>{traders.length ? "That’s everyone for now." : "No traders available."}</h2>
                 <p>{traders.length ? "You’ve seen this deck. Check back later or start over." : "Try a different trading style or add your bot."}</p>
-                {traders.length > 0 && <button type="button" className="dsc-btn" onClick={() => { setIndex(0); setToast(null); }}>
+                {traders.length > 0 && <button type="button" className="dsc-btn" onClick={() => { setReviewed([]); setRestoredId(null); setToast(null); }}>
                   Start over
                 </button>}
               </div>
