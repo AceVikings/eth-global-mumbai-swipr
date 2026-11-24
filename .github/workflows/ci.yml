@@ -1,19 +1,31 @@
 name: CI
 
+# Runs only when flagged, to save Actions minutes:
+#   - pull request labelled `ci` (or `release`) -> checks
+#   - push to main whose commit message contains [release] or [deploy] -> checks + deploy
+#   - pull request labelled `release` merged into main -> release-on-merge.yml dispatches this workflow
+#   - manual: Actions -> CI -> Run workflow
+# Plain pushes and unlabelled pull requests start no jobs.
 on:
   push:
+    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}${{ ((github.event.action == 'labeled' && github.event.label.name != 'ci' && github.event.label.name != 'release') || (github.event_name == 'push' && !contains(github.event.head_commit.message, '[release]') && !contains(github.event.head_commit.message, '[deploy]'))) && format('-noop-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && (contains(github.event.head_commit.message, '[release]') || contains(github.event.head_commit.message, '[deploy]'))) ||
+      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'ci') || contains(github.event.pull_request.labels.*.name, 'release')) && (github.event.action != 'labeled' || github.event.label.name == 'ci' || github.event.label.name == 'release'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # No database service and no network writes: unit and contract tests use the in-memory

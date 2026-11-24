@@ -1,0 +1,29 @@
+name: Release on merge
+
+# When a pull request labelled `release` is merged, dispatch the release/deploy workflows on main.
+# (A push's own event can't see PR labels; a workflow_dispatch from GITHUB_TOKEN is allowed to start runs.)
+# Skipped when the PR title already carries [release]/[deploy], since that push triggers them directly.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: >-
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'release') &&
+      !contains(github.event.pull_request.title, '[release]') &&
+      !contains(github.event.pull_request.title, '[deploy]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Dispatch ci.yml
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main
